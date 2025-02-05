@@ -65,13 +65,34 @@ app.use(
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  console.log("[DEBUG] Health check endpoint hit");
+  console.log("[DEBUG] Request headers:", req.headers);
+  console.log("[DEBUG] Request method:", req.method);
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    headers: req.headers,
+    method: req.method,
+  });
 });
 
 // Test endpoint at app level
 app.get("/test", (req, res) => {
   console.log("[DEBUG] App-level test endpoint hit");
   res.json({ message: "App is working" });
+});
+
+// Test endpoint with explicit CORS
+app.options("/test-cors", cors()); // Enable pre-flight for this specific route
+app.get("/test-cors", (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.json({
+    message: "CORS test successful",
+    timestamp: new Date().toISOString(),
+    headers: req.headers,
+  });
 });
 
 // Routes
