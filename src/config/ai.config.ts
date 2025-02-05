@@ -4,12 +4,12 @@ import { ConfigService } from "./config.service";
 
 const configService = ConfigService.getInstance();
 
-console.log('\n[AIConfig] Initializing AI configuration...');
-configService.debug(); // This will show all environment variables
+// console.log('\n[AIConfig] Initializing AI configuration...');
+// configService.debug(); // This will show all environment variables
 
 const apiKey = configService.get("OPENAI_API_KEY");
 
-console.log("[AIConfig] OPENAI_API_KEY:", apiKey);
+// console.log("[AIConfig] OPENAI_API_KEY:", apiKey);
 
 if (!apiKey) {
   console.error("[AIConfig] OPENAI_API_KEY is missing from environment variables");

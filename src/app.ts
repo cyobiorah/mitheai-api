@@ -31,19 +31,19 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Debug middleware to log all requests
-app.use((req, res, next) => {
-  console.log("\n[DEBUG] Request:");
-  console.log("Method:", req.method);
-  console.log("URL:", req.url);
-  console.log("Original URL:", req.originalUrl);
-  console.log("Base URL:", req.baseUrl);
-  console.log("Path:", req.path);
-  console.log("Headers:", req.headers);
-  console.log("Body:", req.body);
-  console.log("Query:", req.query);
-  console.log("Params:", req.params);
-  next();
-});
+// app.use((req, res, next) => {
+//   console.log("\n[DEBUG] Request:");
+//   console.log("Method:", req.method);
+//   console.log("URL:", req.url);
+//   console.log("Original URL:", req.originalUrl);
+//   console.log("Base URL:", req.baseUrl);
+//   console.log("Path:", req.path);
+//   console.log("Headers:", req.headers);
+//   console.log("Body:", req.body);
+//   console.log("Query:", req.query);
+//   console.log("Params:", req.params);
+//   next();
+// });
 
 // Validation error handler
 app.use(
@@ -68,67 +68,67 @@ app.get("/test", (req, res) => {
 });
 
 // Routes
-console.log("\n[DEBUG] ====== Mounting routes... ======");
+// console.log("\n[DEBUG] ====== Mounting routes... ======");
 
-// Mount invitation routes first (includes test route)
-console.log("[DEBUG] Mounting /api/invitations");
+// // Mount invitation routes first (includes test route)
+// console.log("[DEBUG] Mounting /api/invitations");
 app.use("/api/invitations", invitationsRouter);
 
-console.log("[DEBUG] Mounting /api/auth");
+// console.log("[DEBUG] Mounting /api/auth");
 app.use("/api/auth", authRoutes);
 
-console.log("[DEBUG] Mounting /api/users");
+// console.log("[DEBUG] Mounting /api/users");
 app.use("/api/users", authenticateToken, usersRouter);
 
-console.log("[DEBUG] Mounting /api/teams");
+// console.log("[DEBUG] Mounting /api/teams");
 app.use("/api/teams", authenticateToken, teamsRouter);
 
-console.log("[DEBUG] Mounting /api/content");
-console.log("[DEBUG] Content router stack details:");
-contentRouter?.stack?.forEach((layer: any, index: number) => {
-  console.log(`[DEBUG] Layer ${index}:`, {
-    name: layer.name,
-    path: layer.route?.path,
-    methods: layer.route?.methods
-      ? Object.keys(layer.route.methods)
-      : undefined,
-  });
-});
+// console.log("[DEBUG] Mounting /api/content");
+// console.log("[DEBUG] Content router stack details:");
+// contentRouter?.stack?.forEach((layer: any, index: number) => {
+//   console.log(`[DEBUG] Layer ${index}:`, {
+//     name: layer.name,
+//     path: layer.route?.path,
+//     methods: layer.route?.methods
+//       ? Object.keys(layer.route.methods)
+//       : undefined,
+//   });
+// });
 
 // Mount content router with debug logging
 app.use(
   "/api/content",
   (req, res, next) => {
-    console.log("\n[DEBUG] Content router middleware hit");
-    console.log("[DEBUG] Request path:", req.path);
-    console.log("[DEBUG] Request baseUrl:", req.baseUrl);
-    console.log("[DEBUG] Request originalUrl:", req.originalUrl);
+    // console.log("\n[DEBUG] Content router middleware hit");
+    // console.log("[DEBUG] Request path:", req.path);
+    // console.log("[DEBUG] Request baseUrl:", req.baseUrl);
+    // console.log("[DEBUG] Request originalUrl:", req.originalUrl);
 
     // Skip authentication for generate route in development
-    if (process.env.NODE_ENV === "development" && req.path === "/generate") {
-      console.log("[DEBUG] Bypassing auth for content generation");
-      req.user = {
-        uid: "test-user-id",
-        email: "test@example.com",
-        teamIds: ["test-team-id"],
-        currentTeamId: "test-team-id",
-        isNewUser: false,
-      };
-      return next();
-    }
+    // if (process.env.NODE_ENV === "development" && req.path === "/generate") {
+    //   console.log("[DEBUG] Bypassing auth for content generation");
+    //   req.user = {
+    //     uid: "test-user-id",
+    //     email: "test@example.com",
+    //     teamIds: ["test-team-id"],
+    //     currentTeamId: "test-team-id",
+    //     isNewUser: false,
+    //   };
+    //   return next();
+    // }
     return authenticateToken(req, res, next);
   },
   contentRouter
 );
 
-console.log("[DEBUG] Mounting /api/collections");
+// console.log("[DEBUG] Mounting /api/collections");
 app.use("/api/collections", authenticateToken, collectionsRouter);
 
-console.log("[DEBUG] Mounting /api/analysis");
+// console.log("[DEBUG] Mounting /api/analysis");
 app.use("/api/analysis", authenticateToken, analysisRouter);
 
 // Log all registered routes
-console.log("\n[DEBUG] ====== All registered routes: ======");
+// console.log("\n[DEBUG] ====== All registered routes: ======");
 function listEndpoints(prefix: string, router: any) {
   const routes: any[] = [];
 
@@ -141,7 +141,7 @@ function listEndpoints(prefix: string, router: any) {
     if (middleware.route) {
       const path = prefix + middleware.route.path;
       const methods = Object.keys(middleware.route.methods);
-      console.log(`[DEBUG] Route: ${methods.join(",")} ${path}`);
+      // console.log(`[DEBUG] Route: ${methods.join(",")} ${path}`);
       routes.push({
         path,
         methods: methods.join(","),
@@ -166,29 +166,29 @@ function listEndpoints(prefix: string, router: any) {
   return routes;
 }
 
-try {
-  const allRoutes = listEndpoints("", app._router);
-  console.log("[DEBUG] Total routes registered:", allRoutes.length);
-  console.log("[DEBUG] Routes:", allRoutes);
-} catch (error) {
-  console.error("[ERROR] Failed to list endpoints:", error);
-}
+// try {
+//   const allRoutes = listEndpoints("", app._router);
+//   console.log("[DEBUG] Total routes registered:", allRoutes.length);
+//   console.log("[DEBUG] Routes:", allRoutes);
+// } catch (error) {
+//   console.error("[ERROR] Failed to list endpoints:", error);
+// }
 
 // Log registered route handlers
-console.log("\n[DEBUG] ====== Route Handlers: ======");
-app._router?.stack?.forEach((r: any) => {
-  if (r.route && r.route.path) {
-    console.log(`${Object.keys(r.route.methods).join(",")} ${r.route.path}`);
-  } else if (r.name === "router") {
-    console.log(`Router middleware at: ${r.regexp}`);
-  }
-});
+// console.log("\n[DEBUG] ====== Route Handlers: ======");
+// app._router?.stack?.forEach((r: any) => {
+//   if (r.route && r.route.path) {
+//     console.log(`${Object.keys(r.route.methods).join(",")} ${r.route.path}`);
+//   } else if (r.name === "router") {
+//     console.log(`Router middleware at: ${r.regexp}`);
+//   }
+// });
 
 // 404 handler
 app.use((req: express.Request, res: express.Response) => {
-  console.log("[DEBUG] 404 Not Found:", req.method, req.url);
-  console.log("Headers:", req.headers);
-  console.log("Body:", req.body);
+  // console.log("[DEBUG] 404 Not Found:", req.method, req.url);
+  // console.log("Headers:", req.headers);
+  // console.log("Body:", req.body);
   res.status(404).json({
     error: "Not Found",
     message: `Cannot ${req.method} ${req.url}`,
@@ -217,16 +217,16 @@ try {
   const server = app.listen(port, () => {
     console.log(`[${new Date().toISOString()}] Server running on port ${port}`);
     console.log("[DEBUG] Environment:", process.env.NODE_ENV);
-    console.log("[DEBUG] Available routes:");
-    app._router.stack.forEach((r: any) => {
-      if (r.route && r.route.path) {
-        console.log(
-          `${Object.keys(r.route.methods).join(",")} ${r.route.path}`
-        );
-      } else if (r.name === "router") {
-        console.log(`Router middleware: ${r.regexp}`);
-      }
-    });
+    // console.log("[DEBUG] Available routes:");
+    // app._router.stack.forEach((r: any) => {
+    //   if (r.route && r.route.path) {
+    //     console.log(
+    //       `${Object.keys(r.route.methods).join(",")} ${r.route.path}`
+    //     );
+    //   } else if (r.name === "router") {
+    //     console.log(`Router middleware: ${r.regexp}`);
+    //   }
+    // });
   });
 
   server.on("error", (error: any) => {
