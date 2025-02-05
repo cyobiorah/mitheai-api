@@ -24,7 +24,14 @@ const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet()); // Security headers
-app.use(cors()); // Enable CORS
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+); // Enable CORS with specific options
 app.use(compression()); // Compress responses
 app.use(morgan("dev")); // Request logging
 app.use(express.json()); // Parse JSON bodies
