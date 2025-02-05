@@ -5,7 +5,7 @@ import { AIAssistantRequest } from "../services/ai/types";
 import { aiService } from "../config/ai.config";
 
 interface GenerateContentRequest {
-  type: 'caption' | 'hashtags' | 'variation' | 'optimization';
+  type: "caption" | "hashtags" | "variation" | "optimization";
   content?: string;
   context: {
     platform: string;
@@ -16,28 +16,35 @@ interface GenerateContentRequest {
     length?: {
       min: number;
       max: number;
-      unit: 'characters' | 'words';
+      unit: "characters" | "words";
     };
   };
   constraints?: {
     mustInclude?: string[];
     mustExclude?: string[];
     hashtagCount?: number;
-    emojiUsage?: 'none' | 'minimal' | 'moderate' | 'heavy';
+    emojiUsage?: "none" | "minimal" | "moderate" | "heavy";
   };
 }
 
-export const generateContent = async (req: Request<{}, {}, GenerateContentRequest>, res: Response) => {
+export const generateContent = async (
+  req: Request<{}, {}, GenerateContentRequest>,
+  res: Response
+) => {
   try {
     const { type, content, context, constraints } = req.body;
 
     // Build the prompt based on request parameters
-    let systemPrompt = `You are a professional social media content creator specializing in ${context.platform} content.
-Your task is to create ${type === 'caption' ? 'a compelling caption' : type} that:
+    let systemPrompt = `You are a professional social media content creator specializing in ${
+      context.platform
+    } content.
+Your task is to create ${
+      type === "caption" ? "a compelling caption" : type
+    } that:
 - Maintains a ${context.tone} tone
 - Achieves the purpose of ${context.purpose}
 - Resonates with ${context.targetAudience}
-- Incorporates the following keywords naturally: ${context.keywords.join(', ')}
+- Incorporates the following keywords naturally: ${context.keywords.join(", ")}
 
 Follow these platform-specific best practices for ${context.platform}:
 - LinkedIn: Professional, industry insights, thought leadership
@@ -45,23 +52,27 @@ Follow these platform-specific best practices for ${context.platform}:
 - Facebook: Community-focused, storytelling, engaging
 - Instagram: Visual-first, authentic, lifestyle-oriented`;
 
-    let userPrompt = `Create ${type === 'caption' ? 'a' : ''} ${type} that:`;
-    
+    let userPrompt = `Create ${type === "caption" ? "a" : ""} ${type} that:`;
+
     if (content) {
       userPrompt += `\nBase it on this content: "${content}"`;
     }
-    
+
     userPrompt += `\nTone: ${context.tone}`;
     userPrompt += `\nPurpose: ${context.purpose}`;
     userPrompt += `\nTarget Audience: ${context.targetAudience}`;
-    userPrompt += `\nKeywords to include: ${context.keywords.join(', ')}`;
+    userPrompt += `\nKeywords to include: ${context.keywords.join(", ")}`;
 
     if (constraints) {
       if (constraints.mustInclude?.length) {
-        userPrompt += `\nMust include these phrases: ${constraints.mustInclude.join(', ')}`;
+        userPrompt += `\nMust include these phrases: ${constraints.mustInclude.join(
+          ", "
+        )}`;
       }
       if (constraints.mustExclude?.length) {
-        userPrompt += `\nMust avoid these phrases: ${constraints.mustExclude.join(', ')}`;
+        userPrompt += `\nMust avoid these phrases: ${constraints.mustExclude.join(
+          ", "
+        )}`;
       }
       if (constraints.hashtagCount) {
         userPrompt += `\nInclude exactly ${constraints.hashtagCount} relevant hashtags`;
@@ -71,91 +82,105 @@ Follow these platform-specific best practices for ${context.platform}:
       }
     }
 
-    console.log('[DEBUG] Calling OpenAI with prompts:', { systemPrompt, userPrompt });
+    // console.log('[DEBUG] Calling OpenAI with prompts:', { systemPrompt, userPrompt });
     const completion = await aiService.createCompletion({
       messages: [
         {
-          role: 'system',
-          content: systemPrompt
+          role: "system",
+          content: systemPrompt,
         },
         {
-          role: 'user',
-          content: userPrompt
-        }
-      ]
+          role: "user",
+          content: userPrompt,
+        },
+      ],
     });
 
-    console.log('[DEBUG] OpenAI response:', completion);
+    // console.log('[DEBUG] OpenAI response:', completion);
 
     // Extract hashtags if they exist
     const hashtags = completion.content.match(/#[a-zA-Z0-9_]+/g) || [];
-    const contentWithoutHashtags = completion.content.replace(/#[a-zA-Z0-9_]+/g, '').trim();
+    const contentWithoutHashtags = completion.content
+      .replace(/#[a-zA-Z0-9_]+/g, "")
+      .trim();
 
     // Parse the response and extract suggestions
-    const suggestions = [{
-      content: contentWithoutHashtags,
-      hashtags,
-      confidence: 0.9,
-      metadata: {
-        tone: context.tone,
-        readabilityScore: 0.8,
-        estimatedEngagement: 0.85,
-        platformSpecificMetrics: {
-          [context.platform]: {
-            lengthOptimal: true,
-            hashtagCountOptimal: constraints?.hashtagCount ? hashtags.length === constraints.hashtagCount : true,
-            mediaRecommended: context.platform === 'instagram'
-          }
-        }
-      }
-    }];
+    const suggestions = [
+      {
+        content: contentWithoutHashtags,
+        hashtags,
+        confidence: 0.9,
+        metadata: {
+          tone: context.tone,
+          readabilityScore: 0.8,
+          estimatedEngagement: 0.85,
+          platformSpecificMetrics: {
+            [context.platform]: {
+              lengthOptimal: true,
+              hashtagCountOptimal: constraints?.hashtagCount
+                ? hashtags.length === constraints.hashtagCount
+                : true,
+              mediaRecommended: context.platform === "instagram",
+            },
+          },
+        },
+      },
+    ];
 
     // Generate improvements based on content analysis
     const improvements = [];
-    
+
     // Check content length
     if (contentWithoutHashtags.length < 50) {
       improvements.push({
-        type: 'length',
-        suggestion: 'Consider adding more detail to increase engagement',
-        impact: 'medium'
+        type: "length",
+        suggestion: "Consider adding more detail to increase engagement",
+        impact: "medium",
       });
     }
 
     // Check keyword usage
-    const missingKeywords = context.keywords.filter(keyword => 
-      !contentWithoutHashtags.toLowerCase().includes(keyword.toLowerCase())
+    const missingKeywords = context.keywords.filter(
+      (keyword) =>
+        !contentWithoutHashtags.toLowerCase().includes(keyword.toLowerCase())
     );
     if (missingKeywords.length > 0) {
       improvements.push({
-        type: 'structure',
-        suggestion: `Try incorporating these keywords: ${missingKeywords.join(', ')}`,
-        impact: 'high'
+        type: "structure",
+        suggestion: `Try incorporating these keywords: ${missingKeywords.join(
+          ", "
+        )}`,
+        impact: "high",
       });
     }
 
     // Platform-specific improvements
-    if (context.platform === 'linkedin' && contentWithoutHashtags.length < 100) {
+    if (
+      context.platform === "linkedin" &&
+      contentWithoutHashtags.length < 100
+    ) {
       improvements.push({
-        type: 'structure',
-        suggestion: 'LinkedIn posts perform better with detailed, professional context',
-        impact: 'medium'
+        type: "structure",
+        suggestion:
+          "LinkedIn posts perform better with detailed, professional context",
+        impact: "medium",
       });
     }
 
     res.json({ suggestions, improvements });
   } catch (error: any) {
-    console.error('[ERROR] Failed to generate content:', error);
-    console.error('[ERROR] Stack trace:', error.stack);
+    console.error("[ERROR] Failed to generate content:", error);
+    console.error("[ERROR] Stack trace:", error.stack);
     if (error.response) {
-      console.error('[ERROR] OpenAI API response:', {
+      console.error("[ERROR] OpenAI API response:", {
         status: error.response.status,
-        data: error.response.data
+        data: error.response.data,
       });
     }
-    res.status(500).json({ 
-      error: 'Failed to generate content',
-      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      error: "Failed to generate content",
+      message:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
