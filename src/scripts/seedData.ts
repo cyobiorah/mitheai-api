@@ -102,13 +102,14 @@ export const users: Record<string, User> = {
     email: "admin@mitheia.com",
     firstName: "Super",
     lastName: "Admin",
-    role: "super_admin",
+    userType: "organization",
     organizationId: "mitheia_org",
+    role: "super_admin",
     teamIds: ["mitheia_core"],
     status: "active",
     settings: {
       permissions: ["all"],
-      theme: "dark",
+      theme: "light",
       notifications: []
     },
     createdAt: new Date().toISOString(),
@@ -120,6 +121,7 @@ export const users: Record<string, User> = {
     firstName: "Test",
     lastName: "Owner",
     role: "org_owner",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering", "test_marketing"],
     status: "active",
@@ -137,6 +139,7 @@ export const users: Record<string, User> = {
     firstName: "Team",
     lastName: "Manager",
     role: "team_manager",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering"],
     status: "active",
@@ -154,6 +157,7 @@ export const users: Record<string, User> = {
     firstName: "Regular",
     lastName: "User",
     role: "user",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering"],
     status: "active",
@@ -171,6 +175,7 @@ export const users: Record<string, User> = {
     firstName: "Small",
     lastName: "Owner",
     role: "org_owner",
+    userType: "organization",
     organizationId: "small_org",
     teamIds: ["small_team"],
     status: "active",
@@ -178,6 +183,50 @@ export const users: Record<string, User> = {
       permissions: ["org_manage", "team_manage"],
       theme: "light",
       notifications: []
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  individual_user1: {
+    uid: "individual_user1",
+    email: "john.doe@example.com",
+    firstName: "John",
+    lastName: "Doe",
+    userType: "individual",
+    status: "active",
+    settings: {
+      permissions: ["content_management"],
+      theme: "light",
+      notifications: [],
+      personalPreferences: {
+        defaultContentType: "social_post",
+        aiPreferences: {
+          tone: "professional",
+          style: "concise"
+        }
+      }
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  individual_user2: {
+    uid: "individual_user2",
+    email: "jane.smith@example.com",
+    firstName: "Jane",
+    lastName: "Smith",
+    userType: "individual",
+    status: "active",
+    settings: {
+      permissions: ["content_management"],
+      theme: "dark",
+      notifications: [],
+      personalPreferences: {
+        defaultContentType: "article",
+        aiPreferences: {
+          tone: "casual",
+          style: "detailed"
+        }
+      }
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()

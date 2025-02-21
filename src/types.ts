@@ -18,17 +18,19 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  organizationId: string;
-  role: 'super_admin' | 'org_owner' | 'team_manager' | 'user';
-  teamIds: string[];  // Can be empty array for pending users
+  userType: 'individual' | 'organization';
+  organizationId?: string;  // Required for organization users, omitted for individual
+  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
+  teamIds?: string[];  // Required for organization users
   status: 'pending' | 'active' | 'inactive';
   invitationToken?: string;
   settings: {
     permissions: string[];
     theme: 'light' | 'dark';
     notifications: any[];
+    personalPreferences?: Record<string, any>;  // For individual users
   };
-  pendingTeamInvites?: string[];  // Add this to track pending team invitations
+  pendingTeamInvites?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

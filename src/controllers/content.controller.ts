@@ -276,7 +276,7 @@ export const createContent = async (req: Request, res: Response) => {
     }
 
     // Verify user belongs to team
-    if (!user.teamIds.includes(teamId)) {
+    if (!user.teamIds?.includes(teamId)) {
       return res.status(403).json({
         error: "You do not have permission to create content for this team",
       });
@@ -297,7 +297,7 @@ export const createContent = async (req: Request, res: Response) => {
       analysis: {},
       status: "pending",
       teamId,
-      organizationId: user.organizationId,
+      organizationId: user.organizationId || "",
       createdBy: user.uid,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -338,7 +338,7 @@ export const getContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(content.teamId)) {
       return res.status(403).json({
         error: "You do not have permission to view this content",
       });
@@ -377,7 +377,7 @@ export const updateContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(content.teamId)) {
       return res.status(403).json({
         error: "You do not have permission to update this content",
       });
@@ -429,7 +429,7 @@ export const deleteContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(content.teamId)) {
       return res.status(403).json({
         error: "You do not have permission to delete this content",
       });
@@ -467,7 +467,7 @@ export const analyzeContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(content.teamId)) {
       return res.status(403).json({
         error: "You do not have permission to analyze this content",
       });
@@ -516,7 +516,7 @@ export const archiveContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(content.teamId)) {
       return res.status(403).json({
         error: "You do not have permission to archive this content",
       });
@@ -564,7 +564,7 @@ export const listTeamContent = async (req: Request, res: Response) => {
     }
 
     // Verify user belongs to team
-    if (!user.teamIds || !user.teamIds.includes(teamId)) {
+    if (!user.teamIds || !user.teamIds?.includes(teamId)) {
       return res.status(403).json({
         error: "You do not have permission to view content for this team",
       });

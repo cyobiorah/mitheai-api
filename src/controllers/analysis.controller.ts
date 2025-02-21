@@ -14,7 +14,7 @@ export const createTemplate = async (req: Request, res: Response) => {
     }
 
     // Verify user belongs to team
-    if (!user.teamIds.includes(teamId)) {
+    if (!user.teamIds?.includes(teamId)) {
       return res.status(403).json({
         error: 'You do not have permission to create templates for this team'
       });
@@ -26,7 +26,7 @@ export const createTemplate = async (req: Request, res: Response) => {
       type,
       config,
       teamId,
-      organizationId: user.organizationId,
+      organizationId: user.organizationId || "",
       settings: {
         permissions: [],
         autoApply: false,
@@ -64,7 +64,7 @@ export const getTemplate = async (req: Request, res: Response) => {
     const template = doc.data() as AnalysisTemplate;
 
     // Verify user has access to this template
-    if (!user.teamIds.includes(template.teamId)) {
+    if (!user.teamIds?.includes(template.teamId)) {
       return res.status(403).json({
         error: 'You do not have permission to view this template'
       });
@@ -95,7 +95,7 @@ export const updateTemplate = async (req: Request, res: Response) => {
     const template = doc.data() as AnalysisTemplate;
 
     // Verify user has access to this template
-    if (!user.teamIds.includes(template.teamId)) {
+    if (!user.teamIds?.includes(template.teamId)) {
       return res.status(403).json({
         error: 'You do not have permission to update this template'
       });
@@ -139,7 +139,7 @@ export const deleteTemplate = async (req: Request, res: Response) => {
     const template = doc.data() as AnalysisTemplate;
 
     // Verify user has access to this template
-    if (!user.teamIds.includes(template.teamId)) {
+    if (!user.teamIds?.includes(template.teamId)) {
       return res.status(403).json({
         error: 'You do not have permission to delete this template'
       });
@@ -221,7 +221,7 @@ export const applyTemplate = async (req: Request, res: Response) => {
     const content = contentDoc.data() as ContentItem;
 
     // Verify user has access to both template and content
-    if (!user.teamIds.includes(template.teamId) || !user.teamIds.includes(content.teamId)) {
+    if (!user.teamIds?.includes(template.teamId) || !user.teamIds.includes(content.teamId)) {
       return res.status(403).json({
         error: 'You do not have permission to apply this template to this content'
       });

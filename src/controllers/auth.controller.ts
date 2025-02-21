@@ -1,13 +1,9 @@
 import { Request, Response } from 'express';
-import { LoginRequest, RegisterRequest } from '../types/auth';
+import { LoginRequest, RegisterRequest, IndividualRegisterRequest, OrganizationRegisterRequest } from '../types/auth';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { db, auth, collections } from '../config/firebase';
-
-// TODO: Replace with database
-const users: any[] = [];
-const organizations: any[] = [];
 
 export const login = async (req: Request<{}, {}, LoginRequest>, res: Response) => {
   try {
@@ -45,6 +41,15 @@ export const login = async (req: Request<{}, {}, LoginRequest>, res: Response) =
     // Remove password from response
     const { password: _, ...userWithoutPassword } = userData;
 
+    // Get organization data if user is organization type
+    let organizationData;
+    if (userData.userType === 'organization' && userData.organizationId) {
+      const orgDoc = await collections.organizations.doc(userData.organizationId).get();
+      if (orgDoc.exists) {
+        organizationData = orgDoc.data();
+      }
+    }
+
     res.json({
       token,
       firebaseToken: customToken,
@@ -52,6 +57,7 @@ export const login = async (req: Request<{}, {}, LoginRequest>, res: Response) =
         id: userDoc.id,
         ...userWithoutPassword,
       },
+      ...(organizationData && { organization: organizationData }),
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -61,7 +67,7 @@ export const login = async (req: Request<{}, {}, LoginRequest>, res: Response) =
 
 export const register = async (req: Request<{}, {}, RegisterRequest>, res: Response) => {
   try {
-    const { firstName, lastName, email, password, organizationName } = req.body;
+    const { firstName, lastName, email, password, userType } = req.body;
 
     // Check if user already exists
     const existingUser = await collections.users
@@ -76,44 +82,61 @@ export const register = async (req: Request<{}, {}, RegisterRequest>, res: Respo
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create organization in Firestore
-    const organizationRef = collections.organizations.doc();
-    const organizationData = {
-      name: organizationName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
     // Create user in Firestore
     const userRef = collections.users.doc();
-    const userData = {
+    const baseUserData = {
       email,
       firstName,
       lastName,
       password: hashedPassword,
-      organizationId: organizationRef.id,
+      userType,
+      status: 'active',
+      settings: {
+        permissions: ['content_management'],
+        theme: 'light',
+        notifications: [],
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // Create default team
-    const teamRef = collections.teams.doc();
-    const teamData = {
-      name: 'Default Team',
-      organizationId: organizationRef.id,
-      createdBy: userRef.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      members: [{
-        userId: userRef.id,
-        role: 'owner',
-        joinedAt: new Date().toISOString()
-      }],
-      settings: {
-        isDefault: true,
-        canDelete: false
-      }
-    };
+    let organizationRef, teamRef;
+    let organizationData, teamData;
+
+    // Handle organization-specific setup
+    if (userType === 'organization') {
+      const { organizationName } = req.body as OrganizationRegisterRequest;
+      
+      // Create organization
+      organizationRef = collections.organizations.doc();
+      organizationData = {
+        name: organizationName,
+        ownerId: userRef.id,
+        type: 'business',
+        settings: {
+          permissions: ['content_management', 'team_management'],
+          maxTeams: 10,
+          maxUsers: 50,
+          features: ['content_management', 'team_management', 'analytics']
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Create default team
+      teamRef = collections.teams.doc();
+      teamData = {
+        name: 'Default Team',
+        description: 'Default team for organization',
+        organizationId: organizationRef.id,
+        memberIds: [userRef.id],
+        settings: {
+          permissions: ['content_write', 'team_read']
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
 
     // Create Firebase Auth user
     const firebaseUser = await auth.createUser({
@@ -124,12 +147,33 @@ export const register = async (req: Request<{}, {}, RegisterRequest>, res: Respo
 
     // Batch write to Firestore
     const batch = db.batch();
-    batch.set(organizationRef, {
-      ...organizationData,
-      ownerId: userRef.id,
-    });
-    batch.set(userRef, userData);
-    batch.set(teamRef, teamData);
+    
+    if (userType === 'organization') {
+      batch.set(organizationRef!, organizationData!);
+      batch.set(teamRef!, teamData!);
+      batch.set(userRef, {
+        ...baseUserData,
+        organizationId: organizationRef!.id,
+        role: 'org_owner',
+        teamIds: [teamRef!.id],
+      });
+    } else {
+      // Individual user
+      batch.set(userRef, {
+        ...baseUserData,
+        settings: {
+          ...baseUserData.settings,
+          personalPreferences: {
+            defaultContentType: 'social_post',
+            aiPreferences: {
+              tone: 'professional',
+              style: 'concise'
+            }
+          }
+        }
+      });
+    }
+
     await batch.commit();
 
     // Create Firebase custom token
@@ -143,7 +187,7 @@ export const register = async (req: Request<{}, {}, RegisterRequest>, res: Respo
     );
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = userData;
+    const { password: _, ...userWithoutPassword } = baseUserData;
 
     res.status(201).json({
       token,
@@ -151,9 +195,14 @@ export const register = async (req: Request<{}, {}, RegisterRequest>, res: Respo
       user: {
         id: userRef.id,
         ...userWithoutPassword,
+        ...(userType === 'organization' && {
+          organizationId: organizationRef!.id,
+          role: 'org_owner',
+          teamIds: [teamRef!.id],
+        }),
       },
-      organization: organizationData,
-      team: teamData,
+      ...(organizationData && { organization: organizationData }),
+      ...(teamData && { team: teamData }),
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -176,9 +225,19 @@ export const me = async (req: Request, res: Response) => {
     // Remove password from response
     const { password: _, ...userWithoutPassword } = userData;
 
+    // Get organization data if user is organization type
+    let organizationData;
+    if (userData.userType === 'organization' && userData.organizationId) {
+      const orgDoc = await collections.organizations.doc(userData.organizationId).get();
+      if (orgDoc.exists) {
+        organizationData = orgDoc.data();
+      }
+    }
+
     res.json({
       id: userDoc.id,
       ...userWithoutPassword,
+      ...(organizationData && { organization: organizationData }),
     });
   } catch (error) {
     console.error('Get user error:', error);
