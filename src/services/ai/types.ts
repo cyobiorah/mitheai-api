@@ -37,6 +37,9 @@ export interface AIAssistantRequest {
     purpose: ContentPurpose;
     targetAudience: string;
     keywords: string[];
+    ctaType?: 'question' | 'engagement' | 'purchase' | 'visit' | 'tag';
+    contentStyle?: 'storytelling' | 'listicle' | 'informative' | 'direct';
+    toneIntensity?: 'light' | 'moderate' | 'strong';
     length?: {
       min: number;
       max: number;

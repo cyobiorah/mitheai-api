@@ -101,6 +101,7 @@ export const inviteUser = async (req: Request, res: Response) => {
       lastName,
       role,
       organizationId,
+      userType: "organization",
       teamIds: [],
       status: "pending",
       invitationToken: token,
