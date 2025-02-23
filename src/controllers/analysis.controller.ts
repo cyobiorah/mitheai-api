@@ -7,17 +7,25 @@ export const createTemplate = async (req: Request, res: Response) => {
     const { name, description, type, config, teamId } = req.body;
     const user = req.user as User;
 
-    if (!name || !type || !config || !teamId) {
+    if (!name || !type || !config) {
       return res.status(400).json({
-        error: 'Missing required fields: name, type, config, teamId'
+        error: 'Missing required fields: name, type, config'
       });
     }
 
-    // Verify user belongs to team
-    if (!user.teamIds?.includes(teamId)) {
-      return res.status(403).json({
-        error: 'You do not have permission to create templates for this team'
-      });
+    // Additional validation for organization users
+    if (user.userType === 'organization') {
+      if (!teamId) {
+        return res.status(400).json({
+          error: 'Team ID is required for organization users'
+        });
+      }
+
+      if (!user.teamIds?.includes(teamId)) {
+        return res.status(403).json({
+          error: 'You do not have permission to create templates for this team'
+        });
+      }
     }
 
     const template: Omit<AnalysisTemplate, 'id'> = {
@@ -25,8 +33,8 @@ export const createTemplate = async (req: Request, res: Response) => {
       description,
       type,
       config,
-      teamId,
-      organizationId: user.organizationId || "",
+      teamId: user.userType === 'organization' ? teamId : null,
+      organizationId: user.userType === 'organization' ? user.organizationId || null : null,
       settings: {
         permissions: [],
         autoApply: false,
@@ -63,11 +71,21 @@ export const getTemplate = async (req: Request, res: Response) => {
 
     const template = doc.data() as AnalysisTemplate;
 
-    // Verify user has access to this template
-    if (!user.teamIds?.includes(template.teamId)) {
-      return res.status(403).json({
-        error: 'You do not have permission to view this template'
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      if (template.teamId && !user.teamIds?.includes(template.teamId)) {
+        return res.status(403).json({
+          error: 'You do not have permission to view this template'
+        });
+      }
+    }
+    // For individual users
+    else {
+      if (template.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: 'You do not have permission to view this template'
+        });
+      }
     }
 
     res.json({
@@ -94,11 +112,21 @@ export const updateTemplate = async (req: Request, res: Response) => {
 
     const template = doc.data() as AnalysisTemplate;
 
-    // Verify user has access to this template
-    if (!user.teamIds?.includes(template.teamId)) {
-      return res.status(403).json({
-        error: 'You do not have permission to update this template'
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      if (template.teamId && !user.teamIds?.includes(template.teamId)) {
+        return res.status(403).json({
+          error: 'You do not have permission to update this template'
+        });
+      }
+    }
+    // For individual users
+    else {
+      if (template.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: 'You do not have permission to update this template'
+        });
+      }
     }
 
     // Don't allow updating certain fields
@@ -138,11 +166,21 @@ export const deleteTemplate = async (req: Request, res: Response) => {
 
     const template = doc.data() as AnalysisTemplate;
 
-    // Verify user has access to this template
-    if (!user.teamIds?.includes(template.teamId)) {
-      return res.status(403).json({
-        error: 'You do not have permission to delete this template'
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      if (template.teamId && !user.teamIds?.includes(template.teamId)) {
+        return res.status(403).json({
+          error: 'You do not have permission to delete this template'
+        });
+      }
+    }
+    // For individual users
+    else {
+      if (template.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: 'You do not have permission to delete this template'
+        });
+      }
     }
 
     await doc.ref.delete();
@@ -157,28 +195,69 @@ export const deleteTemplate = async (req: Request, res: Response) => {
 export const listTeamTemplates = async (req: Request, res: Response) => {
   try {
     const { teamId } = req.params;
-    const user = req.user;
+    const user = req.user as User;
 
-    if (!user) {
-      return res.status(401).json({
-        error: 'Authentication required'
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      if (!user.teamIds || !user.teamIds?.includes(teamId)) {
+        return res.status(403).json({
+          error: 'You do not have permission to view templates for this team'
+        });
+      }
+
+      const snapshot = await db
+        .collection('analysisTemplates')
+        .where('teamId', '==', teamId)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const templates = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+
+      res.json(templates);
     }
+    // For individual users
+    else {
+      const snapshot = await db
+        .collection('analysisTemplates')
+        .where('createdBy', '==', user.uid)
+        .where('teamId', '==', null)
+        .get();
 
-    // Handle new users or users in onboarding
-    if (user.isNewUser) {
-      return res.json([]);  // Return empty array for new users
+      const templates = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+
+      res.json(templates);
     }
+  } catch (error: unknown) {
+    console.error('Error listing team templates:', error);
+    res.status(500).json({
+      error: 'Failed to list team templates',
+      details: process.env.NODE_ENV === 'development' ? 
+        error instanceof Error ? error.message : String(error) 
+        : undefined
+    });
+  }
+};
 
-    // Verify user belongs to team
-    if (!user.teamIds || !user.teamIds.includes(teamId)) {
+export const getPersonalTemplates = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as User;
+
+    // Verify this is an individual user
+    if (user.userType !== 'individual') {
       return res.status(403).json({
-        error: 'You do not have permission to view templates for this team'
+        error: 'This endpoint is only for individual users'
       });
     }
 
     const snapshot = await db.collection('analysisTemplates')
-      .where('teamId', '==', teamId)
+      .where('createdBy', '==', user.uid)
+      .where('teamId', '==', null)
       .orderBy('createdAt', 'desc')
       .get();
 
@@ -189,13 +268,8 @@ export const listTeamTemplates = async (req: Request, res: Response) => {
 
     res.json(templates);
   } catch (error: unknown) {
-    console.error('Error listing team templates:', error);
-    res.status(500).json({
-      error: 'Failed to list team templates',
-      details: process.env.NODE_ENV === 'development' ? 
-        error instanceof Error ? error.message : String(error) 
-        : undefined
-    });
+    console.error('Error getting personal templates:', error);
+    res.status(500).json({ error: 'Failed to get personal templates' });
   }
 };
 
@@ -220,11 +294,24 @@ export const applyTemplate = async (req: Request, res: Response) => {
     const template = templateDoc.data() as AnalysisTemplate;
     const content = contentDoc.data() as ContentItem;
 
-    // Verify user has access to both template and content
-    if (!user.teamIds?.includes(template.teamId) || !user.teamIds.includes(content.teamId)) {
-      return res.status(403).json({
-        error: 'You do not have permission to apply this template to this content'
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      // Verify user has access to both template and content
+      if ((template.teamId && !user.teamIds?.includes(template.teamId)) || 
+          (content.teamId && !user.teamIds?.includes(content.teamId))) {
+        return res.status(403).json({
+          error: 'You do not have permission to apply this template to this content'
+        });
+      }
+    }
+    // For individual users
+    else {
+      // Verify user owns both the template and content
+      if (template.createdBy !== user.uid || content.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: 'You do not have permission to analyze this content'
+        });
+      }
     }
 
     // Verify content type is supported by template
@@ -248,7 +335,7 @@ export const applyTemplate = async (req: Request, res: Response) => {
     });
 
     const updatedDoc = await contentDoc.ref.get();
-    
+
     res.json({
       ...updatedDoc.data(),
       id: updatedDoc.id
