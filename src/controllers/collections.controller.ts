@@ -184,15 +184,23 @@ export const addContentToCollection = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Content not found" });
     }
 
-    // Verify user has access to both collection and content
-    if (
-      !user.teamIds?.includes(collection.teamId) ||
-      !user.teamIds?.includes(content.teamId)
-    ) {
-      return res.status(403).json({
-        error:
-          "You do not have permission to modify this collection or content",
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      // Verify user has access to both collection and content
+      if (!user.teamIds?.includes(collection.teamId) || (content.teamId && !user.teamIds?.includes(content.teamId))) {
+        return res.status(403).json({
+          error: "You do not have permission to modify this collection or content",
+        });
+      }
+    }
+    // For individual users
+    else {
+      // Verify user owns the content
+      if (content.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: "You do not have permission to modify this content",
+        });
+      }
     }
 
     // Check if content is already in collection
@@ -227,28 +235,45 @@ export const removeContentFromCollection = async (
     const { collectionId, contentId } = req.params;
     const user = req.user as User;
 
-    const doc = await db.collection("collections").doc(collectionId).get();
+    // Get both collection and content documents
+    const [collectionDoc, contentDoc] = await Promise.all([
+      db.collection("collections").doc(collectionId).get(),
+      db.collection("content").doc(contentId).get(),
+    ]);
 
-    if (!doc.exists) {
+    if (!collectionDoc.exists) {
       return res.status(404).json({ error: "Collection not found" });
     }
 
-    const collection = doc.data() as ContentCollection;
+    const collection = collectionDoc.data() as ContentCollection;
+    const content = contentDoc.exists ? contentDoc.data() as ContentItem : null;
 
-    // Verify user has access to this collection
-    if (!user.teamIds?.includes(collection.teamId)) {
-      return res.status(403).json({
-        error: "You do not have permission to modify this collection",
-      });
+    // For organization users
+    if (user.userType === 'organization') {
+      // Verify user has access to collection and content (if it exists)
+      if (!user.teamIds?.includes(collection.teamId) || (content?.teamId && !user.teamIds?.includes(content.teamId))) {
+        return res.status(403).json({
+          error: "You do not have permission to modify this collection or content",
+        });
+      }
+    }
+    // For individual users
+    else {
+      // Verify user owns the content (if it exists)
+      if (content && content.createdBy !== user.uid) {
+        return res.status(403).json({
+          error: "You do not have permission to modify this content",
+        });
+      }
     }
 
     // Remove content ID from collection
-    await doc.ref.update({
+    await collectionDoc.ref.update({
       contentIds: collection.contentIds.filter((id) => id !== contentId),
       updatedAt: new Date().toISOString(),
     });
 
-    const updatedDoc = await doc.ref.get();
+    const updatedDoc = await collectionDoc.ref.get();
 
     res.json({
       ...updatedDoc.data(),
@@ -306,5 +331,35 @@ export const listTeamCollections = async (req: Request, res: Response) => {
             : String(error)
           : undefined,
     });
+  }
+};
+
+// Get personal collections for individual users
+export const getPersonalCollections = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as User;
+
+    // Verify this is an individual user
+    if (user.userType !== 'individual') {
+      return res.status(403).json({
+        error: 'This endpoint is only for individual users'
+      });
+    }
+
+    const snapshot = await db.collection('collections')
+      .where('createdBy', '==', user.uid)
+      .where('teamId', '==', null)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    const collections = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    }));
+
+    res.json(collections);
+  } catch (error: unknown) {
+    console.error('Error getting personal collections:', error);
+    res.status(500).json({ error: 'Failed to get personal collections' });
   }
 };

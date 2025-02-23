@@ -269,17 +269,26 @@ export const createContent = async (req: Request, res: Response) => {
       req.body;
     const user = req.user as User; // From auth middleware
 
-    if (!title || !type || !content || !teamId) {
+    // Basic validation for all users
+    if (!title || !type || !content) {
       return res.status(400).json({
-        error: "Missing required fields: title, type, content, teamId",
+        error: "Missing required fields: title, type, content",
       });
     }
 
-    // Verify user belongs to team
-    if (!user.teamIds?.includes(teamId)) {
-      return res.status(403).json({
-        error: "You do not have permission to create content for this team",
-      });
+    // Additional validation for organization users
+    if (user.userType === 'organization') {
+      if (!teamId) {
+        return res.status(400).json({
+          error: "Team ID is required for organization users",
+        });
+      }
+
+      if (!user.teamIds?.includes(teamId)) {
+        return res.status(403).json({
+          error: "You do not have permission to create content for this team",
+        });
+      }
     }
 
     const contentItem: Omit<ContentItem, "id"> = {
@@ -296,8 +305,8 @@ export const createContent = async (req: Request, res: Response) => {
       },
       analysis: {},
       status: "pending",
-      teamId,
-      organizationId: user.organizationId || "",
+      teamId: user.userType === 'organization' ? teamId : null,
+      organizationId: user.userType === 'organization' ? user.organizationId || null : null,
       createdBy: user.uid,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -338,7 +347,14 @@ export const getContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds?.includes(content.teamId)) {
+    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+      return res.status(403).json({
+        error: "You do not have permission to view this content",
+      });
+    }
+
+    // For individual users, verify they own the content
+    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
       return res.status(403).json({
         error: "You do not have permission to view this content",
       });
@@ -377,7 +393,14 @@ export const updateContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds?.includes(content.teamId)) {
+    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+      return res.status(403).json({
+        error: "You do not have permission to update this content",
+      });
+    }
+
+    // For individual users, verify they own the content
+    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
       return res.status(403).json({
         error: "You do not have permission to update this content",
       });
@@ -429,7 +452,14 @@ export const deleteContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds?.includes(content.teamId)) {
+    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+      return res.status(403).json({
+        error: "You do not have permission to delete this content",
+      });
+    }
+
+    // For individual users, verify they own the content
+    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
       return res.status(403).json({
         error: "You do not have permission to delete this content",
       });
@@ -467,7 +497,14 @@ export const analyzeContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds?.includes(content.teamId)) {
+    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+      return res.status(403).json({
+        error: "You do not have permission to analyze this content",
+      });
+    }
+
+    // For individual users, verify they own the content
+    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
       return res.status(403).json({
         error: "You do not have permission to analyze this content",
       });
@@ -516,7 +553,14 @@ export const archiveContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (!user.teamIds?.includes(content.teamId)) {
+    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+      return res.status(403).json({
+        error: "You do not have permission to archive this content",
+      });
+    }
+
+    // For individual users, verify they own the content
+    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
       return res.status(403).json({
         error: "You do not have permission to archive this content",
       });
@@ -550,7 +594,7 @@ export const archiveContent = async (req: Request, res: Response) => {
 export const listTeamContent = async (req: Request, res: Response) => {
   try {
     const { teamId } = req.params;
-    const user = req.user;
+    const user = req.user as User;
 
     if (!user) {
       return res.status(401).json({
@@ -558,13 +602,8 @@ export const listTeamContent = async (req: Request, res: Response) => {
       });
     }
 
-    // Handle new users or users in onboarding
-    if (user.isNewUser) {
-      return res.json([]); // Return empty array for new users
-    }
-
     // Verify user belongs to team
-    if (!user.teamIds || !user.teamIds?.includes(teamId)) {
+    if (!user.teamIds?.includes(teamId)) {
       return res.status(403).json({
         error: "You do not have permission to view content for this team",
       });
@@ -593,5 +632,34 @@ export const listTeamContent = async (req: Request, res: Response) => {
             : String(error)
           : undefined,
     });
+  }
+};
+
+export const getPersonalContent = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as User;
+
+    // Verify this is an individual user
+    if (user.userType !== 'individual') {
+      return res.status(403).json({
+        error: 'This endpoint is only for individual users'
+      });
+    }
+
+    const snapshot = await db.collection('content')
+      .where('createdBy', '==', user.uid)
+      .where('teamId', '==', null)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    const content = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    }));
+
+    res.json(content);
+  } catch (error: unknown) {
+    console.error('Error getting personal content:', error);
+    res.status(500).json({ error: 'Failed to get personal content' });
   }
 };

@@ -8,6 +8,7 @@ import {
   listTeamContent,
   archiveContent,
   generateContent,
+  getPersonalContent,
 } from "../controllers/content.controller";
 import { authenticateToken, requireTeamAccess } from '../middleware/auth.middleware';
 
@@ -35,6 +36,11 @@ router.use((req, res, next) => {
 router.get("/test", (req, res) => {
   // console.log("[DEBUG] Test route hit");
   res.json({ message: "Content router is working" });
+});
+
+// Personal routes
+router.get("/personal", authenticateToken, (req, res) => {
+  return getPersonalContent(req, res);
 });
 
 // AI Content Generation route

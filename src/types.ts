@@ -92,8 +92,8 @@ export interface ContentItem {
     customAnalytics?: Record<string, any>;
   };
   status: 'pending' | 'analyzed' | 'archived';
-  teamId: string;
-  organizationId: string;
+  teamId: string | null;  // Null for individual users
+  organizationId: string | null;  // Null for individual users
   createdBy: string;  // User UID
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -146,8 +146,8 @@ export interface AnalysisTemplate {
     preprocessors?: string[];
     postprocessors?: string[];
   };
-  teamId: string;
-  organizationId: string;
+  teamId: string | null;  // Null for individual users
+  organizationId: string | null;  // Null for individual users
   settings: {
     permissions: string[];
     autoApply: boolean;
