@@ -3,9 +3,11 @@ import cors from "cors";
 import morgan from "morgan";
 import helmet from "helmet";
 import compression from "compression";
+import session from "express-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
 import { authenticateToken } from "./middleware/auth.middleware";
+import passport from "./config/passport.config";
 
 // Import routes
 import authRoutes from "./routes/auth.routes";
@@ -15,6 +17,7 @@ import invitationsRouter from "./routes/invitations.routes";
 import contentRouter from "./routes/content.routes";
 import collectionsRouter from "./routes/collections.routes";
 import analysisRouter from "./routes/analysis.routes";
+import socialAccountRouter from "./routes/social-account.routes";
 
 // Load environment variables
 config();
@@ -26,7 +29,7 @@ const port = process.env.PORT || 3001;
 app.use(helmet()); // Security headers
 app.use(
   cors({
-    origin: "*",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -37,20 +40,25 @@ app.use(morgan("dev")); // Request logging
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Debug middleware to log all requests
-// app.use((req, res, next) => {
-//   console.log("\n[DEBUG] Request:");
-//   console.log("Method:", req.method);
-//   console.log("URL:", req.url);
-//   console.log("Original URL:", req.originalUrl);
-//   console.log("Base URL:", req.baseUrl);
-//   console.log("Path:", req.path);
-//   console.log("Headers:", req.headers);
-//   console.log("Body:", req.body);
-//   console.log("Query:", req.query);
-//   console.log("Params:", req.params);
-//   next();
-// });
+// Session configuration
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "your-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: "lax",
+    },
+    name: "mitheai.sid",
+  })
+);
+
+// Initialize passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Validation error handler
 app.use(
@@ -98,62 +106,15 @@ app.get("/test-cors", (req, res) => {
 // Routes
 // console.log("\n[DEBUG] ====== Mounting routes... ======");
 
-// // Mount invitation routes first (includes test route)
-// console.log("[DEBUG] Mounting /api/invitations");
-app.use("/api/invitations", invitationsRouter);
-
-// console.log("[DEBUG] Mounting /api/auth");
+// Mount routes
 app.use("/api/auth", authRoutes);
-
-// console.log("[DEBUG] Mounting /api/users");
 app.use("/api/users", authenticateToken, usersRouter);
-
-// console.log("[DEBUG] Mounting /api/teams");
 app.use("/api/teams", authenticateToken, teamsRouter);
-
-// console.log("[DEBUG] Mounting /api/content");
-// console.log("[DEBUG] Content router stack details:");
-// contentRouter?.stack?.forEach((layer: any, index: number) => {
-//   console.log(`[DEBUG] Layer ${index}:`, {
-//     name: layer.name,
-//     path: layer.route?.path,
-//     methods: layer.route?.methods
-//       ? Object.keys(layer.route.methods)
-//       : undefined,
-//   });
-// });
-
-// Mount content router with debug logging
-app.use(
-  "/api/content",
-  (req, res, next) => {
-    // console.log("\n[DEBUG] Content router middleware hit");
-    // console.log("[DEBUG] Request path:", req.path);
-    // console.log("[DEBUG] Request baseUrl:", req.baseUrl);
-    // console.log("[DEBUG] Request originalUrl:", req.originalUrl);
-
-    // Skip authentication for generate route in development
-    // if (process.env.NODE_ENV === "development" && req.path === "/generate") {
-    //   console.log("[DEBUG] Bypassing auth for content generation");
-    //   req.user = {
-    //     uid: "test-user-id",
-    //     email: "test@example.com",
-    //     teamIds: ["test-team-id"],
-    //     currentTeamId: "test-team-id",
-    //     isNewUser: false,
-    //   };
-    //   return next();
-    // }
-    return authenticateToken(req, res, next);
-  },
-  contentRouter
-);
-
-// console.log("[DEBUG] Mounting /api/collections");
+app.use("/api/invitations", authenticateToken, invitationsRouter);
+app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/collections", authenticateToken, collectionsRouter);
-
-// console.log("[DEBUG] Mounting /api/analysis");
 app.use("/api/analysis", authenticateToken, analysisRouter);
+app.use("/api/social-accounts", socialAccountRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");
@@ -194,29 +155,8 @@ function listEndpoints(prefix: string, router: any) {
   return routes;
 }
 
-// try {
-//   const allRoutes = listEndpoints("", app._router);
-//   console.log("[DEBUG] Total routes registered:", allRoutes.length);
-//   console.log("[DEBUG] Routes:", allRoutes);
-// } catch (error) {
-//   console.error("[ERROR] Failed to list endpoints:", error);
-// }
-
-// Log registered route handlers
-// console.log("\n[DEBUG] ====== Route Handlers: ======");
-// app._router?.stack?.forEach((r: any) => {
-//   if (r.route && r.route.path) {
-//     console.log(`${Object.keys(r.route.methods).join(",")} ${r.route.path}`);
-//   } else if (r.name === "router") {
-//     console.log(`Router middleware at: ${r.regexp}`);
-//   }
-// });
-
 // 404 handler
 app.use((req: express.Request, res: express.Response) => {
-  // console.log("[DEBUG] 404 Not Found:", req.method, req.url);
-  // console.log("Headers:", req.headers);
-  // console.log("Body:", req.body);
   res.status(404).json({
     error: "Not Found",
     message: `Cannot ${req.method} ${req.url}`,
@@ -244,17 +184,7 @@ app.use(
 try {
   const server = app.listen(port, () => {
     console.log(`[${new Date().toISOString()}] Server running on port ${port}`);
-    console.log("[DEBUG] Environment:", process.env.NODE_ENV);
-    // console.log("[DEBUG] Available routes:");
-    // app._router.stack.forEach((r: any) => {
-    //   if (r.route && r.route.path) {
-    //     console.log(
-    //       `${Object.keys(r.route.methods).join(",")} ${r.route.path}`
-    //     );
-    //   } else if (r.name === "router") {
-    //     console.log(`Router middleware: ${r.regexp}`);
-    //   }
-    // });
+    // console.log("[DEBUG] Environment:", process.env.NODE_ENV);
   });
 
   server.on("error", (error: any) => {

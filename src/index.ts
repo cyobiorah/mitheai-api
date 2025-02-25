@@ -76,8 +76,19 @@
 //   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 // });
 
+import app from "./app";
+import session from "express-session";
+import passport from "./config/passport.config";
 
-import app from './app';
+app.use(
+  session({
+    secret: process.env.TWITTER_CONSUMER_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
 
 // The app is now configured and started in app.ts
 // This file just imports and re-exports the app for compatibility
