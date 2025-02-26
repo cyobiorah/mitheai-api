@@ -9,7 +9,7 @@ import {
 } from "../services/ai/types";
 import { aiService } from "../config/ai.config";
 import { Timestamp } from "firebase-admin/firestore";
-import { ContentAnalysisService } from '../services/content-analysis.service';
+import { ContentAnalysisService } from "../services/content-analysis.service";
 
 const contentAnalysisService = new ContentAnalysisService();
 
@@ -335,19 +335,36 @@ export const createContent = async (req: Request, res: Response) => {
       metadata: {
         source: metadata?.source || "manual",
         language: metadata?.language || "en",
-        tags: metadata?.tags || [],
+        tags: [
+          ...(metadata?.tags || []),
+          // Extract hashtags from content if they exist
+          ...(content.match(/#[\w-]+/g) || []).map((tag: any) => tag.slice(1)),
+        ],
         customFields: {},
+        socialPost: metadata?.socialPost,
       },
       analysis: {
         ...analysis,
         customAnalytics: {
-          ...(metadata?.customFields?.tone && { tone: metadata.customFields.tone }),
-          ...(metadata?.customFields?.purpose && { purpose: metadata.customFields.purpose }),
-          ...(metadata?.customFields?.targetAudience && { targetAudience: metadata.customFields.targetAudience }),
-          ...(metadata?.customFields?.contentStyle && { contentStyle: metadata.customFields.contentStyle }),
-          ...(metadata?.customFields?.toneIntensity && { toneIntensity: metadata.customFields.toneIntensity }),
-          ...(metadata?.customFields?.hashtagStrategy && { hashtagStrategy: metadata.customFields.hashtagStrategy })
-        }
+          ...(metadata?.customFields?.tone && {
+            tone: metadata.customFields.tone,
+          }),
+          ...(metadata?.customFields?.purpose && {
+            purpose: metadata.customFields.purpose,
+          }),
+          ...(metadata?.customFields?.targetAudience && {
+            targetAudience: metadata.customFields.targetAudience,
+          }),
+          ...(metadata?.customFields?.contentStyle && {
+            contentStyle: metadata.customFields.contentStyle,
+          }),
+          ...(metadata?.customFields?.toneIntensity && {
+            toneIntensity: metadata.customFields.toneIntensity,
+          }),
+          ...(metadata?.customFields?.hashtagStrategy && {
+            hashtagStrategy: metadata.customFields.hashtagStrategy,
+          }),
+        },
       },
       status: "pending",
       teamId: user.userType === "organization" ? teamId : null,
@@ -359,22 +376,23 @@ export const createContent = async (req: Request, res: Response) => {
     };
 
     // Add socialPost only if it's a social post type
-    const contentItem = type === "social_post" 
-      ? {
-          ...baseContentItem,
-          metadata: {
-            ...baseContentItem.metadata,
-            socialPost: {
-              platform: metadata?.customFields?.platform,
-              scheduledTime: null,
-              publishedTime: null,
-              postId: null,
-              retryCount: 0,
-              failureReason: null
-            }
+    const contentItem =
+      type === "social_post"
+        ? {
+            ...baseContentItem,
+            metadata: {
+              ...baseContentItem.metadata,
+              socialPost: {
+                platform: metadata?.customFields?.platform,
+                scheduledTime: null,
+                publishedTime: null,
+                postId: null,
+                retryCount: 0,
+                failureReason: null,
+              },
+            },
           }
-        }
-      : baseContentItem;
+        : baseContentItem;
 
     const docRef = await db.collection("content").add(contentItem);
     const doc = await docRef.get();
