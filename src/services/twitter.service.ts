@@ -1,6 +1,7 @@
 import { firestore } from "firebase-admin";
 import { SocialAccount } from "../models/social-account.model";
-import { Client } from 'twitter-api-sdk';
+import { Client } from "twitter-api-sdk";
+import { ContentItem } from "../types";
 
 export class TwitterService {
   private readonly db: firestore.Firestore;
@@ -28,15 +29,15 @@ export class TwitterService {
     // Create base account object without optional fields
     const baseAccount: SocialAccount = {
       id: docId,
-      platform: 'twitter' as const,
-      accountType: 'personal' as const,
+      platform: "twitter" as const,
+      accountType: "personal" as const,
       accountName: profile.username,
       accountId: profile.id,
       accessToken,
       refreshToken,
       tokenExpiry: firestore.Timestamp.fromMillis(Date.now() + 7200000),
       lastRefreshed: firestore.Timestamp.now(),
-      status: 'active' as const,
+      status: "active" as const,
       userId,
       metadata: {
         profileUrl: `https://twitter.com/${profile.username}`,
@@ -73,9 +74,9 @@ export class TwitterService {
     }
 
     const client = new Client(account.accessToken);
-    
+
     const response = await client.tweets.createTweet({
-      text: message
+      text: message,
     });
 
     return response;
@@ -132,8 +133,13 @@ export class TwitterService {
     }
   }
 
-  private async getSocialAccount(accountId: string): Promise<SocialAccount | null> {
-    const doc = await this.db.collection("social_accounts").doc(accountId).get();
+  private async getSocialAccount(
+    accountId: string
+  ): Promise<SocialAccount | null> {
+    const doc = await this.db
+      .collection("social_accounts")
+      .doc(accountId)
+      .get();
     if (!doc.exists) {
       return null;
     }
@@ -150,15 +156,20 @@ export class TwitterService {
     // Refresh token logic will be implemented when needed
   }
 
-  private async generateCodeChallenge(): Promise<{ verifier: string; challenge: string }> {
-    const verifier = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  private async generateCodeChallenge(): Promise<{
+    verifier: string;
+    challenge: string;
+  }> {
+    const verifier =
+      Math.random().toString(36).substring(2) +
+      Math.random().toString(36).substring(2);
     const encoder = new TextEncoder();
     const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
+    const digest = await crypto.subtle.digest("SHA-256", data);
     const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
     return { verifier, challenge };
   }
 
@@ -168,9 +179,9 @@ export class TwitterService {
       callbackUrl: process.env.TWITTER_CALLBACK_URL,
     });
 
-    const callbackUrl = process.env.TWITTER_CALLBACK_URL!.replace('www.', '');
+    const callbackUrl = process.env.TWITTER_CALLBACK_URL!.replace("www.", "");
     const { verifier, challenge } = await this.generateCodeChallenge();
-    
+
     // Store verifier for later use
     // TODO: Store this securely, perhaps in session or temporary storage
     console.log("Code verifier (save this):", verifier);
@@ -189,5 +200,49 @@ export class TwitterService {
     console.log("Generated auth URL:", authUrl);
     console.log("Callback URL being used:", callbackUrl);
     return authUrl;
+  }
+
+  async post(content: ContentItem): Promise<{ id: string }> {
+    if (
+      !content.metadata.socialPost?.platform ||
+      content.metadata.socialPost.platform !== "twitter"
+    ) {
+      throw new Error("Invalid platform for Twitter post");
+    }
+
+    // Get the social account for this user
+    const accountSnapshot = await this.db
+      .collection("social_accounts")
+      .where("userId", "==", content.createdBy)
+      .where("platform", "==", "twitter")
+      .where("status", "==", "active")
+      .limit(1)
+      .get();
+
+    if (accountSnapshot.empty) {
+      throw new Error("No active Twitter account found for user");
+    }
+
+    const account = accountSnapshot.docs[0].data() as SocialAccount;
+
+    // Initialize Twitter client with user's access token
+    const client = new Client(account.accessToken);
+
+    try {
+      // Create the tweet
+      const response = await client.tweets.createTweet({
+        text: content.content,
+      });
+
+      if (!response.data?.id) {
+        throw new Error("Failed to create tweet");
+      }
+
+      return {
+        id: response.data.id,
+      };
+    } catch (error: any) {
+      throw new Error(`Twitter API Error: ${error.message}`);
+    }
   }
 }

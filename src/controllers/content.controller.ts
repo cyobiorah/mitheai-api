@@ -1,8 +1,17 @@
 import { Request, Response } from "express";
 import { db } from "../config/firebase";
 import { ContentItem, User } from "../types";
-import { AIAssistantRequest, SocialPlatform, ContentTone, ContentPurpose } from "../services/ai/types";
+import {
+  AIAssistantRequest,
+  SocialPlatform,
+  ContentTone,
+  ContentPurpose,
+} from "../services/ai/types";
 import { aiService } from "../config/ai.config";
+import { Timestamp } from "firebase-admin/firestore";
+import { ContentAnalysisService } from '../services/content-analysis.service';
+
+const contentAnalysisService = new ContentAnalysisService();
 
 interface GenerateContentRequest {
   type: "caption" | "hashtags" | "variation" | "optimization";
@@ -13,9 +22,9 @@ interface GenerateContentRequest {
     purpose: ContentPurpose;
     targetAudience: string;
     keywords: string[];
-    ctaType?: 'question' | 'engagement' | 'purchase' | 'visit' | 'tag';
-    contentStyle?: 'storytelling' | 'listicle' | 'informative' | 'direct';
-    toneIntensity?: 'light' | 'moderate' | 'strong';
+    ctaType?: "question" | "engagement" | "purchase" | "visit" | "tag";
+    contentStyle?: "storytelling" | "listicle" | "informative" | "direct";
+    toneIntensity?: "light" | "moderate" | "strong";
     length?: {
       min: number;
       max: number;
@@ -26,7 +35,7 @@ interface GenerateContentRequest {
     mustInclude?: string[];
     mustExclude?: string[];
     hashtagCount?: number;
-    emojiUsage?: 'none' | 'minimal' | 'moderate' | 'heavy';
+    emojiUsage?: "none" | "minimal" | "moderate" | "heavy";
   };
 }
 
@@ -82,9 +91,15 @@ export const generateContent = async (
       : "";
 
     // Define the main system prompt with more detailed instructions
-    let systemPrompt = `You are an expert social media content creator and copywriter specializing in ${context.platform} content. You have years of experience crafting viral, engaging content that drives real business results.
+    let systemPrompt = `You are an expert social media content creator and copywriter specializing in ${
+      context.platform
+    } content. You have years of experience crafting viral, engaging content that drives real business results.
 
-Your task is to create ${type === "caption" ? "a compelling caption" : type} that will stand out in the ${context.platform} feed and drive meaningful engagement.
+Your task is to create ${
+      type === "caption" ? "a compelling caption" : type
+    } that will stand out in the ${
+      context.platform
+    } feed and drive meaningful engagement.
 
 Content Requirements:
 - Maintain a ${context.tone} tone consistently throughout
@@ -97,13 +112,15 @@ ${contentStyleInstructions}
 ${toneGuidelines}
 
 Platform-Specific Best Practices for ${context.platform}:
-${context.platform === "linkedin" 
-  ? "- Professional yet conversational tone\n- Focus on industry insights and thought leadership\n- Use data points and experience to build credibility\n- Structure content for easy scanning (bullets, spacing)\n- End with a clear, professional call-to-action"
-  : context.platform === "twitter"
-  ? "- Be concise and impactful\n- Use strong hooks in the first line\n- Create conversation-worthy statements\n- Use line breaks strategically\n- Make effective use of Twitter's format"
-  : context.platform === "facebook"
-  ? "- Focus on storytelling and community building\n- Use relatable, friendly language\n- Encourage discussion and sharing\n- Balance professional with personal touch\n- Make content easily shareable"
-  : "- Prioritize visual appeal in descriptions\n- Use emotive, lifestyle-focused language\n- Create scroll-stopping first lines\n- Balance aspirational with authentic\n- Strategic hashtag placement"}
+${
+  context.platform === "linkedin"
+    ? "- Professional yet conversational tone\n- Focus on industry insights and thought leadership\n- Use data points and experience to build credibility\n- Structure content for easy scanning (bullets, spacing)\n- End with a clear, professional call-to-action"
+    : context.platform === "twitter"
+    ? "- Be concise and impactful\n- Use strong hooks in the first line\n- Create conversation-worthy statements\n- Use line breaks strategically\n- Make effective use of Twitter's format"
+    : context.platform === "facebook"
+    ? "- Focus on storytelling and community building\n- Use relatable, friendly language\n- Encourage discussion and sharing\n- Balance professional with personal touch\n- Make content easily shareable"
+    : "- Prioritize visual appeal in descriptions\n- Use emotive, lifestyle-focused language\n- Create scroll-stopping first lines\n- Balance aspirational with authentic\n- Strategic hashtag placement"
+}
 
 Content Structure Guidelines:
 1. Start with a powerful hook that grabs attention
@@ -113,13 +130,21 @@ Content Structure Guidelines:
 5. Add hashtags strategically (if applicable)
 
 Tone and Style Notes:
-- Keep the voice ${context.toneIntensity === "light" ? "subtle and professional" : context.toneIntensity === "moderate" ? "balanced and engaging" : "bold and distinctive"}
+- Keep the voice ${
+      context.toneIntensity === "light"
+        ? "subtle and professional"
+        : context.toneIntensity === "moderate"
+        ? "balanced and engaging"
+        : "bold and distinctive"
+    }
 - Focus on value-first content that serves the audience
 - Avoid generic, overused phrases
 - Make every word count`;
 
     // Enhanced user prompt with more specific instructions
-    let userPrompt = `Create ${type === "caption" ? "a" : ""} ${type} that follows these specific requirements:`;
+    let userPrompt = `Create ${
+      type === "caption" ? "a" : ""
+    } ${type} that follows these specific requirements:`;
 
     if (content) {
       userPrompt += `\nBase it on this content, but enhance it: "${content}"`;
@@ -133,13 +158,15 @@ Key Elements to Include:
 - Keywords: ${context.keywords.join(", ")} (integrate naturally)
 
 Style Requirements:
-${context.contentStyle === "storytelling"
-  ? "Tell a compelling story that draws the reader in and makes them want to engage"
-  : context.contentStyle === "listicle"
-  ? "Present information in a clear, structured format with distinct points"
-  : context.contentStyle === "informative"
-  ? "Focus on delivering valuable insights backed by expertise"
-  : "Be direct and persuasive, focusing on clear value propositions"}
+${
+  context.contentStyle === "storytelling"
+    ? "Tell a compelling story that draws the reader in and makes them want to engage"
+    : context.contentStyle === "listicle"
+    ? "Present information in a clear, structured format with distinct points"
+    : context.contentStyle === "informative"
+    ? "Focus on delivering valuable insights backed by expertise"
+    : "Be direct and persuasive, focusing on clear value propositions"
+}
 
 Remember to:
 1. Start with an attention-grabbing opening
@@ -149,10 +176,14 @@ Remember to:
 
     if (constraints) {
       if (constraints.mustInclude?.length) {
-        userPrompt += `\n\nRequired phrases (integrate naturally): ${constraints.mustInclude.join(", ")}`;
+        userPrompt += `\n\nRequired phrases (integrate naturally): ${constraints.mustInclude.join(
+          ", "
+        )}`;
       }
       if (constraints.mustExclude?.length) {
-        userPrompt += `\n\nAvoid these phrases: ${constraints.mustExclude.join(", ")}`;
+        userPrompt += `\n\nAvoid these phrases: ${constraints.mustExclude.join(
+          ", "
+        )}`;
       }
       if (constraints.hashtagCount) {
         userPrompt += `\n\nInclude exactly ${constraints.hashtagCount} relevant, strategic hashtags`;
@@ -267,7 +298,7 @@ export const createContent = async (req: Request, res: Response) => {
   try {
     const { title, description, type, url, content, metadata, teamId } =
       req.body;
-    const user = req.user as User; // From auth middleware
+    const user = req.user as User;
 
     // Basic validation for all users
     if (!title || !type || !content) {
@@ -276,8 +307,11 @@ export const createContent = async (req: Request, res: Response) => {
       });
     }
 
+    // Analyze content
+    const analysis = await contentAnalysisService.analyzeContent(content);
+
     // Additional validation for organization users
-    if (user.userType === 'organization') {
+    if (user.userType === "organization") {
       if (!teamId) {
         return res.status(400).json({
           error: "Team ID is required for organization users",
@@ -291,26 +325,56 @@ export const createContent = async (req: Request, res: Response) => {
       }
     }
 
-    const contentItem: Omit<ContentItem, "id"> = {
+    // First create the base content item
+    const baseContentItem: Omit<ContentItem, "id"> = {
       title,
       description,
       type,
       url,
       content,
       metadata: {
-        source: metadata?.source || "",
+        source: metadata?.source || "manual",
         language: metadata?.language || "en",
         tags: metadata?.tags || [],
-        customFields: metadata?.customFields || {},
+        customFields: {},
       },
-      analysis: {},
+      analysis: {
+        ...analysis,
+        customAnalytics: {
+          ...(metadata?.customFields?.tone && { tone: metadata.customFields.tone }),
+          ...(metadata?.customFields?.purpose && { purpose: metadata.customFields.purpose }),
+          ...(metadata?.customFields?.targetAudience && { targetAudience: metadata.customFields.targetAudience }),
+          ...(metadata?.customFields?.contentStyle && { contentStyle: metadata.customFields.contentStyle }),
+          ...(metadata?.customFields?.toneIntensity && { toneIntensity: metadata.customFields.toneIntensity }),
+          ...(metadata?.customFields?.hashtagStrategy && { hashtagStrategy: metadata.customFields.hashtagStrategy })
+        }
+      },
       status: "pending",
-      teamId: user.userType === 'organization' ? teamId : null,
-      organizationId: user.userType === 'organization' ? user.organizationId || null : null,
+      teamId: user.userType === "organization" ? teamId : null,
+      organizationId:
+        user.userType === "organization" ? user.organizationId || null : null,
       createdBy: user.uid,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
+
+    // Add socialPost only if it's a social post type
+    const contentItem = type === "social_post" 
+      ? {
+          ...baseContentItem,
+          metadata: {
+            ...baseContentItem.metadata,
+            socialPost: {
+              platform: metadata?.customFields?.platform,
+              scheduledTime: null,
+              publishedTime: null,
+              postId: null,
+              retryCount: 0,
+              failureReason: null
+            }
+          }
+        }
+      : baseContentItem;
 
     const docRef = await db.collection("content").add(contentItem);
     const doc = await docRef.get();
@@ -347,14 +411,22 @@ export const getContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+    if (
+      content.teamId &&
+      user.userType === "organization" &&
+      !user.teamIds?.includes(content.teamId)
+    ) {
       return res.status(403).json({
         error: "You do not have permission to view this content",
       });
     }
 
     // For individual users, verify they own the content
-    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
+    if (
+      !content.teamId &&
+      user.userType === "individual" &&
+      content.createdBy !== user.uid
+    ) {
       return res.status(403).json({
         error: "You do not have permission to view this content",
       });
@@ -393,14 +465,22 @@ export const updateContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+    if (
+      content.teamId &&
+      user.userType === "organization" &&
+      !user.teamIds?.includes(content.teamId)
+    ) {
       return res.status(403).json({
         error: "You do not have permission to update this content",
       });
     }
 
     // For individual users, verify they own the content
-    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
+    if (
+      !content.teamId &&
+      user.userType === "individual" &&
+      content.createdBy !== user.uid
+    ) {
       return res.status(403).json({
         error: "You do not have permission to update this content",
       });
@@ -452,14 +532,22 @@ export const deleteContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+    if (
+      content.teamId &&
+      user.userType === "organization" &&
+      !user.teamIds?.includes(content.teamId)
+    ) {
       return res.status(403).json({
         error: "You do not have permission to delete this content",
       });
     }
 
     // For individual users, verify they own the content
-    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
+    if (
+      !content.teamId &&
+      user.userType === "individual" &&
+      content.createdBy !== user.uid
+    ) {
       return res.status(403).json({
         error: "You do not have permission to delete this content",
       });
@@ -497,14 +585,22 @@ export const analyzeContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+    if (
+      content.teamId &&
+      user.userType === "organization" &&
+      !user.teamIds?.includes(content.teamId)
+    ) {
       return res.status(403).json({
         error: "You do not have permission to analyze this content",
       });
     }
 
     // For individual users, verify they own the content
-    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
+    if (
+      !content.teamId &&
+      user.userType === "individual" &&
+      content.createdBy !== user.uid
+    ) {
       return res.status(403).json({
         error: "You do not have permission to analyze this content",
       });
@@ -553,14 +649,22 @@ export const archiveContent = async (req: Request, res: Response) => {
     const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
-    if (content.teamId && user.userType === 'organization' && !user.teamIds?.includes(content.teamId)) {
+    if (
+      content.teamId &&
+      user.userType === "organization" &&
+      !user.teamIds?.includes(content.teamId)
+    ) {
       return res.status(403).json({
         error: "You do not have permission to archive this content",
       });
     }
 
     // For individual users, verify they own the content
-    if (!content.teamId && user.userType === 'individual' && content.createdBy !== user.uid) {
+    if (
+      !content.teamId &&
+      user.userType === "individual" &&
+      content.createdBy !== user.uid
+    ) {
       return res.status(403).json({
         error: "You do not have permission to archive this content",
       });
@@ -640,26 +744,27 @@ export const getPersonalContent = async (req: Request, res: Response) => {
     const user = req.user as User;
 
     // Verify this is an individual user
-    if (user.userType !== 'individual') {
+    if (user.userType !== "individual") {
       return res.status(403).json({
-        error: 'This endpoint is only for individual users'
+        error: "This endpoint is only for individual users",
       });
     }
 
-    const snapshot = await db.collection('content')
-      .where('createdBy', '==', user.uid)
-      .where('teamId', '==', null)
-      .orderBy('createdAt', 'desc')
+    const snapshot = await db
+      .collection("content")
+      .where("createdBy", "==", user.uid)
+      .where("teamId", "==", null)
+      .orderBy("createdAt", "desc")
       .get();
 
-    const content = snapshot.docs.map(doc => ({
+    const content = snapshot.docs.map((doc) => ({
       ...doc.data(),
-      id: doc.id
+      id: doc.id,
     }));
 
     res.json(content);
   } catch (error: unknown) {
-    console.error('Error getting personal content:', error);
-    res.status(500).json({ error: 'Failed to get personal content' });
+    console.error("Error getting personal content:", error);
+    res.status(500).json({ error: "Failed to get personal content" });
   }
 };

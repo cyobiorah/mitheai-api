@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase-admin/firestore';
+
 export interface Organization {
   id: string;  // Firestore document ID
   name: string;
@@ -69,7 +71,7 @@ export interface Feature {
 
 export interface ContentItem {
   id: string;  // Firestore document ID
-  title: string;
+  title?: string;
   description?: string;
   type: 'article' | 'social_post' | 'video' | 'image' | 'document';
   url?: string;
@@ -79,8 +81,16 @@ export interface ContentItem {
     language: string;
     tags: string[];
     customFields: Record<string, any>;
+    socialPost?: {
+      platform: SocialPlatform;
+      scheduledTime?: Timestamp;
+      publishedTime?: Timestamp;
+      postId?: string;
+      retryCount?: number;
+      failureReason?: string;
+    };
   };
-  analysis: {
+  analysis?: {
     sentiment?: number;
     keywords?: string[];
     categories?: string[];
@@ -91,7 +101,7 @@ export interface ContentItem {
     }>;
     customAnalytics?: Record<string, any>;
   };
-  status: 'pending' | 'analyzed' | 'archived';
+  status: 'draft' | 'ready' | 'pending' | 'posted' | 'failed' | 'analyzed' | 'archived';
   teamId: string | null;  // Null for individual users
   organizationId: string | null;  // Null for individual users
   createdBy: string;  // User UID
@@ -158,4 +168,4 @@ export interface AnalysisTemplate {
   updatedAt: Timestamp;
 }
 
-export type Timestamp = string; // ISO string format
+export type SocialPlatform = 'twitter' | 'facebook' | 'linkedin' | 'instagram';

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/firebase';
 import { AnalysisTemplate, User, ContentItem } from '../types';
+import { Timestamp } from 'firebase-admin/firestore';
 
 export const createTemplate = async (req: Request, res: Response) => {
   try {
@@ -41,8 +42,8 @@ export const createTemplate = async (req: Request, res: Response) => {
         contentTypes: config.contentTypes || ['article', 'social_post']
       },
       createdBy: user.uid,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     };
 
     const docRef = await db.collection('analysisTemplates').add(template);

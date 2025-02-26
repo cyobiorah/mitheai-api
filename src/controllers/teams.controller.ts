@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { collections, db } from '../config/firebase';
 import { Team, User } from '../types';
-import { DocumentData } from 'firebase-admin/firestore';
+import { DocumentData, Timestamp } from 'firebase-admin/firestore';
 
 export const createTeam = async (req: Request, res: Response) => {
   try {
@@ -23,8 +23,8 @@ export const createTeam = async (req: Request, res: Response) => {
       settings: {
         permissions: ['basic'],
       },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
     const teamRef = await collections.teams.add(newTeam);

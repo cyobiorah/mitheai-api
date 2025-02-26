@@ -4,6 +4,7 @@ import { Organization } from "../types";
 import type { User } from "../types"; // Keep this import for now
 import { sendInvitationEmail } from "../services/email.service";
 import { v4 as uuidv4 } from "uuid";
+import { Timestamp } from "firebase-admin/firestore";
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -42,13 +43,13 @@ export const getUser = async (req: Request, res: Response) => {
     }
 
     const userDoc = await collections.users.doc(uid).get();
-    
+
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
     }
 
     res.json({
-      uid: userDoc.id,  
+      uid: userDoc.id,
       ...userDoc.data(),
     });
   } catch (error) {
@@ -110,8 +111,8 @@ export const inviteUser = async (req: Request, res: Response) => {
         theme: "light",
         notifications: [],
       },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
     // Add user to database
@@ -164,7 +165,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
     const updatedUser = await userRef.get();
     res.json({
-      uid: updatedUser.id,  
+      uid: updatedUser.id,
       ...updatedUser.data(),
     });
   } catch (error) {
