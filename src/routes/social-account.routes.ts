@@ -127,4 +127,11 @@ router.post(
   controller.scheduleTweet.bind(controller)
 );
 
+// Debug endpoint for testing Twitter API connectivity
+router.post(
+  "/twitter/debug-connection",
+  authenticateToken,
+  controller.debugTwitterConnection.bind(controller)
+);
+
 export default router;

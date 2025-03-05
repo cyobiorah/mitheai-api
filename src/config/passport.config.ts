@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as OAuth2Strategy } from "passport-oauth2";
 import { TwitterService } from "../services/twitter.service";
 import session from "express-session";
+import { firestore } from "firebase-admin";
 
 type TokenCallback = (
   err: Error | { statusCode: number; data?: any } | undefined,
@@ -60,9 +61,11 @@ const strategy = new OAuth2Strategy(
     try {
       console.log("OAuth callback received:", {
         accessToken: accessToken.substring(0, 10) + "...",
-        refreshToken: refreshToken ? refreshToken.substring(0, 10) + "..." : "none",
+        refreshToken: refreshToken
+          ? refreshToken.substring(0, 10) + "..."
+          : "none",
         params,
-        user: req.user
+        user: req.user,
       });
 
       // Get user profile from Twitter API v2
@@ -105,6 +108,32 @@ const strategy = new OAuth2Strategy(
         accessToken,
         refreshToken
       );
+
+      // Post a welcome tweet to verify the integration works
+      try {
+        console.log("Attempting to post welcome tweet...");
+        await twitterService.postWelcomeTweet(account.id);
+        console.log("Welcome tweet posted successfully");
+      } catch (tweetError) {
+        // If welcome tweet fails, delete the account and report the error
+        console.error("Failed to post welcome tweet:", tweetError);
+        
+        try {
+          // Get a Firestore reference
+          const db = firestore();
+          
+          // Delete the social account that was just created
+          await db.collection("social_accounts").doc(account.id).delete();
+          
+          console.log(`Deleted social account ${account.id} due to welcome tweet failure`);
+          
+          // Return the error to halt the OAuth process
+          return done(new Error(`Failed to post welcome tweet: ${tweetError instanceof Error ? tweetError.message : 'Unknown error'}`));
+        } catch (deleteError) {
+          console.error("Error deleting social account after welcome tweet failure:", deleteError);
+          return done(new Error("Twitter integration failed: Unable to post to Twitter"));
+        }
+      }
 
       return done(null, account);
     } catch (error) {
