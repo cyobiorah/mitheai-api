@@ -72,15 +72,14 @@ export class TwitterService {
    * Post a welcome tweet when a user links their Twitter account
    * This is called automatically after account linking to verify the integration works
    */
-  async postWelcomeTweet(accountId: string): Promise<any> {
-    const welcomeMessage =
-      "Just connected my account to MitheAI! 🚀 #ContentManagement #AITools";
+  async postWelcomeTweet(accountId: string, accountName: string): Promise<any> {
+    const welcomeMessage = `${accountName} has joined Twitter! 📱 In the coming weeks, we'll show you how our platform streamlines content creation, management, scheduling, and analytics—all in one place. Follow for the full reveal! #ContentManagement #AllInOneSolution`;
     console.log(`Posting welcome tweet for account ${accountId}...`);
 
-    // Let errors propagate instead of catching them
-    const result = await this.postTweet(accountId, welcomeMessage);
+    // Explicitly use v2 API since it works during account linking
+    const result = await this.postTweet(accountId, welcomeMessage, "v2");
     console.log("Welcome tweet posted successfully:", result);
-    
+
     return result;
   }
 
@@ -88,9 +87,14 @@ export class TwitterService {
    * Post a tweet
    * @param accountId The ID of the account to post the tweet on
    * @param message The message to post
+   * @param preferredVersion The preferred Twitter API version to use (kept for compatibility)
    * @returns The posted tweet
    */
-  async postTweet(accountId: string, message: string): Promise<any> {
+  async postTweet(
+    accountId: string,
+    message: string,
+    preferredVersion?: "v1" | "v2"
+  ): Promise<any> {
     try {
       // Get account with valid token
       const account = await this.getValidAccount(accountId);
@@ -103,29 +107,36 @@ export class TwitterService {
         tokenExpiry: account.tokenExpiry ? "exists" : "null",
       });
 
-      // Check if we have OAuth 1.0a tokens (needed for v1.1 API)
-      const hasOAuth1Tokens = account.accessToken && account.refreshToken;
-
       // Check if we have OAuth 2.0 token (needed for v2 API)
-      const hasOAuth2Token =
-        account.accessToken && account.accessToken.startsWith("");
+      const hasOAuth2Token = !!(
+        account.accessToken &&
+        typeof account.accessToken === "string" &&
+        account.accessToken.length > 0
+      );
 
       console.log("Token availability:", {
-        hasOAuth1Tokens,
         hasOAuth2Token,
+        refreshToken: account.refreshToken
+          ? account.refreshToken.substring(0, 10) + "..."
+          : "none",
         clientIdConfigured: !!this.clientId,
         clientSecretConfigured: !!this.clientSecret,
       });
 
-      // Try with v2 API first since it's the recommended approach
-      try {
-        console.log("Attempting to post tweet using v2 API...");
-        const client = new Client(new auth.OAuth2Bearer(account.accessToken));
+      if (!hasOAuth2Token) {
+        throw new Error(
+          "No valid OAuth 2.0 token available for posting tweets"
+        );
+      }
 
+      // Use v2 API exclusively (parameter kept for compatibility)
+      console.log("Using Twitter API v2 for posting...");
+
+      try {
+        const client = new Client(new auth.OAuth2Bearer(account.accessToken));
         const response = await client.tweets.createTweet({
           text: message,
         });
-
         console.log(
           "Successfully posted tweet using v2 API:",
           (response.data as any).id
@@ -141,71 +152,45 @@ export class TwitterService {
           stack: apiError.stack?.split("\n").slice(0, 3).join("\n"),
         });
 
-        // If v2 fails and we have OAuth 1.0a tokens, try with v1.1 API
-        if (hasOAuth1Tokens) {
-          console.log("V2 API failed, attempting with v1.1 API...");
-          try {
-            const v1Response = await this.postTweetV1(account, message);
-            return v1Response;
-          } catch (v1Error: any) {
-            console.error("V1.1 API error details:", {
-              code: v1Error.code,
-              statusCode: v1Error.statusCode,
-              message: v1Error.message,
-              allErrors: v1Error.allErrors,
-              stack: v1Error.stack?.split("\n").slice(0, 3).join("\n"),
-            });
+        // Update account status to reflect permission issues if needed
+        await this.updateAccountPermissionStatus(accountId, apiError);
 
-            // Update account status to reflect permission issues
-            await this.updateAccountPermissionStatus(accountId, apiError);
-
-            // Throw a user-friendly error
-            throw this.createUserFriendlyError(apiError);
-          }
-        } else {
-          // Update account status to reflect permission issues
-          await this.updateAccountPermissionStatus(accountId, apiError);
-
-          // Throw a user-friendly error
-          throw this.createUserFriendlyError(apiError);
-        }
+        // Throw a user-friendly error
+        throw this.createUserFriendlyError(apiError);
       }
     } catch (error) {
       // Check if this is a token error and try to refresh once
       if (
         error instanceof Error &&
-        error.message.includes("token") &&
-        error.message.includes("expired")
+        (error.message.includes("token") ||
+          error.message.includes("unauthorized") ||
+          error.message.includes("authentication") ||
+          error.message.includes("auth") ||
+          error.message.includes("expired"))
       ) {
-        console.log("Token expired, attempting to refresh...");
         try {
-          const refreshedAccount = await this.refreshAccessToken(accountId);
+          console.log("Token error detected, attempting to refresh...");
+          await this.refreshAccessToken(accountId);
 
-          // Try posting again with new token
-          const client = new Client(
-            new auth.OAuth2Bearer(refreshedAccount.accessToken)
+          // Try again with the refreshed token
+          console.log("Token refreshed, retrying...");
+          const account = await this.getValidAccount(accountId);
+          const client = new Client(new auth.OAuth2Bearer(account.accessToken));
+          const response = await client.tweets.createTweet({
+            text: message,
+          });
+          console.log(
+            "Successfully posted tweet after token refresh:",
+            (response.data as any).id
           );
-
-          try {
-            const response = await client.tweets.createTweet({
-              text: message,
-            });
-
-            return response;
-          } catch (retryError) {
-            console.error(
-              "Failed to post tweet after token refresh:",
-              retryError
-            );
-            throw retryError;
-          }
+          return response;
         } catch (refreshError) {
           console.error("Failed to refresh token:", refreshError);
-          throw refreshError;
+          throw new Error(
+            "Failed to post tweet: Your Twitter account needs to be reconnected. Please disconnect and reconnect your account."
+          );
         }
       }
-
-      // Re-throw the original error
       throw error;
     }
   }
@@ -240,13 +225,15 @@ export class TwitterService {
   private createUserFriendlyError(apiError: any): Error {
     // Permission error
     if (apiError.status === 403) {
+      // Default error message
       let errorDetail = "Your account doesn't have permission to post tweets.";
 
       // Check for specific error types based on error response
       if (apiError.error?.detail?.includes("not permitted")) {
         errorDetail =
-          "Your Twitter app doesn't have the required permissions. " +
-          "Make sure you have elevated access and 'tweet.write' scope enabled.";
+          "Twitter API limitation: Posting tweets requires a paid Twitter API subscription. " +
+          "Welcome tweets during account linking are allowed, but additional tweets " +
+          "require upgrading the Twitter API access level.";
       } else if (apiError.error?.detail?.includes("duplicate")) {
         errorDetail = "Cannot post duplicate content to Twitter.";
       }
@@ -478,9 +465,7 @@ export class TwitterService {
     }
   }
 
-  private async getSocialAccount(
-    accountId: string
-  ): Promise<SocialAccount | null> {
+  async getSocialAccount(accountId: string): Promise<SocialAccount | null> {
     const doc = await this.db
       .collection("social_accounts")
       .doc(accountId)
@@ -564,6 +549,94 @@ export class TwitterService {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * Check Twitter API limits and capabilities based on the provided credentials
+   * This is useful for determining if the API key has posting permissions
+   */
+  async checkApiCapabilities(accountId: string): Promise<{
+    accessLevel: string;
+    canPostTweets: boolean;
+    canReadUserData: boolean;
+    details: string;
+  }> {
+    try {
+      const account = await this.getValidAccount(accountId);
+
+      // Initialize a client with the account's access token
+      const client = new Client(new auth.OAuth2Bearer(account.accessToken));
+
+      // Try to check rate limit status which should work on any plan
+      let canReadUserData = false;
+      try {
+        const userData = await client.users.findMyUser();
+        canReadUserData = true;
+      } catch (error) {
+        console.log("Error checking user data access:", error);
+      }
+
+      // Try to post a tweet (we'll catch this if it fails)
+      let canPostTweets = false;
+      let postError = null;
+      try {
+        // Create a test tweet that we'll delete immediately
+        const testTweet: any = await client.tweets.createTweet({
+          text: `API test - please ignore - ${Date.now()}`,
+        });
+
+        // If we get here, we can post tweets
+        canPostTweets = true;
+
+        // Delete the test tweet immediately to avoid cluttering timeline
+        try {
+          await client.tweets.deleteTweetById(testTweet.data.id);
+        } catch (deleteError) {
+          console.log("Could not delete test tweet:", deleteError);
+        }
+      } catch (error: any) {
+        postError = error;
+        console.log("Error checking tweet posting capability:", error);
+      }
+
+      // Determine API tier based on capabilities
+      let accessLevel = "Unknown";
+      let details = "Could not determine API access level";
+
+      if (canPostTweets) {
+        accessLevel = "Paid API Tier";
+        details =
+          "This API key has full Twitter capabilities including posting tweets.";
+      } else if (canReadUserData) {
+        accessLevel = "Free API Tier";
+        details =
+          "This API key can read Twitter data but cannot post tweets (requires paid API tier).";
+      } else {
+        accessLevel = "Limited Access";
+        details = "This API key has very limited capabilities.";
+      }
+
+      if (postError) {
+        details += ` Post error: ${postError.message || "Unknown error"}`;
+      }
+
+      return {
+        accessLevel,
+        canPostTweets,
+        canReadUserData,
+        details,
+      };
+    } catch (error) {
+      console.error("Error checking API capabilities:", error);
+      return {
+        accessLevel: "Error",
+        canPostTweets: false,
+        canReadUserData: false,
+        details: `Error checking API: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
     }
   }
 
@@ -651,7 +724,6 @@ export class TwitterService {
     try {
       // Reuse the postTweet method which already handles token refresh
       const response = await this.postTweet(accountId, content.content);
-
       if (!response.data?.id) {
         throw new Error("Failed to create tweet");
       }

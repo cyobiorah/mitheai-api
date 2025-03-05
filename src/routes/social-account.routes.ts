@@ -134,4 +134,9 @@ router.post(
   controller.debugTwitterConnection.bind(controller)
 );
 
+router.get("/twitter/debug/:accountId", 
+  authenticateToken, 
+  controller.debugTwitterAccount.bind(controller)
+);
+
 export default router;

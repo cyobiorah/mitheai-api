@@ -112,26 +112,41 @@ const strategy = new OAuth2Strategy(
       // Post a welcome tweet to verify the integration works
       try {
         console.log("Attempting to post welcome tweet...");
-        await twitterService.postWelcomeTweet(account.id);
+        await twitterService.postWelcomeTweet(account.id, userData.data.name);
         console.log("Welcome tweet posted successfully");
       } catch (tweetError) {
         // If welcome tweet fails, delete the account and report the error
         console.error("Failed to post welcome tweet:", tweetError);
-        
+
         try {
           // Get a Firestore reference
           const db = firestore();
-          
+
           // Delete the social account that was just created
           await db.collection("social_accounts").doc(account.id).delete();
-          
-          console.log(`Deleted social account ${account.id} due to welcome tweet failure`);
-          
+
+          console.log(
+            `Deleted social account ${account.id} due to welcome tweet failure`
+          );
+
           // Return the error to halt the OAuth process
-          return done(new Error(`Failed to post welcome tweet: ${tweetError instanceof Error ? tweetError.message : 'Unknown error'}`));
+          return done(
+            new Error(
+              `Failed to post welcome tweet: ${
+                tweetError instanceof Error
+                  ? tweetError.message
+                  : "Unknown error"
+              }`
+            )
+          );
         } catch (deleteError) {
-          console.error("Error deleting social account after welcome tweet failure:", deleteError);
-          return done(new Error("Twitter integration failed: Unable to post to Twitter"));
+          console.error(
+            "Error deleting social account after welcome tweet failure:",
+            deleteError
+          );
+          return done(
+            new Error("Twitter integration failed: Unable to post to Twitter")
+          );
         }
       }
 
