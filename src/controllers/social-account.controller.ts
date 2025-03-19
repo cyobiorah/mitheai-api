@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { TwitterService } from "../services/twitter.service";
 import { firestore } from "firebase-admin";
 import { Client, auth } from "twitter-api-sdk";
+import { Timestamp } from "firebase-admin/firestore";
+import { collections } from "../config/firebase";
 
 export class SocialAccountController {
   private readonly twitterService: TwitterService;
@@ -22,21 +24,77 @@ export class SocialAccountController {
       }
 
       // The Twitter account info is now in req.user from passport
+      if (!req.user) {
+        console.error("No authenticated user in request");
+        return res.status(401).json({
+          error: "Authentication required",
+          message: "No authenticated user in request",
+        });
+      }
+
       const { account } = req.user as any;
 
       if (!account) {
         console.error("No account data in callback");
-        return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?error=no_account_data`
-        );
+        return res.status(400).json({
+          error: "No account data in callback",
+          message: "No account data in callback",
+        });
       }
 
-      // Redirect to the frontend settings page with success
-      res.redirect(`${process.env.FRONTEND_URL}/settings?success=true`);
-    } catch (error) {
+      try {
+        // Try to create the social account (this will check for duplicates)
+        await this.twitterService.createSocialAccount(
+          req.user.uid,
+          account.profile,
+          account.accessToken,
+          account.refreshToken,
+          req.user.organizationId,
+          req.user.currentTeamId
+        );
+
+        // Redirect to the frontend settings page with success
+        res.redirect(`${process.env.FRONTEND_URL}/settings?success=true`);
+      } catch (error: any) {
+        // Handle the case where the account is already connected
+        if (error.code === "account_already_connected") {
+          console.warn(
+            "Attempted to connect already connected account:",
+            error.details
+          );
+
+          // Encode error details for the frontend
+          const errorDetails = encodeURIComponent(
+            JSON.stringify({
+              code: error.code,
+              message: error.message,
+              details: error.details,
+            })
+          );
+
+          return res.redirect(
+            `${process.env.FRONTEND_URL}/settings?error=account_already_connected&details=${errorDetails}`
+          );
+        }
+
+        // Handle other errors
+        console.error("Failed to create social account:", error);
+        return res.redirect(
+          `${
+            process.env.FRONTEND_URL
+          }/settings?error=account_creation_failed&message=${encodeURIComponent(
+            error.message || "Unknown error"
+          )}`
+        );
+      }
+    } catch (error: any) {
       console.error("Failed to handle Twitter callback:", error);
       res.redirect(
-        `${process.env.FRONTEND_URL}/settings?error=callback_failed`
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=callback_failed&message=${encodeURIComponent(
+          error.message || "Unknown error"
+        )}`
       );
     }
   }
@@ -107,8 +165,9 @@ export class SocialAccountController {
               errorType: "api_plan_limitation",
               message:
                 "Twitter requires a paid API subscription to post tweets. Only the welcome tweet during account linking is allowed with the free API tier.",
-              details: "To enable tweet posting, an upgrade to Twitter's paid API plan is required.",
-              actionRequired: "apiPlanUpgrade"
+              details:
+                "To enable tweet posting, an upgrade to Twitter's paid API plan is required.",
+              actionRequired: "apiPlanUpgrade",
             });
           }
 
@@ -205,29 +264,32 @@ export class SocialAccountController {
     }
   }
 
-  async disconnectAccount(userId: string, platform: string) {
+  async disconnectAccount(userId: string, accountId: string) {
     try {
-      // Find accounts matching the user and platform
-      const accountsSnapshot = await this.db
+      console.log(`Disconnecting account ${accountId} for user ${userId}`);
+      
+      // Find the specific account by ID and verify it belongs to the user
+      const accountDoc = await this.db
         .collection("social_accounts")
-        .where("userId", "==", userId)
-        .where("platform", "==", platform)
+        .doc(accountId)
         .get();
 
-      if (accountsSnapshot.empty) {
-        throw new Error("No account found");
+      if (!accountDoc.exists) {
+        throw new Error(`Account ${accountId} not found`);
       }
 
-      // Delete all matching accounts (should usually be just one)
-      const batch = this.db.batch();
-      accountsSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
+      const accountData = accountDoc.data();
+      if (accountData?.userId !== userId) {
+        throw new Error("Unauthorized: Account belongs to a different user");
+      }
 
-      await batch.commit();
-      return { success: true };
+      // Delete just this specific account
+      await this.db.collection("social_accounts").doc(accountId).delete();
+      
+      console.log(`Successfully disconnected account ${accountId}`);
+      return { success: true, message: "Account disconnected successfully" };
     } catch (error) {
-      console.error(`Error disconnecting ${platform} account:`, error);
+      console.error(`Error disconnecting account ${accountId}:`, error);
       throw error;
     }
   }
@@ -312,7 +374,9 @@ export class SocialAccountController {
         },
         userDataTest: { success: false, data: null as any, error: null as any },
         postingTest: { success: false, data: null as any, error: null as any },
-        apiCapabilities: await this.twitterService.checkApiCapabilities(accountId),
+        apiCapabilities: await this.twitterService.checkApiCapabilities(
+          accountId
+        ),
         tokenData: {
           accessTokenStart: account.accessToken
             ? account.accessToken.substring(0, 10) + "..."
@@ -356,6 +420,43 @@ export class SocialAccountController {
         error: "Error debugging Twitter account",
         message: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  }
+
+  async assignTeam(req: Request, res: Response) {
+    try {
+      const { accountId } = req.params;
+      const { teamId } = req.body;
+
+      // Validate team exists and user has access
+      const teamRef = collections.teams.doc(teamId);
+      const team = await teamRef.get();
+
+      if (!team.exists) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      const teamData = team.data();
+      if (!req.user) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      if (teamData?.organizationId !== req.user.organizationId) {
+        return res
+          .status(403)
+          .json({ error: "Not authorized to assign to this team" });
+      }
+
+      // Update social account
+      await this.db.collection("social_accounts").doc(accountId).update({
+        teamId,
+        updatedAt: Timestamp.now(),
+      });
+
+      res.json({ message: "Team assigned successfully" });
+    } catch (error) {
+      console.error("Error assigning team:", error);
+      res.status(500).json({ error: "Failed to assign team" });
     }
   }
 }

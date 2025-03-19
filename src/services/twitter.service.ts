@@ -1,8 +1,12 @@
 import { firestore } from "firebase-admin";
-import { SocialAccount } from "../models/social-account.model";
+import {
+  SocialAccount,
+  // SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT,
+} from "../models/social-account.model";
 import { Client, auth } from "twitter-api-sdk";
 import { ContentItem } from "../types";
 import Twit from "twit";
+import { Timestamp } from "firebase-admin/firestore";
 
 export class TwitterService {
   private readonly db: firestore.Firestore;
@@ -15,6 +19,37 @@ export class TwitterService {
     this.db = firestore();
   }
 
+  /**
+   * Check if a social account with the given platform and platformAccountId already exists
+   */
+  private async findExistingSocialAccount(
+    platform: string,
+    platformAccountId: string,
+    userId?: string
+  ): Promise<SocialAccount | null> {
+    const query = this.db
+      .collection("social_accounts")
+      .where("platform", "==", platform)
+      .where("platformAccountId", "==", platformAccountId);
+
+    // If userId is provided, check if this specific user already connected this account
+    if (userId) {
+      query.where("userId", "==", userId);
+    }
+
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const doc = snapshot.docs[0];
+    return {
+      id: doc.id,
+      ...doc.data(),
+    } as SocialAccount;
+  }
+
   async createSocialAccount(
     userId: string,
     profile: any,
@@ -23,49 +58,104 @@ export class TwitterService {
     organizationId?: string,
     teamId?: string
   ): Promise<SocialAccount> {
-    // Create doc reference first to get the ID
-    const docRef = this.db.collection("social_accounts").doc();
-    const docId = docRef.id;
+    try {
+      // Check for existing connection with the same Twitter ID and user ID
+      const existingAccount = await this.findExistingSocialAccount(
+        "twitter",
+        profile.id,
+        userId // Add userId parameter to check
+      );
 
-    // Create base account object without optional fields
-    const baseAccount: SocialAccount = {
-      id: docId,
-      platform: "twitter" as const,
-      accountType: "personal" as const,
-      accountName: profile.username,
-      accountId: profile.id,
-      accessToken,
-      refreshToken,
-      tokenExpiry: firestore.Timestamp.fromMillis(Date.now() + 7200000),
-      lastRefreshed: firestore.Timestamp.now(),
-      status: "active" as const,
-      userId,
-      metadata: {
-        profileUrl: `https://twitter.com/${profile.username}`,
-        followerCount: profile.public_metrics?.followers_count || 0,
-        followingCount: profile.public_metrics?.following_count || 0,
-        lastChecked: firestore.Timestamp.now(),
-      },
-      permissions: {
-        canPost: true,
-        canSchedule: true,
-        canAnalyze: true,
-      },
-      createdAt: firestore.Timestamp.now(),
-      updatedAt: firestore.Timestamp.now(),
-    };
+      if (existingAccount) {
+        const error: any = new Error("Account already connected by this user");
+        error.code = "account_already_connected";
+        error.details = {
+          existingAccountId: existingAccount.id,
+          connectedUserId: existingAccount.userId,
+          organizationId: existingAccount.organizationId,
+          teamId: existingAccount.teamId,
+          connectionDate: existingAccount.createdAt,
+        };
+        throw error;
+      }
 
-    // Add optional fields only if they are defined
-    const socialAccount: SocialAccount = {
-      ...baseAccount,
-      ...(organizationId && { organizationId }),
-      ...(teamId && { teamId }),
-    };
+      // Create new social account if no existing connection found
+      const socialAccount: SocialAccount = {
+        id: this.db.collection("social_accounts").doc().id,
+        platform: "twitter",
+        platformAccountId: profile.id,
+        accountType: "personal",
+        accountName: profile.username,
+        accountId: profile.id,
+        accessToken,
+        refreshToken,
+        tokenExpiry: null,
+        lastRefreshed: Timestamp.now(),
+        status: "active",
+        userId,
+        ownershipLevel: this.determineOwnershipLevel(organizationId),
+        metadata: {
+          profileUrl: `https://twitter.com/${profile.username}`,
+          followerCount: profile.public_metrics?.followers_count,
+          followingCount: profile.public_metrics?.following_count,
+          lastChecked: Timestamp.now(),
+        },
+        permissions: {
+          canPost: true,
+          canSchedule: true,
+          canAnalyze: true,
+        },
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
 
-    // Save to Firestore
-    await docRef.set(socialAccount);
+      // Only add optional fields if they have values
+      if (organizationId) {
+        socialAccount.organizationId = organizationId;
+      }
 
-    return socialAccount;
+      if (teamId) {
+        socialAccount.teamId = teamId;
+      }
+
+      // Create with transaction to ensure atomicity
+      await this.db.runTransaction(async (transaction) => {
+        // Double-check no duplicate was created while we were processing
+        const duplicateCheck = await transaction.get(
+          this.db
+            .collection("social_accounts")
+            .where("platform", "==", "twitter")
+            .where("platformAccountId", "==", profile.id)
+            .where("userId", "==", userId)
+        );
+
+        if (!duplicateCheck.empty) {
+          throw new Error("Account already connected");
+        }
+
+        transaction.set(
+          this.db.collection("social_accounts").doc(socialAccount.id),
+          socialAccount
+        );
+      });
+
+      return socialAccount as SocialAccount;
+    } catch (error: any) {
+      if (error.code === "account_already_connected") {
+        throw error;
+      }
+      console.error("Error creating social account:", error);
+      throw new Error("Failed to create social account");
+    }
+  }
+
+  private determineOwnershipLevel(
+    organizationId?: string
+  ): "user" | "organization" {
+    if (organizationId) {
+      return "organization";
+    }
+    return "user";
   }
 
   /**
@@ -73,14 +163,94 @@ export class TwitterService {
    * This is called automatically after account linking to verify the integration works
    */
   async postWelcomeTweet(accountId: string, accountName: string): Promise<any> {
-    const welcomeMessage = `${accountName} has joined Twitter! 📱 In the coming weeks, we'll show you how our platform streamlines content creation, management, scheduling, and analytics—all in one place. Follow for the full reveal! #ContentManagement #AllInOneSolution`;
+    // Array of random greeting variations
+    const greetings = [
+      "Exciting news!",
+      "We're thrilled to announce that",
+      "Great news!",
+      "Happy to share that",
+      "Breaking news!",
+      "Just in!",
+      "Announcement time!",
+      "Guess what?",
+      "Big update!",
+      "New connection alert!",
+    ];
+
+    // Array of random emoji combinations
+    const emojis = [
+      "📱 ✨",
+      "🚀 🎉",
+      "🔥 💯",
+      "✅ 🌟",
+      "💪 🎯",
+      "🎊 🌈",
+      "📈 🙌",
+      "⚡ 🔔",
+      "🌠 📊",
+      "🤩 📲",
+    ];
+
+    // Array of random hashtag combinations
+    const hashtags = [
+      "#ContentManagement #AllInOneSolution",
+      "#SocialMedia #ContentStrategy",
+      "#DigitalMarketing #SocialMediaTools",
+      "#ContentCreation #SocialMediaManagement",
+      "#MarketingTools #ContentPlanning",
+      "#SocialStrategy #DigitalTools",
+      "#ContentCalendar #SocialMediaMarketing",
+      "#MarketingAutomation #ContentOptimization",
+      "#SocialMediaAnalytics #ContentDistribution",
+      "#DigitalPresence #SocialMediaScheduling",
+    ];
+
+    // Get random elements
+    const randomGreeting =
+      greetings[Math.floor(Math.random() * greetings.length)];
+    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const randomHashtags =
+      hashtags[Math.floor(Math.random() * hashtags.length)];
+
+    // Add timestamp to make each tweet unique (in a hidden format that users won't notice)
+    const uniqueId = Date.now().toString(36).slice(-4);
+
+    // Construct welcome message with random elements
+    const welcomeMessage = `${randomGreeting} ${accountName} has joined Twitter! ${randomEmoji} In the coming weeks, we'll show you how our platform streamlines content creation, management, scheduling, and analytics—all in one place. Follow for the full reveal! ${randomHashtags} (${uniqueId})`;
+
     console.log(`Posting welcome tweet for account ${accountId}...`);
 
-    // Explicitly use v2 API since it works during account linking
-    const result = await this.postTweet(accountId, welcomeMessage, "v2");
-    console.log("Welcome tweet posted successfully:", result);
+    try {
+      // Explicitly use v2 API since it works during account linking
+      const result = await this.postTweet(accountId, welcomeMessage, "v2");
+      console.log("Welcome tweet posted successfully:", result);
+      return result;
+    } catch (error: any) {
+      // Check if this is a duplicate content error
+      if (
+        error.message &&
+        (error.message.includes("duplicate content") ||
+          error.message.includes("duplicate status") ||
+          (error.error && error.error.includes("duplicate")))
+      ) {
+        console.log("Duplicate welcome tweet detected, marking as sent anyway");
 
-    return result;
+        // Update the account to mark welcome tweet as sent
+        await this.db.collection("social_accounts").doc(accountId).update({
+          welcomeTweetSent: true,
+        });
+
+        // Return a success response with a note about the duplicate
+        return {
+          status: "success",
+          note: "Welcome tweet already exists (duplicate content)",
+          originalError: error,
+        };
+      }
+
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   /**
@@ -148,49 +318,50 @@ export class TwitterService {
           status: apiError.status,
           statusText: apiError.statusText,
           error: apiError.error,
-          message: apiError.message,
-          stack: apiError.stack?.split("\n").slice(0, 3).join("\n"),
         });
 
-        // Update account status to reflect permission issues if needed
-        await this.updateAccountPermissionStatus(accountId, apiError);
+        // Check for duplicate content errors
+        if (apiError.error && typeof apiError.error === "string") {
+          const errorText = apiError.error.toLowerCase();
+          if (
+            errorText.includes("duplicate") ||
+            errorText.includes("already tweeted")
+          ) {
+            throw new Error(
+              `Twitter API error: duplicate content - ${apiError.error}`
+            );
+          }
+        }
 
-        // Throw a user-friendly error
-        throw this.createUserFriendlyError(apiError);
+        // Check for error in response body
+        if (apiError.response ?? apiError.response.data) {
+          const responseData = apiError.response.data;
+
+          // Twitter API v2 error format
+          if (responseData.errors && Array.isArray(responseData.errors)) {
+            const duplicateErrors = responseData.errors.filter(
+              (err: any) =>
+                err.message &&
+                (err.message.toLowerCase().includes("duplicate") ||
+                  err.message.toLowerCase().includes("already tweeted"))
+            );
+
+            if (duplicateErrors.length > 0) {
+              throw new Error(
+                `Twitter API error: duplicate content - ${duplicateErrors[0].message}`
+              );
+            }
+          }
+
+          // Log the full error for debugging
+          console.error("Twitter API v2 response data:", responseData);
+        }
+
+        // Re-throw the original error if not handled
+        throw apiError;
       }
     } catch (error) {
-      // Check if this is a token error and try to refresh once
-      if (
-        error instanceof Error &&
-        (error.message.includes("token") ||
-          error.message.includes("unauthorized") ||
-          error.message.includes("authentication") ||
-          error.message.includes("auth") ||
-          error.message.includes("expired"))
-      ) {
-        try {
-          console.log("Token error detected, attempting to refresh...");
-          await this.refreshAccessToken(accountId);
-
-          // Try again with the refreshed token
-          console.log("Token refreshed, retrying...");
-          const account = await this.getValidAccount(accountId);
-          const client = new Client(new auth.OAuth2Bearer(account.accessToken));
-          const response = await client.tweets.createTweet({
-            text: message,
-          });
-          console.log(
-            "Successfully posted tweet after token refresh:",
-            (response.data as any).id
-          );
-          return response;
-        } catch (refreshError) {
-          console.error("Failed to refresh token:", refreshError);
-          throw new Error(
-            "Failed to post tweet: Your Twitter account needs to be reconnected. Please disconnect and reconnect your account."
-          );
-        }
-      }
+      console.error("Error posting tweet:", error);
       throw error;
     }
   }

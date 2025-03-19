@@ -21,18 +21,27 @@ export interface User {
   firstName: string;
   lastName: string;
   userType: 'individual' | 'organization';
-  organizationId?: string;  // Required for organization users, omitted for individual
-  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
-  teamIds?: string[];  // Required for organization users
   status: 'pending' | 'active' | 'inactive';
-  invitationToken?: string;
   settings: {
     permissions: string[];
     theme: 'light' | 'dark';
     notifications: any[];
-    personalPreferences?: Record<string, any>;  // For individual users
+    personalPreferences?: Record<string, any>;
   };
-  pendingTeamInvites?: string[];
+  // Organization-specific fields
+  organizationId?: string;  // Required for organization users, omitted for individual
+  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
+  teamIds?: string[];  // Required for organization users
+  // Individual-specific fields
+  personalSettings?: {
+    defaultContentType?: string;
+    aiPreferences?: {
+      tone?: string;
+      style?: string;
+    };
+  };
+  // Invitation-related fields
+  invitationToken?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

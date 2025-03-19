@@ -18,6 +18,7 @@ import contentRouter from "./routes/content.routes";
 import collectionsRouter from "./routes/collections.routes";
 import analysisRouter from "./routes/analysis.routes";
 import socialAccountRouter from "./routes/social-account.routes";
+import analyticsRouter from "./routes/analytics.routes";
 
 // Load environment variables
 config();
@@ -115,6 +116,7 @@ app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/collections", authenticateToken, collectionsRouter);
 app.use("/api/analysis", authenticateToken, analysisRouter);
 app.use("/api/social-accounts", socialAccountRouter);
+app.use("/api/analytics", authenticateToken, analyticsRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");

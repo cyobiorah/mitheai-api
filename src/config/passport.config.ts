@@ -1,8 +1,8 @@
 import passport from "passport";
 import { Strategy as OAuth2Strategy } from "passport-oauth2";
 import { TwitterService } from "../services/twitter.service";
-import session from "express-session";
 import { firestore } from "firebase-admin";
+import './facebook.config'; // Import to register the Facebook strategy
 
 type TokenCallback = (
   err: Error | { statusCode: number; data?: any } | undefined,
@@ -101,56 +101,98 @@ const strategy = new OAuth2Strategy(
         return done(new Error("No user ID found"));
       }
 
-      // Create social account
-      const account = await twitterService.createSocialAccount(
-        userId,
-        userData.data,
-        accessToken,
-        refreshToken
-      );
-
-      // Post a welcome tweet to verify the integration works
+      // Create or update social account
       try {
-        console.log("Attempting to post welcome tweet...");
-        await twitterService.postWelcomeTweet(account.id, userData.data.name);
-        console.log("Welcome tweet posted successfully");
-      } catch (tweetError) {
-        // If welcome tweet fails, delete the account and report the error
-        console.error("Failed to post welcome tweet:", tweetError);
+        const skipWelcome = req.session?.skipWelcome || false;
+        const account = await twitterService.createSocialAccount(
+          userId,
+          userData.data,
+          accessToken,
+          refreshToken,
+          req.session?.user?.organizationId,
+          req.session?.user?.currentTeamId
+        );
 
-        try {
-          // Get a Firestore reference
-          const db = firestore();
+        // Only post welcome tweet if not skipped
+        if (!skipWelcome && !account.welcomeTweetSent) {
+          try {
+            console.log("Attempting to post welcome tweet...");
+            await twitterService.postWelcomeTweet(account.id, userData.data.name);
+            
+            // Mark that we've sent the welcome tweet
+            const db = firestore();
+            await db.collection("social_accounts").doc(account.id).update({
+              welcomeTweetSent: true
+            });
+            
+            console.log("Welcome tweet posted successfully");
+          } catch (tweetError: any) {
+            // If welcome tweet fails due to duplicate content, we can ignore it
+            // This might happen if the account was reconnected
+            if (tweetError.message && (
+              tweetError.message.includes("duplicate content") || 
+              tweetError.message.includes("duplicate status") ||
+              tweetError.message.includes("already tweeted")
+            )) {
+              console.log("Welcome tweet already posted (duplicate content)");
+              
+              // Still mark the account as having sent a welcome tweet
+              const db = firestore();
+              await db.collection("social_accounts").doc(account.id).update({
+                welcomeTweetSent: true
+              });
+            } else {
+              // For other errors, delete the account and report the error
+              console.error("Failed to post welcome tweet:", tweetError);
 
-          // Delete the social account that was just created
-          await db.collection("social_accounts").doc(account.id).delete();
+              try {
+                // Get a Firestore reference
+                const db = firestore();
 
-          console.log(
-            `Deleted social account ${account.id} due to welcome tweet failure`
-          );
+                // Delete the social account that was just created
+                await db.collection("social_accounts").doc(account.id).delete();
 
-          // Return the error to halt the OAuth process
-          return done(
-            new Error(
-              `Failed to post welcome tweet: ${
-                tweetError instanceof Error
-                  ? tweetError.message
-                  : "Unknown error"
-              }`
-            )
-          );
-        } catch (deleteError) {
-          console.error(
-            "Error deleting social account after welcome tweet failure:",
-            deleteError
-          );
-          return done(
-            new Error("Twitter integration failed: Unable to post to Twitter")
-          );
+                console.log(
+                  `Deleted social account ${account.id} due to welcome tweet failure`
+                );
+
+                // Return the error to halt the OAuth process
+                return done(
+                  new Error(
+                    `Failed to post welcome tweet: ${
+                      tweetError instanceof Error
+                        ? tweetError.message
+                        : "Unknown error"
+                    }`
+                  )
+                );
+              } catch (deleteError) {
+                console.error(
+                  "Error deleting social account after welcome tweet failure:",
+                  deleteError
+                );
+                return done(
+                  new Error("Twitter integration failed: Unable to post to Twitter")
+                );
+              }
+            }
+          }
+        } else {
+          console.log("Skipping welcome tweet as requested");
         }
-      }
 
-      return done(null, account);
+        return done(null, account);
+      } catch (accountError: any) {
+        // Handle the case where the account is already connected to another user
+        if (accountError.code === "account_already_connected") {
+          console.warn("Attempted to connect already connected account:", accountError.details);
+          return done(accountError);
+        }
+        
+        // Handle other errors
+        console.error("Error creating/updating social account:", accountError);
+        return done(new Error("Failed to connect Twitter account"));
+      }
     } catch (error) {
       console.error("OAuth callback error:", error);
       done(error as Error);
