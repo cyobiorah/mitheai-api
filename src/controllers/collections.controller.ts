@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../config/firebase";
 import { ContentCollection, User, ContentItem } from "../types";
+import { Timestamp } from "firebase-admin/firestore";
 
 export const createCollection = async (req: Request, res: Response) => {
   try {
@@ -37,8 +38,8 @@ export const createCollection = async (req: Request, res: Response) => {
         },
       },
       createdBy: user.uid,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
     const docRef = await db.collection("collections").add(collection);

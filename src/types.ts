@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase-admin/firestore';
+
 export interface Organization {
   id: string;  // Firestore document ID
   name: string;
@@ -19,18 +21,27 @@ export interface User {
   firstName: string;
   lastName: string;
   userType: 'individual' | 'organization';
-  organizationId?: string;  // Required for organization users, omitted for individual
-  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
-  teamIds?: string[];  // Required for organization users
   status: 'pending' | 'active' | 'inactive';
-  invitationToken?: string;
   settings: {
     permissions: string[];
     theme: 'light' | 'dark';
     notifications: any[];
-    personalPreferences?: Record<string, any>;  // For individual users
+    personalPreferences?: Record<string, any>;
   };
-  pendingTeamInvites?: string[];
+  // Organization-specific fields
+  organizationId?: string;  // Required for organization users, omitted for individual
+  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
+  teamIds?: string[];  // Required for organization users
+  // Individual-specific fields
+  personalSettings?: {
+    defaultContentType?: string;
+    aiPreferences?: {
+      tone?: string;
+      style?: string;
+    };
+  };
+  // Invitation-related fields
+  invitationToken?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -69,7 +80,7 @@ export interface Feature {
 
 export interface ContentItem {
   id: string;  // Firestore document ID
-  title: string;
+  title?: string;
   description?: string;
   type: 'article' | 'social_post' | 'video' | 'image' | 'document';
   url?: string;
@@ -79,8 +90,16 @@ export interface ContentItem {
     language: string;
     tags: string[];
     customFields: Record<string, any>;
+    socialPost?: {
+      platform: SocialPlatform;
+      scheduledTime?: Timestamp;
+      publishedTime?: Timestamp;
+      postId?: string;
+      retryCount?: number;
+      failureReason?: string;
+    };
   };
-  analysis: {
+  analysis?: {
     sentiment?: number;
     keywords?: string[];
     categories?: string[];
@@ -91,7 +110,7 @@ export interface ContentItem {
     }>;
     customAnalytics?: Record<string, any>;
   };
-  status: 'pending' | 'analyzed' | 'archived';
+  status: 'draft' | 'ready' | 'pending' | 'posted' | 'failed' | 'analyzed' | 'archived';
   teamId: string | null;  // Null for individual users
   organizationId: string | null;  // Null for individual users
   createdBy: string;  // User UID
@@ -158,4 +177,4 @@ export interface AnalysisTemplate {
   updatedAt: Timestamp;
 }
 
-export type Timestamp = string; // ISO string format
+export type SocialPlatform = 'twitter' | 'facebook' | 'linkedin' | 'instagram';

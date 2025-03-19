@@ -10,7 +10,11 @@ import {
   generateContent,
   getPersonalContent,
 } from "../controllers/content.controller";
-import { authenticateToken, requireTeamAccess } from '../middleware/auth.middleware';
+import {
+  authenticateToken,
+  requireTeamAccess,
+} from "../middleware/auth.middleware";
+import { firestore } from "firebase-admin";
 
 // Create router instance
 const router = express.Router();
@@ -54,11 +58,16 @@ router.post("/generate", authenticateToken, (req, res) => {
 });
 
 // Team routes
-router.get("/team/:teamId", authenticateToken, requireTeamAccess, (req, res) => {
-  // console.log("[DEBUG] Team content route hit");
-  // console.log("[DEBUG] Team ID:", req.params.teamId);
-  return listTeamContent(req, res);
-});
+router.get(
+  "/team/:teamId",
+  authenticateToken,
+  requireTeamAccess,
+  (req, res) => {
+    // console.log("[DEBUG] Team content route hit");
+    // console.log("[DEBUG] Team ID:", req.params.teamId);
+    return listTeamContent(req, res);
+  }
+);
 
 // Content Item Routes
 router.post("/", authenticateToken, (req, res) => {
@@ -94,6 +103,60 @@ router.post("/:contentId/archive", authenticateToken, (req, res) => {
   // console.log("[DEBUG] Archive content route hit");
   // console.log("[DEBUG] Content ID:", req.params.contentId);
   return archiveContent(req, res);
+});
+
+// Add route for updating post status
+router.patch("/:contentId/post-status", authenticateToken, (req, res) => {
+  // Get content ID from params
+  const { contentId } = req.params;
+
+  // Get update data from request body
+  const { platform, postId, status, postedAt } = req.body;
+
+  // Validate required fields
+  if (!platform || !status) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: "Platform and status are required fields",
+    });
+  }
+
+  // Update content in database
+  try {
+    const db = firestore();
+
+    // Update the content document
+    db.collection("content")
+      .doc(contentId)
+      .update({
+        "metadata.socialPost.status": status,
+        "metadata.socialPost.postId": postId || null,
+        "metadata.socialPost.postedAt": postedAt
+          ? new Date(postedAt)
+          : new Date(),
+        updatedAt: new Date(),
+      })
+      .then(() => {
+        // Return success response
+        return res.status(200).json({
+          success: true,
+          message: "Post status updated successfully",
+        });
+      })
+      .catch((error) => {
+        console.error("Error updating post status:", error);
+        return res.status(500).json({
+          error: "Internal Server Error",
+          message: "Failed to update post status",
+        });
+      });
+  } catch (error) {
+    console.error("Error in post-status endpoint:", error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      message: "An unexpected error occurred",
+    });
+  }
 });
 
 // Log all registered routes

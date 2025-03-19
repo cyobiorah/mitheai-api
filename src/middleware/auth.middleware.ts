@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { auth, collections } from "../config/firebase";
+import { SocialAccount } from "../models/social-account.model";
 
 // Extend Express Request type to include user
 declare global {
@@ -21,6 +22,7 @@ declare global {
           personalPreferences?: Record<string, any>;
         };
       };
+      socialAccount?: SocialAccount;
     }
   }
 }
