@@ -82,5 +82,27 @@ service cloud.firestore {
         (isOrgOwner() && isInSameOrg(resource.data.organizationId))
       );
     }
+
+    // Social accounts collection
+    match /social_accounts/{accountId} {
+      allow create: if
+        isSignedIn() &&
+        !exists(
+          db.collection("social_accounts")
+          .where("platform", "==", request.resource.data.platform)
+          .where("platformAccountId", "==", request.resource.data.platformAccountId)
+          .limit(1)
+        )
+      allow read: if isSignedIn() && (
+        // Individual user access
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'individual' &&
+         resource.data.userId == request.auth.uid) ||
+        // Organization user access
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'organization' &&
+         (resource.data.userId == request.auth.uid ||
+          (resource.data.teamId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamIds) ||
+          resource.data.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId))
+      );
+    }
   }
 }

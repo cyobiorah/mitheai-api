@@ -4,6 +4,7 @@ import { Organization } from "../types";
 import type { User } from "../types"; // Keep this import for now
 import { sendInvitationEmail } from "../services/email.service";
 import { v4 as uuidv4 } from "uuid";
+import { Timestamp } from "firebase-admin/firestore";
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -42,13 +43,13 @@ export const getUser = async (req: Request, res: Response) => {
     }
 
     const userDoc = await collections.users.doc(uid).get();
-    
+
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
     }
 
     res.json({
-      uid: userDoc.id,  
+      uid: userDoc.id,
       ...userDoc.data(),
     });
   } catch (error) {
@@ -68,6 +69,16 @@ export const inviteUser = async (req: Request, res: Response) => {
       });
     }
 
+    // Get organization for email
+    console.log("Fetching organization:", organizationId);
+    const orgDoc = await collections.organizations.doc(organizationId).get();
+    if (!orgDoc.exists) {
+      console.error("Organization not found:", organizationId);
+      return res.status(404).json({ error: "Organization not found" });
+    }
+    const organization = orgDoc.data() as Organization;
+    console.log("Found organization:", organization);
+
     // Check if user already exists
     const existingUsers = await collections.users
       .where("email", "==", email)
@@ -80,16 +91,6 @@ export const inviteUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Get organization for email
-    console.log("Fetching organization:", organizationId);
-    const orgDoc = await collections.organizations.doc(organizationId).get();
-    if (!orgDoc.exists) {
-      console.error("Organization not found:", organizationId);
-      return res.status(404).json({ error: "Organization not found" });
-    }
-    const organization = orgDoc.data() as Organization;
-    console.log("Found organization:", organization);
-
     // Generate invitation token
     const token = uuidv4();
 
@@ -101,6 +102,7 @@ export const inviteUser = async (req: Request, res: Response) => {
       lastName,
       role,
       organizationId,
+      userType: "organization",
       teamIds: [],
       status: "pending",
       invitationToken: token,
@@ -109,18 +111,14 @@ export const inviteUser = async (req: Request, res: Response) => {
         theme: "light",
         notifications: [],
       },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
     // Add user to database
     await collections.users.doc(newUser.uid).set(newUser);
 
     // Send invitation email
-    console.log(
-      "Sending invitation email with organization:",
-      organization.name
-    );
     try {
       await sendInvitationEmail({
         to: email,
@@ -163,7 +161,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
     const updatedUser = await userRef.get();
     res.json({
-      uid: updatedUser.id,  
+      uid: updatedUser.id,
       ...updatedUser.data(),
     });
   } catch (error) {

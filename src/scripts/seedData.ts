@@ -1,4 +1,5 @@
-import { Organization, Team, User, Role, Permission, Feature } from '../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { Organization, Team, User, Role, Permission, Feature } from "../types";
 
 export const organizations: Record<string, Organization> = {
   mitheia_org: {
@@ -10,10 +11,10 @@ export const organizations: Record<string, Organization> = {
       permissions: ["all"],
       maxTeams: 999,
       maxUsers: 999,
-      features: ["all"]
+      features: ["all"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_corp: {
     id: "test_corp",
@@ -24,10 +25,10 @@ export const organizations: Record<string, Organization> = {
       permissions: ["content_management", "team_management"],
       maxTeams: 10,
       maxUsers: 50,
-      features: ["content_management", "team_management", "analytics"]
+      features: ["content_management", "team_management", "analytics"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   small_org: {
     id: "small_org",
@@ -38,11 +39,11 @@ export const organizations: Record<string, Organization> = {
       permissions: ["content_management"],
       maxTeams: 3,
       maxUsers: 10,
-      features: ["content_management", "basic_analytics"]
+      features: ["content_management", "basic_analytics"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  },
 };
 
 export const teams: Record<string, Team> = {
@@ -53,10 +54,10 @@ export const teams: Record<string, Team> = {
     organizationId: "mitheia_org",
     memberIds: ["super_admin"],
     settings: {
-      permissions: ["all"]
+      permissions: ["all"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_engineering: {
     id: "test_engineering",
@@ -65,10 +66,10 @@ export const teams: Record<string, Team> = {
     organizationId: "test_corp",
     memberIds: ["test_owner", "test_manager", "test_user"],
     settings: {
-      permissions: ["content_write", "team_read"]
+      permissions: ["content_write", "team_read"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_marketing: {
     id: "test_marketing",
@@ -77,10 +78,10 @@ export const teams: Record<string, Team> = {
     organizationId: "test_corp",
     memberIds: ["test_owner"],
     settings: {
-      permissions: ["content_write", "analytics_read"]
+      permissions: ["content_write", "analytics_read"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   small_team: {
     id: "small_team",
@@ -89,11 +90,11 @@ export const teams: Record<string, Team> = {
     organizationId: "small_org",
     memberIds: ["small_owner"],
     settings: {
-      permissions: ["content_write"]
+      permissions: ["content_write"],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  },
 };
 
 export const users: Record<string, User> = {
@@ -102,17 +103,18 @@ export const users: Record<string, User> = {
     email: "admin@mitheia.com",
     firstName: "Super",
     lastName: "Admin",
-    role: "super_admin",
+    userType: "organization",
     organizationId: "mitheia_org",
+    role: "super_admin",
     teamIds: ["mitheia_core"],
     status: "active",
     settings: {
       permissions: ["all"],
-      theme: "dark",
-      notifications: []
+      theme: "light",
+      notifications: [],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_owner: {
     uid: "test_owner",
@@ -120,16 +122,17 @@ export const users: Record<string, User> = {
     firstName: "Test",
     lastName: "Owner",
     role: "org_owner",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering", "test_marketing"],
     status: "active",
     settings: {
       permissions: ["org_manage", "team_manage", "user_manage"],
       theme: "light",
-      notifications: []
+      notifications: [],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_manager: {
     uid: "test_manager",
@@ -137,16 +140,17 @@ export const users: Record<string, User> = {
     firstName: "Team",
     lastName: "Manager",
     role: "team_manager",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering"],
     status: "active",
     settings: {
       permissions: ["team_manage", "content_manage"],
       theme: "light",
-      notifications: []
+      notifications: [],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   test_user: {
     uid: "test_user",
@@ -154,16 +158,17 @@ export const users: Record<string, User> = {
     firstName: "Regular",
     lastName: "User",
     role: "user",
+    userType: "organization",
     organizationId: "test_corp",
     teamIds: ["test_engineering"],
     status: "active",
     settings: {
       permissions: ["content_write"],
       theme: "light",
-      notifications: []
+      notifications: [],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   },
   small_owner: {
     uid: "small_owner",
@@ -171,17 +176,62 @@ export const users: Record<string, User> = {
     firstName: "Small",
     lastName: "Owner",
     role: "org_owner",
+    userType: "organization",
     organizationId: "small_org",
     teamIds: ["small_team"],
     status: "active",
     settings: {
       permissions: ["org_manage", "team_manage"],
       theme: "light",
-      notifications: []
+      notifications: [],
     },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  },
+  individual_user1: {
+    uid: "individual_user1",
+    email: "john.doe@example.com",
+    firstName: "John",
+    lastName: "Doe",
+    userType: "individual",
+    status: "active",
+    settings: {
+      permissions: ["content_management"],
+      theme: "light",
+      notifications: [],
+      personalPreferences: {
+        defaultContentType: "social_post",
+        aiPreferences: {
+          tone: "professional",
+          style: "concise",
+        },
+      },
+    },
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  },
+  individual_user2: {
+    uid: "individual_user2",
+    email: "jane.smith@example.com",
+    firstName: "Jane",
+    lastName: "Smith",
+    userType: "individual",
+    status: "active",
+    settings: {
+      permissions: ["content_management"],
+      theme: "dark",
+      notifications: [],
+      personalPreferences: {
+        defaultContentType: "article",
+        aiPreferences: {
+          tone: "casual",
+          style: "detailed",
+        },
+      },
+    },
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  },
 };
 
 export const roles: Record<string, Role> = {
@@ -189,85 +239,85 @@ export const roles: Record<string, Role> = {
     name: "Super Admin",
     description: "Full system access",
     permissions: ["all"],
-    level: 0
+    level: 0,
   },
   org_owner: {
     name: "Organization Owner",
     description: "Full organization access",
     permissions: ["org_manage", "team_manage", "user_manage", "content_manage"],
-    level: 1
+    level: 1,
   },
   team_manager: {
     name: "Team Manager",
     description: "Team management access",
     permissions: ["team_manage", "content_manage"],
-    level: 2
+    level: 2,
   },
   user: {
     name: "User",
     description: "Basic user access",
     permissions: ["content_write"],
-    level: 3
-  }
+    level: 3,
+  },
 };
 
 export const permissions: Record<string, Permission> = {
   all: {
     name: "All Permissions",
     description: "Full system access",
-    scope: "system"
+    scope: "system",
   },
   org_manage: {
     name: "Organization Management",
     description: "Manage organization settings",
-    scope: "organization"
+    scope: "organization",
   },
   team_manage: {
     name: "Team Management",
     description: "Manage teams",
-    scope: "organization"
+    scope: "organization",
   },
   user_manage: {
     name: "User Management",
     description: "Manage users",
-    scope: "organization"
+    scope: "organization",
   },
   content_manage: {
     name: "Content Management",
     description: "Manage all content",
-    scope: "team"
+    scope: "team",
   },
   content_write: {
     name: "Content Write",
     description: "Create and edit content",
-    scope: "team"
+    scope: "team",
   },
   analytics_read: {
     name: "Analytics Read",
     description: "View analytics",
-    scope: "team"
-  }
+    scope: "team",
+  },
 };
 
 export const features: Record<string, Feature> = {
   content_management: {
     name: "Content Management",
     description: "Core content management features",
-    dependencies: []
+    dependencies: [],
   },
   team_management: {
     name: "Team Management",
     description: "Team management features",
-    dependencies: ["content_management"]
+    dependencies: ["content_management"],
   },
   analytics: {
     name: "Analytics",
     description: "Advanced analytics features",
-    dependencies: ["content_management"]
+    dependencies: ["content_management"],
   },
   basic_analytics: {
     name: "Basic Analytics",
     description: "Basic analytics features",
-    dependencies: ["content_management"]
-  }
+    dependencies: ["content_management"],
+  },
 };

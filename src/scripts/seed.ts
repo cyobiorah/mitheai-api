@@ -36,11 +36,12 @@ const db = getFirestore(app);
 async function seedData() {
   try {
     console.log("Starting seed process...");
-
-    // Create collections in batch
     const batch = db.batch();
 
-    // Seed organizations
+    // Store credentials for logging
+    const credentials: Array<{email: string; password: string; userType: string}> = [];
+
+    // Seed organizations (only for organization users)
     console.log("Seeding organizations...");
     for (const [id, org] of Object.entries(organizations)) {
       const ref = db.collection("organizations").doc(id);
@@ -48,23 +49,16 @@ async function seedData() {
         ...org,
         settings: {
           ...org.settings,
-          permissions: org.settings.permissions || [], // Ensure permissions exist
+          permissions: org.settings.permissions || [],
         },
       });
     }
 
-    // Seed teams
+    // Seed teams (only for organization users)
     console.log("Seeding teams...");
     for (const [id, team] of Object.entries(teams)) {
       const ref = db.collection("teams").doc(id);
-      batch.set(ref, {
-        ...team,
-        memberIds: team.memberIds || [], // Ensure memberIds exist
-        settings: {
-          ...team.settings,
-          permissions: team.settings.permissions || [], // Ensure permissions exist
-        },
-      });
+      batch.set(ref, team);
     }
 
     // Seed roles
@@ -88,82 +82,81 @@ async function seedData() {
       batch.set(ref, feature);
     }
 
-    // Commit the batch
-    await batch.commit();
-
-    // Create users in Firebase Auth and Firestore
+    // Seed users (both organization and individual)
     console.log("Seeding users...");
     for (const [id, user] of Object.entries(users)) {
+      const ref = db.collection("users").doc(id);
+      const password = "password123"; // Default password for testing
+      
+      // Create Firebase auth user
       try {
-        // Create user in Firebase Auth
         await auth.createUser({
-          uid: user.uid, // Use uid instead of id
+          uid: id,
           email: user.email,
-          password: "password123", // Default password for testing
+          password,
           displayName: `${user.firstName} ${user.lastName}`,
         });
+        console.log(`Created Firebase auth user: ${user.email}`);
+        
+        // Store credentials for later logging
+        credentials.push({
+          email: user.email,
+          password,
+          userType: user.userType
+        });
 
-        // Create user document in Firestore
-        await db
-          .collection("users")
-          .doc(user.uid)
-          .set({
-            // Use uid for document ID
-            ...user,
-            settings: {
-              ...user.settings,
-              notifications: user.settings.notifications || [], // Ensure notifications array exists
-            },
-            status: user.status || "active", // Ensure status exists
-          });
-
-        console.log(`Created user: ${user.email}`);
       } catch (error: any) {
-        if (error.code === "auth/email-already-exists") {
-          console.log(`User ${user.email} already exists, updating...`);
-          await db
-            .collection("users")
-            .doc(user.uid)
-            .set({
-              // Use uid for document ID
-              ...user,
-              settings: {
-                ...user.settings,
-                notifications: user.settings.notifications || [],
-              },
-              status: user.status || "active",
-            });
+        if (error.code === 'auth/uid-already-exists') {
+          console.log(`User ${user.email} already exists in Firebase Auth`);
+          credentials.push({
+            email: user.email,
+            password,
+            userType: user.userType
+          });
         } else {
-          console.error(`Error creating user ${user.email}:`, error);
+          throw error;
         }
       }
+
+      // Store user data in Firestore
+      batch.set(ref, {
+        ...user,
+        // Only include organization/team fields for organization users
+        ...(user.userType === 'organization' ? {
+          organizationId: user.organizationId,
+          role: user.role,
+          teamIds: user.teamIds
+        } : {})
+      });
     }
 
+    // Commit all changes
+    await batch.commit();
     console.log("Seed completed successfully!");
-    console.log("\nTest account credentials:");
-    console.log("Super Admin:", {
-      email: "admin@mitheia.com",
-      password: "password123",
-    });
-    console.log("Org Owner:", {
-      email: "owner@test.com",
-      password: "password123",
-    });
-    console.log("Team Manager:", {
-      email: "manager@test.com",
-      password: "password123",
-    });
-    console.log("Regular User:", {
-      email: "user@test.com",
-      password: "password123",
-    });
-    console.log("Small Org Owner:", {
-      email: "owner@small.com",
-      password: "password123",
-    });
+
+    // Log all account credentials
+    console.log("\n=== Seeded Account Credentials ===");
+    console.log("Organization Accounts:");
+    credentials
+      .filter(cred => cred.userType === 'organization')
+      .forEach(cred => {
+        console.log(`Email: ${cred.email}`);
+        console.log(`Password: ${cred.password}`);
+        console.log("---");
+      });
+    
+    console.log("\nIndividual Accounts:");
+    credentials
+      .filter(cred => cred.userType === 'individual')
+      .forEach(cred => {
+        console.log(`Email: ${cred.email}`);
+        console.log(`Password: ${cred.password}`);
+        console.log("---");
+      });
+
   } catch (error) {
     console.error("Error seeding data:", error);
-    process.exit(1);
+    throw error;
   }
 }
 
