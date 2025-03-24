@@ -8,8 +8,6 @@ import { validationResult } from "express-validator";
 import { config } from "dotenv";
 import { authenticateToken } from "./middleware/auth.middleware";
 import passport from "./config/passport.config";
-import https from "https";
-import fs from "fs";
 
 // Import routes
 import authRoutes from "./routes/auth.routes";
@@ -28,11 +26,22 @@ config();
 const app = express();
 const port = process.env.PORT ?? 3001;
 
+const allowedOrigins = [
+  "https://localhost:5173",
+  "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
+];
+
 // Middleware
 app.use(helmet()); // Security headers
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? "https://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -106,9 +115,6 @@ app.get("/test-cors", (req, res) => {
   });
 });
 
-// Routes
-// console.log("\n[DEBUG] ====== Mounting routes... ======");
-
 // Mount routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authenticateToken, usersRouter);
@@ -125,7 +131,7 @@ app.use("/api/analytics", authenticateToken, analyticsRouter);
 function listEndpoints(prefix: string, router: any) {
   const routes: any[] = [];
 
-  if (!router || !router.stack) {
+  if (!router?.stack) {
     console.log(`[DEBUG] No routes found for prefix: ${prefix}`);
     return routes;
   }
@@ -134,7 +140,6 @@ function listEndpoints(prefix: string, router: any) {
     if (middleware.route) {
       const path = prefix + middleware.route.path;
       const methods = Object.keys(middleware.route.methods);
-      // console.log(`[DEBUG] Route: ${methods.join(",")} ${path}`);
       routes.push({
         path,
         methods: methods.join(","),

@@ -841,7 +841,7 @@ export class TwitterService {
 
   async getAuthUrl(): Promise<string> {
     console.log("Twitter OAuth Config:", {
-      clientId: this.clientId,
+      clientId: process.env.TWITTER_CLIENT_ID,
       callbackUrl: process.env.TWITTER_CALLBACK_URL,
     });
 
@@ -855,7 +855,7 @@ export class TwitterService {
     // Make sure URL matches exactly what Twitter expects
     const authUrl =
       "https://twitter.com/i/oauth2/authorize?" +
-      `client_id=${encodeURIComponent(this.clientId)}&` +
+      `client_id=${encodeURIComponent(process.env.TWITTER_CLIENT_ID!)}&` +
       `redirect_uri=${encodeURIComponent(callbackUrl)}&` +
       `scope=${encodeURIComponent("tweet.read tweet.write users.read")}&` +
       "response_type=code&" +
