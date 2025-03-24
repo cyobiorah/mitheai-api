@@ -8,6 +8,8 @@ import { validationResult } from "express-validator";
 import { config } from "dotenv";
 import { authenticateToken } from "./middleware/auth.middleware";
 import passport from "./config/passport.config";
+import https from "https";
+import fs from "fs";
 
 // Import routes
 import authRoutes from "./routes/auth.routes";
@@ -24,13 +26,13 @@ import analyticsRouter from "./routes/analytics.routes";
 config();
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT ?? 3001;
 
 // Middleware
 app.use(helmet()); // Security headers
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_URL ?? "https://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -44,7 +46,7 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 // Session configuration
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: process.env.SESSION_SECRET ?? "",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -182,39 +184,5 @@ app.use(
   }
 );
 
-// Start server with error handling
-try {
-  const server = app.listen(port, () => {
-    console.log(`[${new Date().toISOString()}] Server running on port ${port}`);
-    // console.log("[DEBUG] Environment:", process.env.NODE_ENV);
-  });
-
-  server.on("error", (error: any) => {
-    console.error("[FATAL] Server failed to start:", error);
-    process.exit(1);
-  });
-
-  process.on("uncaughtException", (error: Error) => {
-    console.error("[FATAL] Uncaught exception:", error);
-    server.close(() => {
-      process.exit(1);
-    });
-  });
-
-  process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
-    console.error(
-      "[FATAL] Unhandled Rejection at:",
-      promise,
-      "reason:",
-      reason
-    );
-    server.close(() => {
-      process.exit(1);
-    });
-  });
-} catch (error) {
-  console.error("[FATAL] Failed to start server:", error);
-  process.exit(1);
-}
-
+// Export the app for use in server.ts
 export default app;

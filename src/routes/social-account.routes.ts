@@ -7,6 +7,7 @@ import {
 import passport from "../config/passport.config";
 import { validateSocialAccountOperation } from "../middleware/social-account.middleware";
 import facebookRoutes from "./facebook.routes";
+import threadsRoutes from "./threads.routes";
 
 // Extend express-session types
 declare module "express-session" {
@@ -35,6 +36,9 @@ const controller = new SocialAccountController();
 
 // Mount Facebook routes
 router.use("/", facebookRoutes);
+
+// Mount Threads routes
+router.use("/", threadsRoutes);
 
 // Get all social accounts for the authenticated user
 router.get("/", authenticateToken, async (req, res) => {

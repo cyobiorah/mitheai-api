@@ -2,7 +2,8 @@ import passport from "passport";
 import { Strategy as OAuth2Strategy } from "passport-oauth2";
 import { TwitterService } from "../services/twitter.service";
 import { firestore } from "firebase-admin";
-import './facebook.config'; // Import to register the Facebook strategy
+import "./facebook.config";
+import threadsStrategy from "./threads.config";
 
 type TokenCallback = (
   err: Error | { statusCode: number; data?: any } | undefined,
@@ -15,7 +16,7 @@ const twitterService = new TwitterService();
 
 // Ensure consistent URL format
 const callbackUrl = (
-  process.env.TWITTER_CALLBACK_URL ||
+  process.env.TWITTER_CALLBACK_URL ??
   "http://localhost:3001/api/social-accounts/twitter/callback"
 ).replace(/:\d+/, ":3001"); // Force port 3001
 
@@ -117,29 +118,33 @@ const strategy = new OAuth2Strategy(
         if (!skipWelcome && !account.welcomeTweetSent) {
           try {
             console.log("Attempting to post welcome tweet...");
-            await twitterService.postWelcomeTweet(account.id, userData.data.name);
-            
+            await twitterService.postWelcomeTweet(
+              account.id,
+              userData.data.name
+            );
+
             // Mark that we've sent the welcome tweet
             const db = firestore();
             await db.collection("social_accounts").doc(account.id).update({
-              welcomeTweetSent: true
+              welcomeTweetSent: true,
             });
-            
+
             console.log("Welcome tweet posted successfully");
           } catch (tweetError: any) {
             // If welcome tweet fails due to duplicate content, we can ignore it
             // This might happen if the account was reconnected
-            if (tweetError.message && (
-              tweetError.message.includes("duplicate content") || 
-              tweetError.message.includes("duplicate status") ||
-              tweetError.message.includes("already tweeted")
-            )) {
+            if (
+              tweetError.message &&
+              (tweetError.message.includes("duplicate content") ||
+                tweetError.message.includes("duplicate status") ||
+                tweetError.message.includes("already tweeted"))
+            ) {
               console.log("Welcome tweet already posted (duplicate content)");
-              
+
               // Still mark the account as having sent a welcome tweet
               const db = firestore();
               await db.collection("social_accounts").doc(account.id).update({
-                welcomeTweetSent: true
+                welcomeTweetSent: true,
               });
             } else {
               // For other errors, delete the account and report the error
@@ -172,7 +177,9 @@ const strategy = new OAuth2Strategy(
                   deleteError
                 );
                 return done(
-                  new Error("Twitter integration failed: Unable to post to Twitter")
+                  new Error(
+                    "Twitter integration failed: Unable to post to Twitter"
+                  )
                 );
               }
             }
@@ -185,10 +192,13 @@ const strategy = new OAuth2Strategy(
       } catch (accountError: any) {
         // Handle the case where the account is already connected to another user
         if (accountError.code === "account_already_connected") {
-          console.warn("Attempted to connect already connected account:", accountError.details);
+          console.warn(
+            "Attempted to connect already connected account:",
+            accountError.details
+          );
           return done(accountError);
         }
-        
+
         // Handle other errors
         console.error("Error creating/updating social account:", accountError);
         return done(new Error("Failed to connect Twitter account"));
@@ -273,6 +283,8 @@ const getOAuthAccessToken = function (
 // Use type assertion to access protected property
 (strategy as any)._oauth2.getOAuthAccessToken = getOAuthAccessToken;
 
+// Register strategies
 passport.use("oauth2", strategy);
+passport.use("threads", threadsStrategy);
 
 export default passport;

@@ -1,0 +1,316 @@
+import express from "express";
+import passport from "passport";
+import { ThreadsService } from "../services/threads.service";
+import { authenticateToken } from "../middleware/auth.middleware";
+
+const router = express.Router();
+const threadsService = new ThreadsService();
+
+// Direct auth route for Threads
+router.get("/threads/direct-auth", authenticateToken, (req: any, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Store user data in session
+    req.session.user = req.user;
+    req.session.save((err: any) => {
+      if (err) {
+        console.error("Session save error:", err);
+        return res.status(500).json({ error: "Session error" });
+      }
+
+      // Return the full URL
+      const baseUrl = process.env.API_URL ?? "http://localhost:3001";
+      res.send(`${baseUrl}/api/social-accounts/threads/connect`);
+    });
+  } catch (error) {
+    console.error("Error in Threads direct-auth:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * Initialize Threads connection - redirects to Threads OAuth
+ * According to Meta documentation, Threads API is accessed through Threads OAuth:
+ * https://developers.facebook.com/docs/threads/get-started
+ */
+router.get("/threads/connect", (req, res) => {
+  // Store the user ID in the session for the callback
+  const userId = req.session?.user?.uid;
+
+  if (!userId) {
+    console.error("No user ID found in session for Threads connect");
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/settings?error=true&message=Authentication required`
+    );
+  }
+
+  // Set up Threads OAuth URL with proper scopes
+  const threadsAuthUrl = new URL("https://threads.net/oauth/authorize");
+  threadsAuthUrl.searchParams.append(
+    "client_id",
+    process.env.THREADS_APP_ID ?? ""
+  );
+  threadsAuthUrl.searchParams.append(
+    "redirect_uri",
+    process.env.NODE_ENV === "production"
+      ? `${process.env.API_URL}/api/social-accounts/threads/callback`
+      : "https://localhost:3001/api/social-accounts/threads/callback"
+  );
+  threadsAuthUrl.searchParams.append("response_type", "code");
+  threadsAuthUrl.searchParams.append(
+    "scope",
+    "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
+  );
+  threadsAuthUrl.searchParams.append("state", userId);
+
+  console.log(
+    "Redirecting to Threads OAuth:",
+    threadsAuthUrl.toString()
+  );
+  res.redirect(threadsAuthUrl.toString());
+});
+
+/**
+ * Threads callback handler for Threads OAuth
+ * Processes the Threads OAuth callback and creates a Threads social account
+ * https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions
+ */
+router.get("/threads/callback", async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+
+    console.log("Threads callback received:", {
+      hasCode: !!code,
+      state,
+      error,
+      error_description,
+    });
+
+    // Check for errors from Threads OAuth
+    if (error) {
+      console.error("OAuth error:", error, error_description);
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          error_description?.toString() ?? "Authentication failed"
+        )}`
+      );
+    }
+
+    // Validate code parameter
+    if (!code) {
+      console.error("No authorization code received");
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=true&message=No authorization code received`
+      );
+    }
+
+    // Check for user ID in session or state
+    const userId = state?.toString() ?? req.session?.user?.uid;
+    if (!userId) {
+      console.error("No user ID found in session or state");
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=true&message=Authentication required`
+      );
+    }
+
+    try {
+      // Exchange the code for an Threads access token
+      const accessToken = await threadsService.exchangeCodeForToken(
+        code.toString()
+      );
+
+      if (!accessToken) {
+        console.error("Failed to exchange code for token");
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=true&message=Failed to authenticate with Threads`
+        );
+      }
+
+      // Get user profile from Threads Graph API (which includes Threads access)
+      const userProfile = await threadsService.getUserProfile(accessToken);
+
+      if (!userProfile || !userProfile.id) {
+        console.error("Failed to fetch user profile from Threads Graph API");
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=true&message=Failed to fetch user profile`
+        );
+      }
+
+      console.log("Threads user profile:", {
+        id: userProfile.id,
+        username: userProfile.username,
+      });
+
+      // Create or update the social account with proper organization/team context
+      const organizationId = req.session?.user?.organizationId;
+      const teamId = req.session?.user?.currentTeamId;
+
+      const account = await threadsService.createSocialAccount(
+        userId,
+        userProfile,
+        userProfile.longLivedToken || accessToken,
+        "", // Threads doesn't provide refresh tokens in this flow
+        organizationId,
+        teamId
+      );
+
+      console.log("Threads account connected successfully:", {
+        accountId: account.id,
+        organizationId,
+        teamId,
+      });
+
+      return res.redirect(`${process.env.FRONTEND_URL}/settings?success=true`);
+    } catch (error: any) {
+      console.error("Error in Threads callback:", error);
+
+      // Handle duplicate account error based on uniqueness constraints
+      if (
+        error.code === "ACCOUNT_ALREADY_LINKED" ||
+        error.code === "account_already_connected"
+      ) {
+        return res.redirect(
+          `${
+            process.env.FRONTEND_URL
+          }/settings?error=duplicate_account&message=${encodeURIComponent(
+            error.message ??
+              "This Threads account is already connected to another user"
+          )}`
+        );
+      }
+
+      // Handle other errors
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          error.message ?? "Failed to connect Threads account"
+        )}`
+      );
+    }
+  } catch (error: any) {
+    console.error("Unexpected error in Threads callback:", error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/settings?error=true&message=An unexpected error occurred`
+    );
+  }
+});
+
+/**
+ * Create a post on Threads
+ * Uses the Threads Graph API to create a post on Threads
+ * https://developers.facebook.com/docs/threads/create-posts
+ */
+router.post("/threads/:accountId/post", async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const { content, mediaUrls } = req.body;
+
+    // Validate request
+    if (!accountId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Account ID is required",
+      });
+    }
+
+    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Content or media is required",
+      });
+    }
+
+    // Authenticate user
+    const userId = req.session?.user?.uid;
+    if (!userId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
+      });
+    }
+
+    // Check if the user has access to this account
+    const db = threadsService.getDb();
+    const accountSnap = await db
+      .collection("social_accounts")
+      .doc(accountId)
+      .get();
+
+    if (!accountSnap.exists) {
+      return res.status(404).json({
+        status: "error",
+        message: "Social account not found",
+      });
+    }
+
+    const account = { id: accountSnap.id, ...accountSnap.data() } as any;
+
+    // Security check: Verify the account belongs to the authenticated user
+    // Unless the user is an admin or belongs to the organization/team
+    if (account.userId !== userId) {
+      // Check if the user belongs to the organization/team
+      const userSnap = await db.collection("users").doc(userId).get();
+
+      if (!userSnap.exists) {
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication failed",
+        });
+      }
+
+      const user = userSnap.data();
+
+      const hasAccess =
+        (account.organizationId &&
+          account.organizationId === user?.organizationId) ||
+        (account.teamId && account.teamId === user?.currentTeamId) ||
+        user?.role === "admin";
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          status: "error",
+          message: "You don't have access to this account",
+        });
+      }
+    }
+
+    // Post to Threads using the account
+    const post = await threadsService.postContent(
+      accountId,
+      content,
+      mediaUrls
+    );
+
+    // Return the post details
+    return res.status(200).json({
+      status: "success",
+      data: post,
+    });
+  } catch (error: any) {
+    console.error("Error posting to Threads:", error);
+
+    // Handle specific error types
+    if (error.message?.includes("Media uploads")) {
+      return res.status(400).json({
+        status: "error",
+        message: error.message,
+        code: "MEDIA_NOT_SUPPORTED",
+      });
+    }
+
+    // Return appropriate error response
+    return res.status(error.response?.status || 500).json({
+      status: "error",
+      message: error.message || "An error occurred while posting to Threads",
+      details: error.response?.data || null,
+    });
+  }
+});
+
+export default router;

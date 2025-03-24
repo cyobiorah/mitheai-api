@@ -22,6 +22,7 @@ export interface SocialAccount {
     followerCount?: number;
     followingCount?: number;
     lastChecked?: Timestamp;
+    tokenExpiresAt?: Timestamp;
   };
   permissions: {
     canPost: boolean;

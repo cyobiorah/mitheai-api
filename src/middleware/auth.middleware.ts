@@ -81,6 +81,11 @@ export const authenticateToken = async (
             notifications: []
           }
         };
+        
+        // Save user to session
+        if (req.session) {
+          req.session.user = req.user;
+        }
       } else {
         // Set user data based on user type
         const {
@@ -106,6 +111,11 @@ export const authenticateToken = async (
             role
           })
         };
+        
+        // Save user to session
+        if (req.session) {
+          req.session.user = req.user;
+        }
       }
 
       next();

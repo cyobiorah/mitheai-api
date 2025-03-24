@@ -139,7 +139,7 @@ export class TwitterService {
         );
       });
 
-      return socialAccount as SocialAccount;
+      return socialAccount;
     } catch (error: any) {
       if (error.code === "account_already_connected") {
         throw error;
