@@ -46,7 +46,7 @@ const strategy = new OAuth2Strategy(
     callbackURL: callbackUrl,
     scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
     state: true,
-    pkce: true,
+    pkce: true, // Enable the built-in PKCE support
     passReqToCallback: true,
     customHeaders: {
       Authorization: `Basic ${Buffer.from(
@@ -244,55 +244,18 @@ const strategy = new OAuth2Strategy(
 
 // Create a state mapping to store our state data
 const stateMap = new Map<string, string>();
-// Create a code verifier mapping to store PKCE code verifiers
-const codeVerifierMap = new Map<string, string>();
-
-// Use a fixed code verifier for testing that matches Twitter's example
-// This must be between 43-128 characters
-const FIXED_CODE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-
-// Generate a random string for PKCE
-function generateRandomString(length: number): string {
-  // Use only alphanumeric characters to avoid any issues with special characters
-  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let text = "";
-  for (let i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
-}
-
-// Generate a code challenge from a code verifier using S256 method
-function generateCodeChallenge(codeVerifier: string): string {
-  // For Twitter's implementation with code_challenge_method=S256
-  // We need to hash the verifier with SHA-256, then base64url encode it
-  const crypto = require('crypto');
-  const base64Digest = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64');
-  
-  // Convert to base64url encoding (replace +, / and remove =)
-  return base64Digest
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-}
 
 // Override the authenticate method to preserve the state parameter
 const originalAuthenticate = (strategy as any).authenticate;
 (strategy as any).authenticate = function (req: any, options: any) {
-  // Log all request details for debugging
-  console.log("Twitter auth request:", {
-    url: req.url,
-    query: req.query,
-    session: req.session,
-    headers: req.headers,
-  });
-
-  // If this is the initial auth request and we have a state parameter in the query
-  if (req.query.state && !req.url.includes("/callback")) {
-    console.log("Initial auth request with state:", req.query.state);
+  // If this is an authorization request (not a callback)
+  if (req.query.state && !req.query.code) {
+    console.log("Twitter auth request:", {
+      url: req.url,
+      query: req.query,
+      session: req.session,
+      headers: req.headers,
+    });
 
     // Generate a random state key for Twitter
     const twitterState = Math.random().toString(36).substring(2, 15);
@@ -303,18 +266,6 @@ const originalAuthenticate = (strategy as any).authenticate;
       `Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`
     );
 
-    // Use the fixed code verifier for testing
-    const codeVerifier = FIXED_CODE_VERIFIER;
-    codeVerifierMap.set(twitterState, codeVerifier);
-    console.log(
-      `Using fixed code verifier for state ${twitterState}:`,
-      codeVerifier
-    );
-
-    // Generate a code challenge using S256 method (Twitter's requirement)
-    const codeChallenge = generateCodeChallenge(codeVerifier);
-    console.log(`Generated code challenge:`, codeChallenge);
-
     // Make sure options has an authorizationParams property
     options = options || {};
     options.authorizationParams = options.authorizationParams || {};
@@ -322,81 +273,64 @@ const originalAuthenticate = (strategy as any).authenticate;
     // Set the state parameter
     options.state = twitterState;
 
-    // Add PKCE parameters to the authorization request
-    options.authorizationParams.code_challenge = codeChallenge;
-    options.authorizationParams.code_challenge_method = 'S256';
+    // Let the built-in PKCE handle code verifier and challenge
+    console.log("Using built-in PKCE support");
 
-    // Log the complete authorization URL for debugging
-    const authUrl = this._oauth2.getAuthorizeUrl({
-      ...options.authorizationParams,
-      redirect_uri: this._callbackURL,
-      response_type: 'code',
-      state: twitterState,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256'
-    });
-    console.log("Complete Twitter authorization URL:", authUrl);
+    // Hack to access the code verifier that will be generated
+    const originalGetAuthorizeUrl = this._oauth2.getAuthorizeUrl;
+    this._oauth2.getAuthorizeUrl = function (params: any) {
+      console.log("PKCE Code Verifier:", this._pkceVerifier);
+      console.log("Authorization params:", params);
+      return originalGetAuthorizeUrl.call(this, params);
+    };
 
-    console.log("Using Twitter state:", twitterState);
-    console.log("Using code challenge:", codeChallenge);
+    // Call the original authenticate method
+    return originalAuthenticate.call(this, req, options);
   }
 
   // If this is the callback and we have a state parameter, make sure it's available in the verify callback
-  if (req.query.state && req.url.includes("/callback")) {
+  if (req.query.code && req.query.state) {
+    console.log("Twitter callback received:", {
+      url: req.url,
+      query: req.query,
+      session: req.session,
+      headers: req.headers,
+    });
+
+    // Get the Twitter state from the callback
     const twitterState = req.query.state as string;
     console.log("Received Twitter state in callback:", twitterState);
 
-    // Look up our original state from the map
+    // Look up our original state
     const ourState = stateMap.get(twitterState);
-
     if (ourState) {
       console.log("Found our state in map:", ourState);
 
-      // Replace Twitter's state with our state
+      // Replace Twitter's state with our state to maintain compatibility
       req.query.state = ourState;
 
-      // Store the state in the request object so it's available in the verify callback
+      // Store it on the request object so it's available in the verify callback
       req._twitterState = ourState;
       console.log("Restored our state parameter:", ourState);
-
-      // Get the code verifier for this state
-      const codeVerifier = codeVerifierMap.get(twitterState);
-      if (codeVerifier) {
-        console.log("Found code verifier for state:", twitterState);
-
-        // Store the code verifier in multiple places to ensure it's available during token exchange
-        req._codeVerifier = codeVerifier;
-        this._codeVerifier = codeVerifier;
-
-        // Also store it directly on the OAuth2 instance
-        if (this._oauth2) {
-          this._oauth2._codeVerifier = codeVerifier;
-        }
-
-        console.log("Stored code verifier for token exchange:", codeVerifier);
-      } else {
-        console.warn("No code verifier found for state:", twitterState);
-      }
 
       try {
         // Try to parse the state parameter
         const stateData = JSON.parse(
-          Buffer.from(ourState, "base64").toString()
+          Buffer.from(ourState, "base64").toString("utf-8")
         );
         console.log("Parsed state data:", stateData);
 
-        // If we have a user ID in the state, restore the user object
+        // If the state contains a user ID, restore the user object
         if (stateData.uid) {
           req.user = { uid: stateData.uid };
           console.log("Restored user from state parameter:", req.user);
         }
-      } catch (error) {
-        console.error("Failed to parse state parameter:", error);
+      } catch (e) {
+        console.warn("Failed to parse state data:", e);
       }
 
       // Clean up the maps
       stateMap.delete(twitterState);
-      codeVerifierMap.delete(twitterState);
     } else {
       console.warn("Could not find our state for Twitter state:", twitterState);
     }
@@ -422,82 +356,18 @@ const originalAuthenticate = (strategy as any).authenticate;
   },
 };
 
-// Override the token exchange method
-const getOAuthAccessToken = function (
-  this: any,
-  code: string,
-  params: any | TokenCallback,
-  callback?: TokenCallback
+// Override the token exchange method to add logging
+const originalOAuthGetToken = (strategy as any)._oauth2.getOAuthAccessToken;
+(strategy as any)._oauth2.getOAuthAccessToken = function (
+  code: any,
+  params: any,
+  callback: any
 ) {
-  // Handle the case where params is actually the callback
-  const tokenCallback = callback || (params as TokenCallback);
-  const tokenParams = callback ? params : {};
+  console.log("Token exchange initiated with code:", code);
+  console.log("Token exchange params:", params);
+  console.log("PKCE Code Verifier for token exchange:", this._pkceVerifier);
 
-  // Always use the fixed code verifier
-  console.log("Using fixed code verifier for token exchange:", FIXED_CODE_VERIFIER);
-
-  const finalParams = {
-    ...tokenParams,
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: callbackUrl,
-    code_verifier: FIXED_CODE_VERIFIER
-  };
-
-  console.log("Final token request params:", finalParams);
-
-  const postData = Object.keys(finalParams)
-    .map(
-      (key) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(finalParams[key])}`
-    )
-    .join("&");
-
-  console.log("Raw token request post data:", postData);
-
-  // Create Basic Auth header
-  const basicAuth = Buffer.from(
-    `${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`
-  ).toString("base64");
-
-  this._request(
-    "POST",
-    this._getAccessTokenUrl(),
-    {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-      Authorization: `Basic ${basicAuth}`,
-      "User-Agent": "MitheAI/1.0",
-    },
-    postData,
-    null,
-    (error: any, data: any, response: any) => {
-      if (error) {
-        console.error("Token exchange error:", error);
-        const err = error.statusCode
-          ? error
-          : { statusCode: 500, data: error.message || error };
-        return tokenCallback(err);
-      }
-
-      try {
-        console.log("Token exchange response:", data);
-        const results = JSON.parse(data);
-        tokenCallback(
-          undefined,
-          results.access_token,
-          results.refresh_token,
-          results
-        );
-      } catch (e) {
-        console.error("Token parse error:", e);
-        tokenCallback({
-          statusCode: 500,
-          data: "Failed to parse access token response",
-        });
-      }
-    }
-  );
+  return originalOAuthGetToken.call(this, code, params, callback);
 };
 
 // Override the OAuth2Strategy's userProfile method to handle our custom state
@@ -505,9 +375,6 @@ const getOAuthAccessToken = function (
   // This is a no-op as we handle profile fetching in the callback
   done(null, {});
 };
-
-// Use type assertion to access protected property
-(strategy as any)._oauth2.getOAuthAccessToken = getOAuthAccessToken;
 
 // Register strategies
 passport.use("oauth2", strategy);
