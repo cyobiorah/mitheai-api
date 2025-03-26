@@ -14,16 +14,19 @@ type TokenCallback = (
 
 const twitterService = new TwitterService();
 
-// Ensure consistent URL format
+// Ensure consistent URL format for both local and Vercel environments
 const callbackUrl = (
   process.env.TWITTER_CALLBACK_URL ??
-  "http://localhost:3001/api/social-accounts/twitter/callback"
-).replace(/:\d+/, ":3001"); // Force port 3001
+  (process.env.NODE_ENV === "production" 
+    ? "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app/api/social-accounts/twitter/callback"
+    : "http://localhost:3001/api/social-accounts/twitter/callback")
+).replace(/:\d+/, ":3001"); // Force port 3001 for local
 
 // Log OAuth configuration
 console.log("Twitter OAuth Config:", {
   clientId: process.env.TWITTER_CLIENT_ID,
   callbackUrl: callbackUrl,
+  environment: process.env.NODE_ENV ?? "development"
 });
 
 passport.serializeUser((user: any, done) => {
