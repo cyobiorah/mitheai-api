@@ -67,6 +67,9 @@ const strategy = new OAuth2Strategy(
           : "none",
         params,
         user: req.user,
+        session: req.session,
+        query: req.query,
+        state: req.query.state || req._twitterState,
       });
 
       // Get user profile from Twitter API v2
@@ -97,14 +100,24 @@ const strategy = new OAuth2Strategy(
 
       // Get user ID from session or state parameter
       let userId = req.session?.user?.uid;
+      console.log("User ID from session:", userId);
       
       // For serverless: try to get user ID from state parameter if session is missing
-      if (!userId && req.query.state) {
+      const stateParam = req.query.state || req._twitterState;
+      if (!userId && stateParam) {
         try {
-          const stateData = JSON.parse(Buffer.from(req.query.state as string, "base64").toString());
+          console.log("Attempting to parse state:", stateParam);
+          const stateData = JSON.parse(Buffer.from(stateParam as string, "base64").toString());
+          console.log("Parsed state data:", stateData);
+          
           if (stateData.uid) {
             userId = stateData.uid;
             console.log("Restored user ID from state parameter:", userId);
+            
+            // Also set it in the session for downstream handlers
+            if (!req.session.user) {
+              req.session.user = { uid: userId };
+            }
           }
         } catch (error) {
           console.error("Failed to parse state parameter:", error);
@@ -292,6 +305,34 @@ const getOAuthAccessToken = function (
       }
     }
   );
+};
+
+// Override the OAuth2Strategy's userProfile method to handle our custom state
+(strategy as any).userProfile = function(accessToken: string, done: any) {
+  // This is a no-op as we handle profile fetching in the callback
+  done(null, {});
+};
+
+// Override the authenticate method to preserve the state parameter
+const originalAuthenticate = (strategy as any).authenticate;
+(strategy as any).authenticate = function(req: any, options: any) {
+  // Log all request details for debugging
+  console.log("Twitter auth request:", {
+    url: req.url,
+    query: req.query,
+    session: req.session,
+    headers: req.headers,
+  });
+  
+  // If this is the callback and we have a state parameter, make sure it's available in the verify callback
+  if (req.query.state && req.url.includes('/callback')) {
+    // Store the state in the request object so it's available in the verify callback
+    req._twitterState = req.query.state;
+    console.log("Stored Twitter state for verify callback:", req._twitterState);
+  }
+  
+  // Call the original authenticate method
+  return originalAuthenticate.call(this, req, options);
 };
 
 // Use type assertion to access protected property
