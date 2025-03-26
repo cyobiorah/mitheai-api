@@ -247,8 +247,9 @@ const stateMap = new Map<string, string>();
 // Create a code verifier mapping to store PKCE code verifiers
 const codeVerifierMap = new Map<string, string>();
 
-// Use a fixed code verifier for testing
-const FIXED_CODE_VERIFIER = "challenge";
+// Use a fixed code verifier for testing that matches Twitter's example
+// This must be between 43-128 characters
+const FIXED_CODE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
 // Generate a random string for PKCE
 function generateRandomString(length: number): string {
@@ -261,11 +262,21 @@ function generateRandomString(length: number): string {
   return text;
 }
 
-// Generate a code challenge from a code verifier (for Twitter, we'll use plain method)
+// Generate a code challenge from a code verifier using S256 method
 function generateCodeChallenge(codeVerifier: string): string {
-  // For Twitter's implementation with code_challenge_method=plain,
-  // the code challenge is the same as the code verifier
-  return codeVerifier;
+  // For Twitter's implementation with code_challenge_method=S256
+  // We need to hash the verifier with SHA-256, then base64url encode it
+  const crypto = require('crypto');
+  const base64Digest = crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64');
+  
+  // Convert to base64url encoding (replace +, / and remove =)
+  return base64Digest
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 // Override the authenticate method to preserve the state parameter
@@ -300,7 +311,7 @@ const originalAuthenticate = (strategy as any).authenticate;
       codeVerifier
     );
 
-    // Generate a code challenge (for Twitter, using plain method)
+    // Generate a code challenge using S256 method (Twitter's requirement)
     const codeChallenge = generateCodeChallenge(codeVerifier);
     console.log(`Generated code challenge:`, codeChallenge);
 
@@ -313,7 +324,7 @@ const originalAuthenticate = (strategy as any).authenticate;
 
     // Add PKCE parameters to the authorization request
     options.authorizationParams.code_challenge = codeChallenge;
-    options.authorizationParams.code_challenge_method = 'plain';
+    options.authorizationParams.code_challenge_method = 'S256';
 
     // Log the complete authorization URL for debugging
     const authUrl = this._oauth2.getAuthorizeUrl({
@@ -322,7 +333,7 @@ const originalAuthenticate = (strategy as any).authenticate;
       response_type: 'code',
       state: twitterState,
       code_challenge: codeChallenge,
-      code_challenge_method: 'plain'
+      code_challenge_method: 'S256'
     });
     console.log("Complete Twitter authorization URL:", authUrl);
 
@@ -423,15 +434,14 @@ const getOAuthAccessToken = function (
   const tokenParams = callback ? params : {};
 
   // Always use the fixed code verifier
-  const codeVerifier = FIXED_CODE_VERIFIER;
-  console.log("Using fixed code verifier for token exchange:", codeVerifier);
+  console.log("Using fixed code verifier for token exchange:", FIXED_CODE_VERIFIER);
 
   const finalParams = {
     ...tokenParams,
     grant_type: "authorization_code",
     code,
     redirect_uri: callbackUrl,
-    code_verifier: codeVerifier
+    code_verifier: FIXED_CODE_VERIFIER
   };
 
   console.log("Final token request params:", finalParams);
