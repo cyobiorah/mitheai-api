@@ -842,7 +842,7 @@ export class TwitterService {
   async getAuthUrl(): Promise<string> {
     // Determine the appropriate callback URL based on the environment
     const callbackUrl = process.env.NODE_ENV === "production"
-      ? `${process.env.API_URL}/api/social-accounts/twitter/callback`
+      ? `${process.env.API_URL || "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app"}/api/social-accounts/twitter/callback`
       : process.env.TWITTER_CALLBACK_URL!;
     
     console.log("Twitter OAuth Config:", {
@@ -866,11 +866,8 @@ export class TwitterService {
       `scope=${encodeURIComponent("tweet.read tweet.write users.read")}&` +
       "response_type=code&" +
       `code_challenge=${challenge}&` +
-      "code_challenge_method=S256&" +
-      `state=${Math.random().toString(36).substring(7)}`;
+      "code_challenge_method=S256";
 
-    console.log("Generated auth URL:", authUrl);
-    console.log("Callback URL being used:", cleanCallbackUrl);
     return authUrl;
   }
 
