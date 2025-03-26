@@ -247,6 +247,9 @@ const stateMap = new Map<string, string>();
 // Create a code verifier mapping to store PKCE code verifiers
 const codeVerifierMap = new Map<string, string>();
 
+// Use a fixed code verifier for testing
+const FIXED_CODE_VERIFIER = "challenge";
+
 // Generate a random string for PKCE
 function generateRandomString(length: number): string {
   // Use only alphanumeric characters to avoid any issues with special characters
@@ -289,8 +292,8 @@ const originalAuthenticate = (strategy as any).authenticate;
       `Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`
     );
 
-    // Use a fixed code verifier for testing (matches Twitter's documentation example)
-    const codeVerifier = "challenge";
+    // Use the fixed code verifier for testing
+    const codeVerifier = FIXED_CODE_VERIFIER;
     codeVerifierMap.set(twitterState, codeVerifier);
     console.log(
       `Using fixed code verifier for state ${twitterState}:`,
@@ -312,11 +315,16 @@ const originalAuthenticate = (strategy as any).authenticate;
     options.authorizationParams.code_challenge = codeChallenge;
     options.authorizationParams.code_challenge_method = 'plain';
 
-    // Store the code verifier globally so it's accessible during token exchange
-    this._codeVerifier = codeVerifier;
-    if (this._oauth2) {
-      this._oauth2._codeVerifier = codeVerifier;
-    }
+    // Log the complete authorization URL for debugging
+    const authUrl = this._oauth2.getAuthorizeUrl({
+      ...options.authorizationParams,
+      redirect_uri: this._callbackURL,
+      response_type: 'code',
+      state: twitterState,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'plain'
+    });
+    console.log("Complete Twitter authorization URL:", authUrl);
 
     console.log("Using Twitter state:", twitterState);
     console.log("Using code challenge:", codeChallenge);
@@ -414,35 +422,19 @@ const getOAuthAccessToken = function (
   const tokenCallback = callback || (params as TokenCallback);
   const tokenParams = callback ? params : {};
 
+  // Always use the fixed code verifier
+  const codeVerifier = FIXED_CODE_VERIFIER;
+  console.log("Using fixed code verifier for token exchange:", codeVerifier);
+
   const finalParams = {
     ...tokenParams,
     grant_type: "authorization_code",
     code,
     redirect_uri: callbackUrl,
+    code_verifier: codeVerifier
   };
 
-  // Find the code verifier for this request
-  let codeVerifier = null;
-
-  // Try to get it from various places
-  if (this._codeVerifier) {
-    codeVerifier = this._codeVerifier;
-    console.log("Found code_verifier on OAuth2 instance:", codeVerifier);
-  } else if (this._oauth2?._codeVerifier) {
-    codeVerifier = this._oauth2._codeVerifier;
-    console.log(
-      "Found code_verifier on OAuth2._oauth2 instance:",
-      codeVerifier
-    );
-  }
-
-  // Add the code_verifier if we found it
-  if (codeVerifier) {
-    console.log("Adding code_verifier to token request:", codeVerifier);
-    finalParams.code_verifier = codeVerifier;
-  } else {
-    console.warn("No code_verifier found for token request");
-  }
+  console.log("Final token request params:", finalParams);
 
   const postData = Object.keys(finalParams)
     .map(
@@ -450,6 +442,8 @@ const getOAuthAccessToken = function (
         `${encodeURIComponent(key)}=${encodeURIComponent(finalParams[key])}`
     )
     .join("&");
+
+  console.log("Raw token request post data:", postData);
 
   // Create Basic Auth header
   const basicAuth = Buffer.from(
