@@ -95,11 +95,25 @@ const strategy = new OAuth2Strategy(
         return done(new Error("No user data received"));
       }
 
-      // Get user ID from session
-      const userId = req.session?.user?.uid;
+      // Get user ID from session or state parameter
+      let userId = req.session?.user?.uid;
+      
+      // For serverless: try to get user ID from state parameter if session is missing
+      if (!userId && req.query.state) {
+        try {
+          const stateData = JSON.parse(Buffer.from(req.query.state as string, "base64").toString());
+          if (stateData.uid) {
+            userId = stateData.uid;
+            console.log("Restored user ID from state parameter:", userId);
+          }
+        } catch (error) {
+          console.error("Failed to parse state parameter:", error);
+        }
+      }
+      
       if (!userId) {
-        console.error("No user ID found in session");
-        return done(new Error("No user ID found"));
+        console.error("No user ID found in session or state parameter");
+        return done(new Error("No authenticated user found"));
       }
 
       // Create or update social account
