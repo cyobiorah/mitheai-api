@@ -172,6 +172,20 @@ router.get(
         );
       }
 
+      // For serverless environments, try to get user data from state parameter
+      if (!req.user && req.query.state) {
+        try {
+          const stateData = JSON.parse(Buffer.from(req.query.state as string, "base64").toString());
+          if (stateData.uid) {
+            // Recreate user object from state
+            req.user = { uid: stateData.uid };
+            console.log("Restored user from state parameter:", req.user);
+          }
+        } catch (error) {
+          console.error("Failed to parse state parameter:", error);
+        }
+      }
+
       // Authentication successful, continue
       req.logIn(user, (loginErr) => {
         if (loginErr) {
