@@ -327,11 +327,41 @@ const originalAuthenticate = (strategy as any).authenticate;
     headers: req.headers,
   });
   
+  // If this is the initial auth request and we have a state parameter in the query
+  if (req.query.state && !req.url.includes('/callback')) {
+    console.log("Initial auth request with state:", req.query.state);
+    
+    // Make sure options has an authorizationURL property
+    options = options || {};
+    
+    // Modify the authorization URL to include our state parameter
+    const authURL = new URL(this._oauth2._authorizeUrl);
+    authURL.searchParams.append('state', req.query.state);
+    
+    // Override the authorization URL for this request only
+    this._oauth2._authorizeUrl = authURL.toString();
+    console.log("Modified authorization URL to include state:", this._oauth2._authorizeUrl);
+  }
+  
   // If this is the callback and we have a state parameter, make sure it's available in the verify callback
   if (req.query.state && req.url.includes('/callback')) {
     // Store the state in the request object so it's available in the verify callback
     req._twitterState = req.query.state;
     console.log("Stored Twitter state for verify callback:", req._twitterState);
+    
+    try {
+      // Try to parse the state parameter
+      const stateData = JSON.parse(Buffer.from(req.query.state as string, 'base64').toString());
+      console.log("Parsed state data:", stateData);
+      
+      // If we have a user ID in the state, restore the user object
+      if (stateData.uid) {
+        req.user = { uid: stateData.uid };
+        console.log("Restored user from state parameter:", req.user);
+      }
+    } catch (error) {
+      console.error("Failed to parse state parameter:", error);
+    }
   }
   
   // Call the original authenticate method
