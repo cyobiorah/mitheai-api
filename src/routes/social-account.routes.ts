@@ -148,7 +148,9 @@ router.get(
         // Check for specific error types
         if (err.code === "account_already_connected") {
           // Redirect with specific error for duplicate accounts
-          const frontendUrl = process.env.FRONTEND_URL;
+          const frontendUrl =
+            process.env.FRONTEND_URL ??
+            "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
           return res.redirect(
             `${frontendUrl}/settings?error=duplicate_account&message=${encodeURIComponent(
               err.message
@@ -157,7 +159,9 @@ router.get(
         }
 
         // Handle other errors
-        const frontendUrl = process.env.FRONTEND_URL;
+        const frontendUrl =
+          process.env.FRONTEND_URL ??
+          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
         return res.redirect(
           `${frontendUrl}/settings?error=true&message=${encodeURIComponent(
             err.message || "Authentication failed"
@@ -166,7 +170,9 @@ router.get(
       }
 
       if (!user) {
-        const frontendUrl = process.env.FRONTEND_URL;
+        const frontendUrl =
+          process.env.FRONTEND_URL ??
+          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
         return res.redirect(
           `${frontendUrl}/settings?error=true&message=No user data received`
         );
@@ -175,7 +181,9 @@ router.get(
       // For serverless environments, try to get user data from state parameter
       if (!req.user && req.query.state) {
         try {
-          const stateData = JSON.parse(Buffer.from(req.query.state as string, "base64").toString());
+          const stateData = JSON.parse(
+            Buffer.from(req.query.state as string, "base64").toString()
+          );
           if (stateData.uid) {
             // Recreate user object from state
             req.user = { uid: stateData.uid };
@@ -190,14 +198,18 @@ router.get(
       req.logIn(user, (loginErr) => {
         if (loginErr) {
           console.error("Login error:", loginErr);
-          const frontendUrl = process.env.FRONTEND_URL;
+          const frontendUrl =
+            process.env.FRONTEND_URL ??
+            "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
           return res.redirect(
             `${frontendUrl}/settings?error=true&message=Login failed`
           );
         }
 
         // Success - redirect to settings page
-        const frontendUrl = process.env.FRONTEND_URL;
+        const frontendUrl =
+          process.env.FRONTEND_URL ??
+          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
         return res.redirect(`${frontendUrl}/settings?success=true`);
       });
     })(req, res, next);
