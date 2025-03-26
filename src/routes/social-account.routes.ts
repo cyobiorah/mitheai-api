@@ -62,19 +62,29 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
     }
 
     const skipWelcome = req.query.skipWelcome === "true";
-    req.session.skipWelcome = skipWelcome;
-
-    // Store user data in session
+    
+    // Store user data in session for non-serverless environments
     req.session.user = req.user;
+    req.session.skipWelcome = skipWelcome;
+    
+    // Generate a secure state parameter with encoded user data
+    const userState = Buffer.from(
+      JSON.stringify({
+        uid: req.user.uid,
+        skipWelcome: skipWelcome,
+        timestamp: Date.now(),
+      })
+    ).toString('base64');
+    
     req.session.save((err: any) => {
       if (err) {
         console.error("Session save error:", err);
-        return res.status(500).json({ error: "Session error" });
+        // Continue anyway since we'll use the state parameter
       }
 
-      // Return the full URL
+      // Return the full URL with state parameter
       const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-      res.send(`${baseUrl}/api/social-accounts/twitter/auth`);
+      res.send(`${baseUrl}/api/social-accounts/twitter/auth?state=${encodeURIComponent(userState)}`);
     });
   } catch (error) {
     console.error("Error in direct-auth:", error);
@@ -82,15 +92,38 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
   }
 });
 
-// Update the auth route to use session data
+// Update the auth route to use state parameter if session is missing
 router.get(
   "/twitter/auth",
   (req, res, next) => {
-    // Check if we have user data in session
-    if (!req.session.user) {
-      return res.status(401).json({ error: "No session found" });
+    // Check if we have user data in session first (works in local)
+    if (req.session.user) {
+      return next();
     }
-    next();
+    
+    // For serverless: check for state parameter
+    const { state } = req.query;
+    if (!state) {
+      return res.status(401).json({ error: "No authentication state found" });
+    }
+    
+    try {
+      // Decode and validate the state parameter
+      const userData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+      
+      // Check for timestamp expiration (10 minute window)
+      if (Date.now() - userData.timestamp > 10 * 60 * 1000) {
+        return res.status(401).json({ error: "Authentication state expired" });
+      }
+      
+      // Recreate the session from state
+      req.session.user = { uid: userData.uid };
+      req.session.skipWelcome = userData.skipWelcome;
+      next();
+    } catch (error) {
+      console.error("Error parsing state parameter:", error);
+      return res.status(401).json({ error: "Invalid authentication state" });
+    }
   },
   passport.authenticate("oauth2", {
     scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
