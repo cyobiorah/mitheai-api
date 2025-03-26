@@ -240,6 +240,82 @@ const strategy = new OAuth2Strategy(
   }
 );
 
+// Create a state mapping to store our state data
+const stateMap = new Map<string, string>();
+
+// Override the authenticate method to preserve the state parameter
+const originalAuthenticate = (strategy as any).authenticate;
+(strategy as any).authenticate = function(req: any, options: any) {
+  // Log all request details for debugging
+  console.log("Twitter auth request:", {
+    url: req.url,
+    query: req.query,
+    session: req.session,
+    headers: req.headers,
+  });
+  
+  // If this is the initial auth request and we have a state parameter in the query
+  if (req.query.state && !req.url.includes('/callback')) {
+    console.log("Initial auth request with state:", req.query.state);
+    
+    // Generate a random state key for Twitter
+    const twitterState = Math.random().toString(36).substring(2, 15);
+    
+    // Store our state mapped to Twitter's state
+    stateMap.set(twitterState, req.query.state as string);
+    console.log(`Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`);
+    
+    // Make sure options has an authorizationURL property
+    options = options || {};
+    
+    // Override the state parameter for this request only
+    options.state = twitterState;
+    console.log("Using Twitter state:", twitterState);
+  }
+  
+  // If this is the callback and we have a state parameter, make sure it's available in the verify callback
+  if (req.query.state && req.url.includes('/callback')) {
+    const twitterState = req.query.state as string;
+    console.log("Received Twitter state in callback:", twitterState);
+    
+    // Look up our original state from the map
+    const ourState = stateMap.get(twitterState);
+    
+    if (ourState) {
+      console.log("Found our state in map:", ourState);
+      
+      // Replace Twitter's state with our state
+      req.query.state = ourState;
+      
+      // Store the state in the request object so it's available in the verify callback
+      req._twitterState = ourState;
+      console.log("Restored our state parameter:", ourState);
+      
+      try {
+        // Try to parse the state parameter
+        const stateData = JSON.parse(Buffer.from(ourState, 'base64').toString());
+        console.log("Parsed state data:", stateData);
+        
+        // If we have a user ID in the state, restore the user object
+        if (stateData.uid) {
+          req.user = { uid: stateData.uid };
+          console.log("Restored user from state parameter:", req.user);
+        }
+      } catch (error) {
+        console.error("Failed to parse state parameter:", error);
+      }
+      
+      // Clean up the map
+      stateMap.delete(twitterState);
+    } else {
+      console.warn("Could not find our state for Twitter state:", twitterState);
+    }
+  }
+  
+  // Call the original authenticate method
+  return originalAuthenticate.call(this, req, options);
+};
+
 // Override the token exchange method
 const getOAuthAccessToken = function (
   this: any,
@@ -314,58 +390,6 @@ const getOAuthAccessToken = function (
 (strategy as any).userProfile = function(accessToken: string, done: any) {
   // This is a no-op as we handle profile fetching in the callback
   done(null, {});
-};
-
-// Override the authenticate method to preserve the state parameter
-const originalAuthenticate = (strategy as any).authenticate;
-(strategy as any).authenticate = function(req: any, options: any) {
-  // Log all request details for debugging
-  console.log("Twitter auth request:", {
-    url: req.url,
-    query: req.query,
-    session: req.session,
-    headers: req.headers,
-  });
-  
-  // If this is the initial auth request and we have a state parameter in the query
-  if (req.query.state && !req.url.includes('/callback')) {
-    console.log("Initial auth request with state:", req.query.state);
-    
-    // Make sure options has an authorizationURL property
-    options = options || {};
-    
-    // Modify the authorization URL to include our state parameter
-    const authURL = new URL(this._oauth2._authorizeUrl);
-    authURL.searchParams.append('state', req.query.state);
-    
-    // Override the authorization URL for this request only
-    this._oauth2._authorizeUrl = authURL.toString();
-    console.log("Modified authorization URL to include state:", this._oauth2._authorizeUrl);
-  }
-  
-  // If this is the callback and we have a state parameter, make sure it's available in the verify callback
-  if (req.query.state && req.url.includes('/callback')) {
-    // Store the state in the request object so it's available in the verify callback
-    req._twitterState = req.query.state;
-    console.log("Stored Twitter state for verify callback:", req._twitterState);
-    
-    try {
-      // Try to parse the state parameter
-      const stateData = JSON.parse(Buffer.from(req.query.state as string, 'base64').toString());
-      console.log("Parsed state data:", stateData);
-      
-      // If we have a user ID in the state, restore the user object
-      if (stateData.uid) {
-        req.user = { uid: stateData.uid };
-        console.log("Restored user from state parameter:", req.user);
-      }
-    } catch (error) {
-      console.error("Failed to parse state parameter:", error);
-    }
-  }
-  
-  // Call the original authenticate method
-  return originalAuthenticate.call(this, req, options);
 };
 
 // Use type assertion to access protected property
