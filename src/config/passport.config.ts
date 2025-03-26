@@ -242,6 +242,33 @@ const strategy = new OAuth2Strategy(
 
 // Create a state mapping to store our state data
 const stateMap = new Map<string, string>();
+// Create a code verifier mapping to store PKCE code verifiers
+const codeVerifierMap = new Map<string, string>();
+
+// Generate a random string for PKCE
+function generateRandomString(length: number): string {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let text = '';
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+// Generate a code challenge from a code verifier (base64url encoded SHA-256 hash)
+function generateCodeChallenge(codeVerifier: string): string {
+  // In Node.js environment, use the crypto module
+  const crypto = require('crypto');
+  const base64Hash = crypto.createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64');
+  
+  // Convert to base64url encoding (replace + with -, / with _, and remove =)
+  return base64Hash
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
 
 // Override the authenticate method to preserve the state parameter
 const originalAuthenticate = (strategy as any).authenticate;
@@ -265,11 +292,29 @@ const originalAuthenticate = (strategy as any).authenticate;
     stateMap.set(twitterState, req.query.state as string);
     console.log(`Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`);
     
-    // Make sure options has an authorizationURL property
-    options = options || {};
+    // Generate a code verifier for PKCE (between 43-128 characters)
+    const codeVerifier = generateRandomString(64);
+    codeVerifierMap.set(twitterState, codeVerifier);
+    console.log(`Generated code verifier for state ${twitterState}:`, codeVerifier);
     
-    // Override the state parameter for this request only
+    // Generate a code challenge (base64url encoded SHA-256 hash of the code verifier)
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    console.log(`Generated code challenge:`, codeChallenge);
+    
+    // Make sure options has an authorizationParams property
+    options = options || {};
+    options.authorizationParams = options.authorizationParams || {};
+    
+    // Set the state parameter
     options.state = twitterState;
+    
+    // Add PKCE parameters to the authorization request
+    options.authorizationParams.code_challenge = codeChallenge;
+    options.authorizationParams.code_challenge_method = 'S256';
+    
+    // Store the code verifier globally so it's accessible during token exchange
+    (strategy as any)._oauth2._codeVerifier = codeVerifier;
+    
     console.log("Using Twitter state:", twitterState);
   }
   
@@ -291,6 +336,25 @@ const originalAuthenticate = (strategy as any).authenticate;
       req._twitterState = ourState;
       console.log("Restored our state parameter:", ourState);
       
+      // Get the code verifier for this state
+      const codeVerifier = codeVerifierMap.get(twitterState);
+      if (codeVerifier) {
+        console.log("Found code verifier for state:", twitterState);
+        
+        // Store the code verifier in multiple places to ensure it's available during token exchange
+        req._codeVerifier = codeVerifier;
+        this._codeVerifier = codeVerifier;
+        
+        // Also store it directly on the OAuth2 instance
+        if (this._oauth2) {
+          this._oauth2._codeVerifier = codeVerifier;
+        }
+        
+        console.log("Stored code verifier for token exchange:", codeVerifier);
+      } else {
+        console.warn("Could not find code verifier for state:", twitterState);
+      }
+      
       try {
         // Try to parse the state parameter
         const stateData = JSON.parse(Buffer.from(ourState, 'base64').toString());
@@ -305,8 +369,9 @@ const originalAuthenticate = (strategy as any).authenticate;
         console.error("Failed to parse state parameter:", error);
       }
       
-      // Clean up the map
+      // Clean up the maps
       stateMap.delete(twitterState);
+      codeVerifierMap.delete(twitterState);
     } else {
       console.warn("Could not find our state for Twitter state:", twitterState);
     }
@@ -341,13 +406,33 @@ const getOAuthAccessToken = function (
   // Handle the case where params is actually the callback
   const tokenCallback = callback || (params as TokenCallback);
   const tokenParams = callback ? params : {};
-
+  
   const finalParams = {
     ...tokenParams,
     grant_type: "authorization_code",
     code,
     redirect_uri: callbackUrl,
   };
+  
+  // Find the code verifier for this request
+  let codeVerifier = null;
+  
+  // Try to get it from various places
+  if (this._codeVerifier) {
+    codeVerifier = this._codeVerifier;
+    console.log("Found code_verifier on OAuth2 instance:", codeVerifier);
+  } else if (this._oauth2 && this._oauth2._codeVerifier) {
+    codeVerifier = this._oauth2._codeVerifier;
+    console.log("Found code_verifier on OAuth2._oauth2 instance:", codeVerifier);
+  }
+  
+  // Add the code_verifier if we found it
+  if (codeVerifier) {
+    console.log("Adding code_verifier to token request:", codeVerifier);
+    finalParams.code_verifier = codeVerifier;
+  } else {
+    console.warn("No code_verifier found for token request");
+  }
 
   const postData = Object.keys(finalParams)
     .map(
