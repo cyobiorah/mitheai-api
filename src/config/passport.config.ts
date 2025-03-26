@@ -249,8 +249,8 @@ const codeVerifierMap = new Map<string, string>();
 
 // Generate a random string for PKCE
 function generateRandomString(length: number): string {
-  const possible =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  // Use only alphanumeric characters to avoid any issues with special characters
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let text = "";
   for (let i = 0; i < length; i++) {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
@@ -289,11 +289,11 @@ const originalAuthenticate = (strategy as any).authenticate;
       `Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`
     );
 
-    // Generate a code verifier for PKCE (between 43-128 characters)
-    const codeVerifier = generateRandomString(64);
+    // Use a fixed code verifier for testing (matches Twitter's documentation example)
+    const codeVerifier = "challenge";
     codeVerifierMap.set(twitterState, codeVerifier);
     console.log(
-      `Generated code verifier for state ${twitterState}:`,
+      `Using fixed code verifier for state ${twitterState}:`,
       codeVerifier
     );
 
