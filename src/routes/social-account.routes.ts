@@ -62,11 +62,11 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
     }
 
     const skipWelcome = req.query.skipWelcome === "true";
-    
+
     // Store user data in session for non-serverless environments
     req.session.user = req.user;
     req.session.skipWelcome = skipWelcome;
-    
+
     // Generate a secure state parameter with encoded user data
     const userState = Buffer.from(
       JSON.stringify({
@@ -74,8 +74,8 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
         skipWelcome: skipWelcome,
         timestamp: Date.now(),
       })
-    ).toString('base64');
-    
+    ).toString("base64");
+
     req.session.save((err: any) => {
       if (err) {
         console.error("Session save error:", err);
@@ -84,7 +84,11 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
 
       // Return the full URL with state parameter
       const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-      res.send(`${baseUrl}/api/social-accounts/twitter/auth?state=${encodeURIComponent(userState)}`);
+      res.send(
+        `${baseUrl}/api/social-accounts/twitter/auth?state=${encodeURIComponent(
+          userState
+        )}`
+      );
     });
   } catch (error) {
     console.error("Error in direct-auth:", error);
@@ -100,22 +104,24 @@ router.get(
     if (req.session.user) {
       return next();
     }
-    
+
     // For serverless: check for state parameter
     const { state } = req.query;
     if (!state) {
       return res.status(401).json({ error: "No authentication state found" });
     }
-    
+
     try {
       // Decode and validate the state parameter
-      const userData = JSON.parse(Buffer.from(state as string, 'base64').toString());
-      
+      const userData = JSON.parse(
+        Buffer.from(state as string, "base64").toString()
+      );
+
       // Check for timestamp expiration (10 minute window)
       if (Date.now() - userData.timestamp > 10 * 60 * 1000) {
         return res.status(401).json({ error: "Authentication state expired" });
       }
-      
+
       // Recreate the session from state
       req.session.user = { uid: userData.uid };
       req.session.skipWelcome = userData.skipWelcome;
@@ -142,28 +148,27 @@ router.get(
         // Check for specific error types
         if (err.code === "account_already_connected") {
           // Redirect with specific error for duplicate accounts
+          const frontendUrl = process.env.FRONTEND_URL;
           return res.redirect(
-            `${
-              process.env.FRONTEND_URL
-            }/settings?error=duplicate_account&message=${encodeURIComponent(
+            `${frontendUrl}/settings?error=duplicate_account&message=${encodeURIComponent(
               err.message
             )}`
           );
         }
 
         // Handle other errors
+        const frontendUrl = process.env.FRONTEND_URL;
         return res.redirect(
-          `${
-            process.env.FRONTEND_URL
-          }/settings?error=true&message=${encodeURIComponent(
+          `${frontendUrl}/settings?error=true&message=${encodeURIComponent(
             err.message || "Authentication failed"
           )}`
         );
       }
 
       if (!user) {
+        const frontendUrl = process.env.FRONTEND_URL;
         return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?error=true&message=No user data received`
+          `${frontendUrl}/settings?error=true&message=No user data received`
         );
       }
 
@@ -171,15 +176,15 @@ router.get(
       req.logIn(user, (loginErr) => {
         if (loginErr) {
           console.error("Login error:", loginErr);
+          const frontendUrl = process.env.FRONTEND_URL;
           return res.redirect(
-            `${process.env.FRONTEND_URL}/settings?error=true&message=Login failed`
+            `${frontendUrl}/settings?error=true&message=Login failed`
           );
         }
 
         // Success - redirect to settings page
-        return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?success=true`
-        );
+        const frontendUrl = process.env.FRONTEND_URL;
+        return res.redirect(`${frontendUrl}/settings?success=true`);
       });
     })(req, res, next);
   },
