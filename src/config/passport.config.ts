@@ -258,22 +258,11 @@ function generateRandomString(length: number): string {
   return text;
 }
 
-// Generate a code challenge from a code verifier (base64url encoded SHA-256 hash)
+// Generate a code challenge from a code verifier (for Twitter, we'll use plain method)
 function generateCodeChallenge(codeVerifier: string): string {
-  // In Node.js environment, use the crypto module
-  const crypto = require("crypto");
-
-  // Create a SHA-256 hash of the code verifier
-  const hash = crypto.createHash("sha256").update(codeVerifier).digest();
-
-  // Base64 encode the hash
-  const base64Digest = Buffer.from(hash).toString("base64");
-
-  // Convert to base64url encoding (replace + with -, / with _, and remove =)
-  return base64Digest
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  // For Twitter's implementation with code_challenge_method=plain,
+  // the code challenge is the same as the code verifier
+  return codeVerifier;
 }
 
 // Override the authenticate method to preserve the state parameter
@@ -308,7 +297,7 @@ const originalAuthenticate = (strategy as any).authenticate;
       codeVerifier
     );
 
-    // Generate a code challenge (base64url encoded SHA-256 hash of the code verifier)
+    // Generate a code challenge (for Twitter, using plain method)
     const codeChallenge = generateCodeChallenge(codeVerifier);
     console.log(`Generated code challenge:`, codeChallenge);
 
@@ -321,7 +310,7 @@ const originalAuthenticate = (strategy as any).authenticate;
 
     // Add PKCE parameters to the authorization request
     options.authorizationParams.code_challenge = codeChallenge;
-    options.authorizationParams.code_challenge_method = "S256";
+    options.authorizationParams.code_challenge_method = 'plain';
 
     // Store the code verifier globally so it's accessible during token exchange
     this._codeVerifier = codeVerifier;
