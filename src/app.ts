@@ -9,7 +9,6 @@ import { config } from "dotenv";
 import { authenticateToken } from "./middleware/auth.middleware";
 import passport from "./config/passport.config";
 
-// Import routes
 import authRoutes from "./routes/auth.routes";
 import usersRouter from "./routes/users.routes";
 import teamsRouter from "./routes/teams.routes";
@@ -20,22 +19,22 @@ import analysisRouter from "./routes/analysis.routes";
 import socialAccountRouter from "./routes/social-account.routes";
 import analyticsRouter from "./routes/analytics.routes";
 
-// Load environment variables
 config();
 
 const app = express();
-const port = process.env.PORT ?? 3001;
 
 const allowedOrigins = [
-  "https://localhost:5173",
+  "http://localhost:5173",
+  "http://localhost:3001",
   "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
 ];
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet());
 app.use(
   cors({
     origin: function (origin, callback) {
+      console.log({ origin });
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -46,11 +45,12 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
-); // Enable CORS with specific options
-app.use(compression()); // Compress responses
-app.use(morgan("dev")); // Request logging
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+);
+
+app.use(compression());
+app.use(morgan("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Session configuration
 app.use(
@@ -103,7 +103,7 @@ app.get("/test", (req, res) => {
 });
 
 // Test endpoint with explicit CORS
-app.options("/test-cors", cors()); // Enable pre-flight for this specific route
+app.options("/test-cors", cors());
 app.get("/test-cors", (req, res) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
