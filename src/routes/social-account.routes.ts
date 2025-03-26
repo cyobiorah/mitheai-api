@@ -140,8 +140,24 @@ router.get(
 router.get(
   "/twitter/callback",
   (req, res, next) => {
+    // Log all request details for debugging
+    console.log("Twitter callback received:", {
+      url: req.url,
+      query: req.query,
+      session: req.session,
+      headers: req.headers,
+    });
+
     // Add error handling for the OAuth callback
     passport.authenticate("oauth2", (err: any, user: any, info: any) => {
+      console.log("Twitter OAuth callback result:", {
+        error: err ? { message: err.message, code: err.code } : null,
+        user: user ? "Present" : "Missing",
+        info,
+        session: req.session,
+        query: req.query,
+      });
+
       if (err) {
         console.error("OAuth authentication error:", err);
 
