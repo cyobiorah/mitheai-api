@@ -840,12 +840,18 @@ export class TwitterService {
   }
 
   async getAuthUrl(): Promise<string> {
+    // Determine the appropriate callback URL based on the environment
+    const callbackUrl = process.env.NODE_ENV === "production"
+      ? `${process.env.API_URL}/api/social-accounts/twitter/callback`
+      : process.env.TWITTER_CALLBACK_URL!;
+    
     console.log("Twitter OAuth Config:", {
       clientId: process.env.TWITTER_CLIENT_ID,
-      callbackUrl: process.env.TWITTER_CALLBACK_URL,
+      callbackUrl: callbackUrl,
+      environment: process.env.NODE_ENV,
     });
 
-    const callbackUrl = process.env.TWITTER_CALLBACK_URL!.replace("www.", "");
+    const cleanCallbackUrl = callbackUrl.replace("www.", "");
     const { verifier, challenge } = await this.generateCodeChallenge();
 
     // Store verifier for later use
@@ -856,7 +862,7 @@ export class TwitterService {
     const authUrl =
       "https://twitter.com/i/oauth2/authorize?" +
       `client_id=${encodeURIComponent(process.env.TWITTER_CLIENT_ID!)}&` +
-      `redirect_uri=${encodeURIComponent(callbackUrl)}&` +
+      `redirect_uri=${encodeURIComponent(cleanCallbackUrl)}&` +
       `scope=${encodeURIComponent("tweet.read tweet.write users.read")}&` +
       "response_type=code&" +
       `code_challenge=${challenge}&` +
@@ -864,7 +870,7 @@ export class TwitterService {
       `state=${Math.random().toString(36).substring(7)}`;
 
     console.log("Generated auth URL:", authUrl);
-    console.log("Callback URL being used:", callbackUrl);
+    console.log("Callback URL being used:", cleanCallbackUrl);
     return authUrl;
   }
 
