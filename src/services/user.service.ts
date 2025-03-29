@@ -4,14 +4,16 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 export class UserService {
-  private userRepository: any;
+  private readonly userRepository: any;
 
-  constructor() {
-    this.initialize();
+  private constructor(userRepository: any) {
+    this.userRepository = userRepository;
   }
 
-  private async initialize() {
-    this.userRepository = await RepositoryFactory.createUserRepository();
+  // Factory method to create and initialize the service
+  public static async create(): Promise<UserService> {
+    const userRepository = await RepositoryFactory.createUserRepository();
+    return new UserService(userRepository);
   }
 
   async findById(id: string): Promise<User | null> {
@@ -40,34 +42,34 @@ export class UserService {
     // Create user without password for now
     const newUser = await this.userRepository.create({
       ...userData,
-      uid: this.generateUid(),
-      status: userData.status || "pending",
-    } as User);
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return newUser;
   }
 
-  async createWithPassword(
-    userData: Omit<User, "uid" | "createdAt" | "updatedAt"> & {
-      password: string;
-    }
-  ): Promise<User> {
+  async createWithPassword(userData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+  }): Promise<User> {
     const { password, ...userDataWithoutPassword } = userData;
 
     // Hash the password
-    const hashedPassword = await this.hashPassword(password);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user with hashed password
     const newUser = await this.userRepository.create({
       ...userDataWithoutPassword,
-      uid: this.generateUid(),
-      status: userData.status || "pending",
-      password: hashedPassword, // Store hashed password
-    } as any);
+      password: hashedPassword,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    // Remove password from returned user object
-    const { password: _, ...userWithoutPassword } = newUser as any;
-    return userWithoutPassword as User;
+    return newUser;
   }
 
   async update(id: string, userData: Partial<User>): Promise<User | null> {
@@ -82,22 +84,34 @@ export class UserService {
     email: string,
     password: string
   ): Promise<{ user: User; token: string } | null> {
-    const user = (await this.userRepository.findByEmail(email)) as any;
+    const user = await this.userRepository.findByEmail(email);
 
-    if (!user || !user.password) {
+    if (!user?.password) {
       return null;
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       return null;
     }
 
-    // Generate JWT token
-    const token = this.generateToken(user);
+    // Create JWT token
+    const payload = {
+      id: user._id?.toString() || user.id,
+      uid: user.uid,
+      email: user.email,
+    };
 
-    // Remove password from returned user object
+    const token = jwt.sign(
+      payload,
+      process.env.JWT_SECRET ?? "your-secret-key",
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
 
     return {
@@ -115,7 +129,7 @@ export class UserService {
 
     return jwt.sign(
       payload,
-      process.env.JWT_SECRET || "your-secret-key-change-this-in-production",
+      process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
       { expiresIn: "24h" }
     );
   }
@@ -123,10 +137,5 @@ export class UserService {
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return await bcrypt.hash(password, saltRounds);
-  }
-
-  private generateUid(): string {
-    // Simple UUID generation
-    return "user_" + Math.random().toString(36).substr(2, 9);
   }
 }
