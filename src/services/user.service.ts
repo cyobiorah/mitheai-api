@@ -4,17 +4,21 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 export class UserService {
-  private readonly userRepository: any;
+  private userRepository: any;
 
-  private constructor(userRepository: any) {
-    this.userRepository = userRepository;
+  constructor() {
+    this.initialize();
+  }
+
+  private async initialize() {
+    this.userRepository = await RepositoryFactory.createUserRepository();
   }
 
   // Factory method to create and initialize the service
-  public static async create(): Promise<UserService> {
-    const userRepository = await RepositoryFactory.createUserRepository();
-    return new UserService(userRepository);
-  }
+  //   public static async create(): Promise<UserService> {
+  //     const userRepository = await RepositoryFactory.createUserRepository();
+  //     return new UserService(userRepository);
+  //   }
 
   async findById(id: string): Promise<User | null> {
     return await this.userRepository.findById(id);
