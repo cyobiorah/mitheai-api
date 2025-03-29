@@ -11,20 +11,20 @@ interface CreateContentOptions {
   scheduledTime?: Date;
 }
 
-interface ContentMetadata {
-  source: string;
-  language: string;
-  tags: string[];
-  customFields: Record<string, any>;
-  socialPost?: {
-    platform: SocialPlatform;
-    scheduledTime?: Timestamp;
-    publishedTime?: Timestamp;
-    postId?: string;
-    retryCount?: number;
-    failureReason?: string;
-  };
-}
+// interface ContentMetadata {
+//   source: string;
+//   language: string;
+//   tags: string[];
+//   customFields: Record<string, any>;
+//   socialPost?: {
+//     platform: SocialPlatform;
+//     scheduledTime?: Date;
+//     publishedTime?: Date;
+//     postId?: string;
+//     retryCount?: number;
+//     failureReason?: string;
+//   };
+// }
 
 export class ContentService {
   private db = getFirestore();
@@ -54,14 +54,14 @@ export class ContentService {
         customFields: {},
         socialPost: {
           platform: options.platform,
-          scheduledTime: options.scheduledTime ? Timestamp.fromDate(options.scheduledTime) : undefined,
+          scheduledTime: options.scheduledTime ?? undefined,
         },
       },
-      teamId: user.teamIds?.[0] || null,
-      organizationId: user.organizationId || null,
+      teamId: user.teamIds?.[0] ?? null,
+      organizationId: user.organizationId ?? null,
       createdBy: user.uid,
-      createdAt: now,
-      updatedAt: now
+      createdAt: now.toDate(),
+      updatedAt: now.toDate(),
     };
 
     // Validate content
