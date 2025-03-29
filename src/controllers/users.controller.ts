@@ -2,17 +2,17 @@ import { Request, Response } from "express";
 import { UserService } from "../services/user.service";
 import { OrganizationService } from "../services/organization.service";
 import { InvitationService } from "../services/invitation.service";
-import { Organization } from "../types";
-import type { User } from "../types";
 import { sendInvitationEmail } from "../services/email.service";
 import { v4 as uuidv4 } from "uuid";
+import { initAuthController } from "./auth.controller";
 
 // Initialize services
-const userService = new UserService();
+// const userService = new UserService();
 const organizationService = new OrganizationService();
 const invitationService = new InvitationService();
 
 export const getUsers = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { organizationId } = req.params;
 
@@ -32,6 +32,7 @@ export const getUsers = async (req: Request, res: Response) => {
 };
 
 export const getUser = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { uid } = req.params;
 
@@ -55,6 +56,7 @@ export const getUser = async (req: Request, res: Response) => {
 };
 
 export const inviteUser = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { email, firstName, lastName, role, organizationId } = req.body;
 
@@ -137,6 +139,7 @@ export const inviteUser = async (req: Request, res: Response) => {
 };
 
 export const updateUser = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { uid } = req.params;
 
@@ -161,6 +164,7 @@ export const updateUser = async (req: Request, res: Response) => {
 };
 
 export const deleteUser = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { userId } = req.params;
 

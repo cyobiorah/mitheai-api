@@ -1,11 +1,12 @@
-import { Request, Response } from 'express';
-import { TeamService } from '../services/team.service';
-import { UserService } from '../services/user.service';
-import { Team, User } from '../types';
+import { Request, Response } from "express";
+import { TeamService } from "../services/team.service";
+import { UserService } from "../services/user.service";
+import { Team, User } from "../types";
+import { initAuthController } from "./auth.controller";
 
 // Initialize services
 const teamService = new TeamService();
-const userService = new UserService();
+// const userService = new UserService();
 
 export const createTeam = async (req: Request, res: Response) => {
   try {
@@ -14,7 +15,7 @@ export const createTeam = async (req: Request, res: Response) => {
     // Validate required fields
     if (!name || !organizationId) {
       return res.status(400).json({
-        error: 'Missing required fields: name, organizationId',
+        error: "Missing required fields: name, organizationId",
       });
     }
 
@@ -25,14 +26,14 @@ export const createTeam = async (req: Request, res: Response) => {
       organizationId,
       memberIds: [],
       settings: {
-        permissions: ['basic'],
+        permissions: ["basic"],
       },
     });
 
     res.status(201).json(newTeam);
   } catch (error) {
-    console.error('Error creating team:', error);
-    res.status(500).json({ error: 'Failed to create team' });
+    console.error("Error creating team:", error);
+    res.status(500).json({ error: "Failed to create team" });
   }
 };
 
@@ -42,7 +43,7 @@ export const getTeams = async (req: Request, res: Response) => {
 
     if (!organizationId) {
       return res.status(400).json({
-        error: 'Missing required parameter: organizationId',
+        error: "Missing required parameter: organizationId",
       });
     }
 
@@ -50,8 +51,8 @@ export const getTeams = async (req: Request, res: Response) => {
 
     res.json(teams);
   } catch (error) {
-    console.error('Error getting teams:', error);
-    res.status(500).json({ error: 'Failed to get teams' });
+    console.error("Error getting teams:", error);
+    res.status(500).json({ error: "Failed to get teams" });
   }
 };
 
@@ -61,20 +62,20 @@ export const getTeam = async (req: Request, res: Response) => {
 
     if (!id) {
       return res.status(400).json({
-        error: 'Missing required parameter: id',
+        error: "Missing required parameter: id",
       });
     }
 
     const team = await teamService.findById(id);
 
     if (!team) {
-      return res.status(404).json({ error: 'Team not found' });
+      return res.status(404).json({ error: "Team not found" });
     }
 
     res.json(team);
   } catch (error) {
-    console.error('Error getting team:', error);
-    res.status(500).json({ error: 'Failed to get team' });
+    console.error("Error getting team:", error);
+    res.status(500).json({ error: "Failed to get team" });
   }
 };
 
@@ -85,67 +86,70 @@ export const updateTeam = async (req: Request, res: Response) => {
 
     if (!id) {
       return res.status(400).json({
-        error: 'Missing required parameter: id',
+        error: "Missing required parameter: id",
       });
     }
 
     const team = await teamService.findById(id);
-    
+
     if (!team) {
-      return res.status(404).json({ error: 'Team not found' });
+      return res.status(404).json({ error: "Team not found" });
     }
 
     const updatedTeam = await teamService.update(id, updates);
 
     res.json(updatedTeam);
   } catch (error) {
-    console.error('Error updating team:', error);
-    res.status(500).json({ error: 'Failed to update team' });
+    console.error("Error updating team:", error);
+    res.status(500).json({ error: "Failed to update team" });
   }
 };
 
 export const deleteTeam = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { id } = req.params;
 
     if (!id) {
       return res.status(400).json({
-        error: 'Missing required parameter: id',
+        error: "Missing required parameter: id",
       });
     }
 
     const team = await teamService.findById(id);
 
     if (!team) {
-      return res.status(404).json({ error: 'Team not found' });
+      return res.status(404).json({ error: "Team not found" });
     }
 
     // Get all team members
     const members = await userService.findByTeam(id);
-    
+
     // Remove team from all members
     for (const member of members) {
-      const updatedTeamIds = member.teamIds?.filter(teamId => teamId !== id) || [];
+      const updatedTeamIds =
+        member.teamIds?.filter((teamId: string) => teamId !== id) || [];
       await userService.update(member.uid, { teamIds: updatedTeamIds });
     }
 
     // Delete the team
     await teamService.delete(id);
 
-    res.json({ message: 'Team deleted successfully' });
+    res.json({ message: "Team deleted successfully" });
   } catch (error) {
-    console.error('Error deleting team:', error);
-    res.status(500).json({ error: 'Failed to delete team' });
+    console.error("Error deleting team:", error);
+    res.status(500).json({ error: "Failed to delete team" });
   }
 };
 
 export const addTeamMember = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { teamId, userId } = req.params;
 
     if (!teamId || !userId) {
       return res.status(400).json({
-        error: 'Missing required parameters: teamId, userId',
+        error: "Missing required parameters: teamId, userId",
       });
     }
 
@@ -153,23 +157,25 @@ export const addTeamMember = async (req: Request, res: Response) => {
     const user = await userService.findById(userId);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Find team
     const team = await teamService.findById(teamId);
 
     if (!team) {
-      return res.status(404).json({ error: 'Team not found' });
+      return res.status(404).json({ error: "Team not found" });
     }
 
     if (team.memberIds.includes(userId)) {
-      return res.status(400).json({ error: 'User is already a member of this team' });
+      return res
+        .status(400)
+        .json({ error: "User is already a member of this team" });
     }
 
     // Add user to team
     const updatedTeam = await teamService.addMember(teamId, userId);
-    
+
     // Add team to user's teamIds
     const userTeamIds = user.teamIds || [];
     if (!userTeamIds.includes(teamId)) {
@@ -180,18 +186,19 @@ export const addTeamMember = async (req: Request, res: Response) => {
 
     res.json(updatedTeam);
   } catch (error) {
-    console.error('Error adding team member:', error);
-    res.status(500).json({ error: 'Failed to add team member' });
+    console.error("Error adding team member:", error);
+    res.status(500).json({ error: "Failed to add team member" });
   }
 };
 
 export const removeTeamMember = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     const { teamId, userId } = req.params;
 
     if (!teamId || !userId) {
       return res.status(400).json({
-        error: 'Missing required parameters: teamId, userId',
+        error: "Missing required parameters: teamId, userId",
       });
     }
 
@@ -199,32 +206,34 @@ export const removeTeamMember = async (req: Request, res: Response) => {
     const user = await userService.findById(userId);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Find team
     const team = await teamService.findById(teamId);
 
     if (!team) {
-      return res.status(404).json({ error: 'Team not found' });
+      return res.status(404).json({ error: "Team not found" });
     }
 
     if (!team.memberIds.includes(userId)) {
-      return res.status(400).json({ error: 'User is not a member of this team' });
+      return res
+        .status(400)
+        .json({ error: "User is not a member of this team" });
     }
 
     // Remove user from team
     const updatedTeam = await teamService.removeMember(teamId, userId);
-    
+
     // Remove team from user's teamIds
     const userTeamIds = user.teamIds || [];
     await userService.update(userId, {
-      teamIds: userTeamIds.filter(id => id !== teamId),
+      teamIds: userTeamIds.filter((id: string) => id !== teamId),
     });
 
     res.json(updatedTeam);
   } catch (error) {
-    console.error('Error removing team member:', error);
-    res.status(500).json({ error: 'Failed to remove team member' });
+    console.error("Error removing team member:", error);
+    res.status(500).json({ error: "Failed to remove team member" });
   }
 };

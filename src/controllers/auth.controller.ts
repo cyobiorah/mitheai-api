@@ -13,14 +13,20 @@ import { OrganizationService } from "../services/organization.service";
 import { TeamService } from "../services/team.service";
 
 // Initialize services
-const userService = new UserService();
+// const userService = await UserService.create();
 const organizationService = new OrganizationService();
 const teamService = new TeamService();
+
+export const initAuthController = async () => {
+  const userService = await UserService.create();
+  return userService;
+};
 
 export const login = async (
   req: Request<{}, {}, LoginRequest>,
   res: Response
 ) => {
+  const userService = await initAuthController();
   try {
     const { email, password } = req.body;
 
@@ -82,6 +88,7 @@ export const register = async (
   req: Request<{}, {}, RegisterRequest>,
   res: Response
 ) => {
+  const userService = await initAuthController();
   try {
     const { firstName, lastName, email, password, userType } = req.body;
 
@@ -238,6 +245,7 @@ export const register = async (
 };
 
 export const me = async (req: Request, res: Response) => {
+  const userService = await initAuthController();
   try {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required" });

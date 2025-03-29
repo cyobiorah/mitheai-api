@@ -18,10 +18,13 @@ import collectionsRouter from "./routes/collections.routes";
 import analysisRouter from "./routes/analysis.routes";
 import socialAccountRouter from "./routes/social-account.routes";
 import analyticsRouter from "./routes/analytics.routes";
+// import { initAuthController } from "./controllers/auth.controller";
 
 config();
 
 const app = express();
+
+// initAuthController();
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -29,7 +32,7 @@ const allowedOrigins = [
   "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
   "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
   // Add wildcard for all subdomains of vercel.app for development
-  "https://*.vercel.app"
+  "https://*.vercel.app",
 ];
 
 // Middleware
@@ -41,31 +44,31 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      
+
       // Check if the origin is in our allowedOrigins list
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      
+
       // Check for wildcard domains (for vercel.app subdomains)
       const wildcardMatches = allowedOrigins
-        .filter(allowed => allowed.includes('*'))
-        .some(pattern => {
-          const regexPattern = pattern.replace('*', '.*');
+        .filter((allowed) => allowed.includes("*"))
+        .some((pattern) => {
+          const regexPattern = pattern.replace("*", ".*");
           return new RegExp(regexPattern).test(origin);
         });
-        
+
       if (wildcardMatches) {
         return callback(null, true);
       }
-      
+
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     preflightContinue: false,
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 204,
   })
 );
 
