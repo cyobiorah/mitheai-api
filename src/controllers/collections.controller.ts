@@ -38,8 +38,8 @@ export const createCollection = async (req: Request, res: Response) => {
         },
       },
       createdBy: user.uid,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     const docRef = await db.collection("collections").add(collection);

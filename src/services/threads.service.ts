@@ -1,13 +1,18 @@
 import axios from "axios";
-import { firestore } from "firebase-admin";
 import { SocialAccount } from "../models/social-account.model";
-import { Timestamp } from "firebase-admin/firestore";
+import { RepositoryFactory } from "../repositories/repository.factory";
+import { SocialAccountRepository } from "../repositories/social-account.repository";
 
 export class ThreadsService {
-  private readonly db: firestore.Firestore;
+  private socialAccountRepository!: SocialAccountRepository;
 
   constructor() {
-    this.db = firestore();
+    this.initialize();
+  }
+
+  private async initialize() {
+    this.socialAccountRepository =
+      await RepositoryFactory.createSocialAccountRepository();
   }
 
   /**
@@ -122,26 +127,18 @@ export class ThreadsService {
     platformAccountId: string,
     userId?: string
   ): Promise<SocialAccount | null> {
-    let query = this.db
-      .collection("social_accounts")
-      .where("platform", "==", platform)
-      .where("platformAccountId", "==", platformAccountId);
+    try {
+      let query: any = { platform, platformAccountId };
 
-    if (userId) {
-      query = query.where("userId", "==", userId);
-    }
+      if (userId) {
+        query.userId = userId;
+      }
 
-    const snapshot = await query.get();
-
-    if (snapshot.empty) {
+      return await this.socialAccountRepository.findOne(query);
+    } catch (error) {
+      console.error("Error finding existing social account:", error);
       return null;
     }
-
-    const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data(),
-    } as SocialAccount;
   }
 
   /**
@@ -156,7 +153,7 @@ export class ThreadsService {
     teamId?: string
   ) {
     try {
-      if (!profile || !profile.id) {
+      if (!profile?.id) {
         throw new Error("Invalid profile data");
       }
 
@@ -195,77 +192,74 @@ export class ThreadsService {
         console.log(`Updating existing Threads account for user ${userId}`);
 
         // Update the tokens
-        const accountRef = this.db
-          .collection("social_accounts")
-          .doc(existingAccount.id);
-        await accountRef.update({
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-          lastUpdated: Timestamp.now(),
+        const now = new Date();
+        const tokenExpiresAt = new Date(
+          now.getTime() + 60 * 24 * 60 * 60 * 1000
+        ); // 60 days
+
+        await this.socialAccountRepository.update(existingAccount.id, {
+          accessToken,
+          refreshToken: refreshToken ?? undefined,
+          status: "active",
+          lastRefreshed: now,
           metadata: {
             ...existingAccount.metadata,
-            tokenExpiresAt: Timestamp.fromDate(
-              new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-            ), // 60 days from now
-            profile: profile,
+            tokenExpiresAt,
+            lastChecked: now,
           },
+          updatedAt: now,
         });
 
-        // Get the updated account
-        const updatedAccountSnap = await accountRef.get();
         return {
-          id: updatedAccountSnap.id,
-          ...updatedAccountSnap.data(),
-        } as SocialAccount;
+          ...existingAccount,
+          accessToken,
+          refreshToken: refreshToken ?? null,
+        };
       }
 
       // Create a new social account
-      // Get organization ID from user if not provided
-      if (!organizationId) {
-        const userDoc = await this.db.collection("users").doc(userId).get();
-        if (!userDoc.exists) {
-          throw new Error(`User not found: ${userId}`);
-        }
-        organizationId = userDoc.data()?.organizationId;
-      }
-
       console.log(`Creating new Threads account for user ${userId}`);
 
-      const socialAccountData = {
+      const now = new Date();
+      const tokenExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
+
+      const newAccount = await this.socialAccountRepository.create({
         userId,
+        id: userId ?? undefined,
+        organizationId: organizationId ?? undefined,
+        teamId: teamId ?? undefined,
         platform: "threads",
         platformAccountId: profile.id,
+        accountName: profile.username || "Threads User",
         accountId: profile.id,
-        displayName: profile.username || "Threads User",
-        username: profile.username || "",
-        accessToken: accessToken,
-        refreshToken,
-        profilePictureUrl: "", // Threads API would need additional permissions for this
-        organizationId,
-        teamId,
+        accountType: "personal", // Adding required accountType field
+        accessToken,
+        refreshToken: refreshToken ?? "",
+        tokenExpiry: tokenExpiresAt,
+        status: "active",
+        lastRefreshed: now,
+        ownershipLevel: userId ? "user" : teamId ? "team" : "organization",
         metadata: {
-          tokenExpiresAt: Timestamp.fromDate(
-            new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-          ), // 60 days from now
-          accountType: profile.account_type,
-          profile: profile,
+          profile,
+          tokenExpiresAt,
+          lastChecked: now,
         },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+        permissions: {
+          canPost: true,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
 
-      const docRef = await this.db
-        .collection("social_accounts")
-        .add(socialAccountData);
-      const newAccountSnap = await docRef.get();
-
-      return {
-        id: newAccountSnap.id,
-        ...newAccountSnap.data(),
-      } as SocialAccount;
+      return newAccount;
     } catch (error) {
+      if (error instanceof SocialAccountError) {
+        throw error;
+      }
       console.error("Error creating Threads social account:", error);
-      throw error;
+      throw new Error(
+        `Failed to create Threads social account: ${(error as Error).message}`
+      );
     }
   }
 
@@ -275,19 +269,13 @@ export class ThreadsService {
    */
   async postContent(accountId: string, content: string, mediaUrls?: string[]) {
     try {
-      const socialAccountSnap = await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .get();
+      const socialAccount = await this.socialAccountRepository.findById(
+        accountId
+      );
 
-      if (!socialAccountSnap.exists) {
+      if (!socialAccount) {
         throw new Error(`Social account not found: ${accountId}`);
       }
-
-      const socialAccount = {
-        id: socialAccountSnap.id,
-        ...socialAccountSnap.data(),
-      } as SocialAccount;
 
       // Ensure we have a valid access token
       if (!socialAccount.accessToken) {
@@ -295,18 +283,16 @@ export class ThreadsService {
       }
 
       // Refresh token if needed
-      await this.refreshAccessTokenIfNeeded(accountId);
+      await this.checkAndRefreshToken(accountId);
 
       // Get the updated account with refreshed token
-      const updatedAccount = await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .get()
-        .then((snap) => ({ id: snap.id, ...snap.data() } as SocialAccount));
+      const updatedAccount = await this.socialAccountRepository.findById(
+        accountId
+      );
 
       // According to Meta docs, we need to retrieve the user's Threads ID
       // First, get the Threads ID from the stored account
-      const threadsId = updatedAccount.platformAccountId;
+      const threadsId = updatedAccount?.platformAccountId;
 
       if (!threadsId) {
         throw new Error("Threads ID not found for this account");
@@ -337,7 +323,7 @@ export class ThreadsService {
           }
         );
 
-        if (!response.data || !response.data.id) {
+        if (!response?.data?.id) {
           throw new Error("Failed to create Threads post");
         }
 
@@ -359,74 +345,101 @@ export class ThreadsService {
   }
 
   /**
-   * Helper method to check if token refresh is needed and refresh if necessary
+   * Check if token needs to be refreshed and refresh it if necessary
    */
-  private async refreshAccessTokenIfNeeded(
-    accountId: string
-  ): Promise<boolean> {
-    const socialAccountSnap = await this.db
-      .collection("social_accounts")
-      .doc(accountId)
-      .get();
-
-    if (!socialAccountSnap.exists) {
-      throw new Error(`Social account not found: ${accountId}`);
-    }
-
-    const socialAccount = {
-      id: socialAccountSnap.id,
-      ...socialAccountSnap.data(),
-    } as SocialAccount;
-
-    // Check if token refresh is needed
-    const tokenExpiresAt = socialAccount.metadata?.tokenExpiresAt
-      ? socialAccount.metadata.tokenExpiresAt.toDate()
-      : null;
-
-    const shouldRefresh =
-      !tokenExpiresAt ||
-      tokenExpiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // Less than 7 days remaining
-
-    if (!shouldRefresh) {
-      return false; // No refresh needed
-    }
-
-    // Refresh the token
-    await this.refreshAccessToken(accountId);
-    return true;
-  }
-
-  /**
-   * Expose the Firestore instance for use in routes
-   * This allows for permission checks and other database operations
-   */
-  getDb(): firestore.Firestore {
-    return this.db;
-  }
-
-  /**
-   * Refresh the access token for a Threads account
-   * Threads API tokens are valid for 60 days and can be refreshed
-   */
-  async refreshAccessToken(accountId: string) {
+  async checkAndRefreshToken(accountId: string): Promise<boolean> {
     try {
-      const socialAccountSnap = await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .get();
+      const socialAccount = await this.socialAccountRepository.findById(
+        accountId
+      );
 
-      if (!socialAccountSnap.exists) {
+      if (!socialAccount) {
         throw new Error(`Social account not found: ${accountId}`);
       }
 
-      const socialAccount = {
-        id: socialAccountSnap.id,
-        ...socialAccountSnap.data(),
-      } as SocialAccount;
+      // Check if token refresh is needed
+      const tokenExpiresAt = socialAccount.metadata?.tokenExpiresAt
+        ? socialAccount.metadata.tokenExpiresAt
+        : null;
+
+      const shouldRefresh =
+        !tokenExpiresAt ||
+        tokenExpiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // Less than 7 days remaining
+
+      if (!shouldRefresh) {
+        return false; // No refresh needed
+      }
+
+      // Refresh the token
+      try {
+        const response = await axios.get(
+          `https://threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${socialAccount.accessToken}`
+        );
+
+        if (!response.data?.access_token) {
+          throw new Error("Failed to refresh Threads token");
+        }
+
+        const now = new Date();
+        const tokenExpiresAt = new Date(
+          now.getTime() + 60 * 24 * 60 * 60 * 1000
+        ); // 60 days
+
+        await this.socialAccountRepository.update(accountId, {
+          accessToken: response.data.access_token,
+          lastRefreshed: now,
+          metadata: {
+            ...socialAccount.metadata,
+            tokenExpiresAt,
+            lastChecked: now,
+          },
+          updatedAt: now,
+        });
+
+        console.log(
+          `Successfully refreshed token for Threads account ${accountId}`
+        );
+        return true;
+      } catch (refreshError) {
+        console.error(
+          `Error refreshing token for Threads account ${accountId}:`,
+          refreshError
+        );
+
+        // Mark the account as having a refresh error
+        await this.socialAccountRepository.update(accountId, {
+          status: "error",
+          updatedAt: new Date(),
+        });
+
+        throw new Error(
+          `Failed to refresh token for Threads account: ${
+            (refreshError as Error).message
+          }`
+        );
+      }
+    } catch (error) {
+      console.error(`Error checking token for account ${accountId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a Threads account with a valid token
+   */
+  async getAccountWithValidToken(accountId: string): Promise<SocialAccount> {
+    try {
+      const socialAccount = await this.socialAccountRepository.findById(
+        accountId
+      );
+
+      if (!socialAccount) {
+        throw new Error(`Social account not found: ${accountId}`);
+      }
 
       // Check if token refresh is needed
       const tokenExpiresAt = socialAccount.metadata?.tokenExpiresAt
-        ? socialAccount.metadata.tokenExpiresAt.toDate()
+        ? socialAccount.metadata.tokenExpiresAt
         : null;
 
       const shouldRefresh =
@@ -440,39 +453,113 @@ export class ThreadsService {
 
       console.log(`Refreshing token for Threads account ${accountId}`);
 
-      // Refresh the long-lived token
-      const refreshResponse = await axios.get(
-        `https://threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${socialAccount.accessToken}`
-      );
-
-      if (!refreshResponse.data || !refreshResponse.data.access_token) {
-        throw new Error("Failed to refresh access token");
-      }
-
-      // Update the account with the new token
-      const accountRef = this.db.collection("social_accounts").doc(accountId);
-      await accountRef.update({
-        accessToken: refreshResponse.data.access_token,
-        lastUpdated: Timestamp.now(),
-        metadata: {
-          ...socialAccount.metadata,
-          tokenExpiresAt: Timestamp.fromDate(
-            new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-          ), // 60 days from now
-        },
-      });
+      // Refresh the token
+      await this.checkAndRefreshToken(accountId);
 
       // Get the updated account
-      const updatedAccountSnap = await accountRef.get();
-      console.log(`Successfully refreshed token for account ${accountId}`);
+      const updatedAccount = await this.socialAccountRepository.findById(
+        accountId
+      );
+      if (!updatedAccount) {
+        throw new Error(`Social account not found after refresh: ${accountId}`);
+      }
 
-      return {
-        id: updatedAccountSnap.id,
-        ...updatedAccountSnap.data(),
-      } as SocialAccount;
+      return updatedAccount;
     } catch (error) {
-      console.error("Error refreshing Threads access token:", error);
+      console.error(
+        `Error getting account with valid token ${accountId}:`,
+        error
+      );
       throw error;
+    }
+  }
+
+  /**
+   * Post a message to Threads
+   */
+  async postMessage(accountId: string, message: string): Promise<any> {
+    try {
+      // Get account with valid token
+      const account = await this.getAccountWithValidToken(accountId);
+
+      // Use the Threads API to post a message
+      const response = await axios.post(
+        "https://graph.threads.net/me/media",
+        {
+          caption: message,
+          access_token: account.accessToken,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Posted message to Threads:", response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error posting to Threads:", error.response?.data || error);
+
+      // Check for specific error types
+      if (error.response?.status === 400) {
+        // Handle invalid request errors
+        throw new Error(
+          `Invalid request to Threads API: ${
+            error.response.data?.error?.message || "Unknown error"
+          }`
+        );
+      } else if (error.response?.status === 401) {
+        // Handle authentication errors
+        await this.socialAccountRepository.update(accountId, {
+          status: "error",
+          updatedAt: new Date(),
+        });
+        throw new Error("Authentication failed with Threads API");
+      } else {
+        // Handle other errors
+        throw new Error(
+          `Error posting to Threads: ${
+            error.response?.data?.error?.message || error.message
+          }`
+        );
+      }
+    }
+  }
+
+  /**
+   * Get a user's Threads account
+   */
+  async getUserAccount(userId: string): Promise<SocialAccount | null> {
+    try {
+      const accounts = await this.socialAccountRepository.find({
+        userId,
+        platform: "threads",
+        status: "active",
+      });
+
+      return accounts.length > 0 ? accounts[0] : null;
+    } catch (error) {
+      console.error(`Error getting Threads account for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get a team's Threads account
+   */
+  async getTeamAccount(teamId: string): Promise<SocialAccount | null> {
+    try {
+      const accounts = await this.socialAccountRepository.find({
+        teamId,
+        platform: "threads",
+        status: "active",
+      });
+
+      return accounts.length > 0 ? accounts[0] : null;
+    } catch (error) {
+      console.error(`Error getting Threads account for team ${teamId}:`, error);
+      return null;
     }
   }
 }

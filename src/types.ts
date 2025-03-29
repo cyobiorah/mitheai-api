@@ -1,37 +1,37 @@
-import { Timestamp } from 'firebase-admin/firestore';
-
 export interface Organization {
-  id: string;  // Firestore document ID
+  id: string; // Firestore document ID
   name: string;
   description?: string;
-  type: 'enterprise' | 'business' | 'startup';
+  ownerId: string; // User ID of the organization owner
+  type: "enterprise" | "business" | "startup";
   settings: {
     permissions: string[];
     maxTeams: number;
     maxUsers: number;
     features: string[];
   };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface User {
-  uid: string;  // Firebase Auth UID
+  uid: string; // Firebase Auth UID
   email: string;
   firstName: string;
   lastName: string;
-  userType: 'individual' | 'organization';
-  status: 'pending' | 'active' | 'inactive';
+  password?: string; // Optional because we don't always want to include it in responses
+  userType: "individual" | "organization";
+  status: "pending" | "active" | "inactive";
   settings: {
     permissions: string[];
-    theme: 'light' | 'dark';
+    theme: "light" | "dark";
     notifications: any[];
     personalPreferences?: Record<string, any>;
   };
   // Organization-specific fields
-  organizationId?: string;  // Required for organization users, omitted for individual
-  role?: 'super_admin' | 'org_owner' | 'team_manager' | 'user';  // Required for organization users
-  teamIds?: string[];  // Required for organization users
+  organizationId?: string; // Required for organization users, omitted for individual
+  role?: "super_admin" | "org_owner" | "team_manager" | "user"; // Required for organization users
+  teamIds?: string[]; // Required for organization users
   // Individual-specific fields
   personalSettings?: {
     defaultContentType?: string;
@@ -42,21 +42,21 @@ export interface User {
   };
   // Invitation-related fields
   invitationToken?: string | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Team {
-  id: string;  // Firestore document ID
+  id: string; // Firestore document ID
   name: string;
   description?: string;
   organizationId: string;
   memberIds: string[];
-  settings: {  
+  settings: {
     permissions: string[];
   };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Role {
@@ -69,7 +69,7 @@ export interface Role {
 export interface Permission {
   name: string;
   description: string;
-  scope: 'system' | 'organization' | 'team';
+  scope: "system" | "organization" | "team";
 }
 
 export interface Feature {
@@ -79,10 +79,10 @@ export interface Feature {
 }
 
 export interface ContentItem {
-  id: string;  // Firestore document ID
+  id: string; // Firestore document ID
   title?: string;
   description?: string;
-  type: 'article' | 'social_post' | 'video' | 'image' | 'document';
+  type: "article" | "social_post" | "video" | "image" | "document";
   url?: string;
   content: string;
   metadata: {
@@ -92,8 +92,8 @@ export interface ContentItem {
     customFields: Record<string, any>;
     socialPost?: {
       platform: SocialPlatform;
-      scheduledTime?: Timestamp;
-      publishedTime?: Timestamp;
+      scheduledTime?: Date;
+      publishedTime?: Date;
       postId?: string;
       retryCount?: number;
       failureReason?: string;
@@ -110,29 +110,36 @@ export interface ContentItem {
     }>;
     customAnalytics?: Record<string, any>;
   };
-  status: 'draft' | 'ready' | 'pending' | 'posted' | 'failed' | 'analyzed' | 'archived';
-  teamId: string | null;  // Null for individual users
-  organizationId: string | null;  // Null for individual users
-  createdBy: string;  // User UID
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  analyzedAt?: Timestamp;
+  status:
+    | "draft"
+    | "ready"
+    | "pending"
+    | "posted"
+    | "failed"
+    | "analyzed"
+    | "archived";
+  teamId: string | null; // Null for individual users
+  organizationId: string | null; // Null for individual users
+  createdBy: string; // User UID
+  createdAt: Date;
+  updatedAt: Date;
+  analyzedAt?: Date;
 }
 
 export interface ContentCollection {
-  id: string;  // Firestore document ID
+  id: string; // Firestore document ID
   name: string;
   description?: string;
-  type: 'manual' | 'automated' | 'smart';
+  type: "manual" | "automated" | "smart";
   rules?: {
     filters: Array<{
       field: string;
-      operator: 'equals' | 'contains' | 'greater_than' | 'less_than';
+      operator: "equals" | "contains" | "greater_than" | "less_than";
       value: any;
     }>;
     sort?: {
       field: string;
-      direction: 'asc' | 'desc';
+      direction: "asc" | "desc";
     };
   };
   teamId: string;
@@ -149,32 +156,47 @@ export interface ContentCollection {
       }>;
     };
   };
-  createdBy: string;  // User UID
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdBy: string; // User UID
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface AnalysisTemplate {
-  id: string;  // Firestore document ID
+  id: string; // Firestore document ID
   name: string;
   description?: string;
-  type: 'sentiment' | 'classification' | 'extraction' | 'custom';
+  type: "sentiment" | "classification" | "extraction" | "custom";
   config: {
     models: string[];
     parameters: Record<string, any>;
     preprocessors?: string[];
     postprocessors?: string[];
   };
-  teamId: string | null;  // Null for individual users
-  organizationId: string | null;  // Null for individual users
+  teamId: string | null; // Null for individual users
+  organizationId: string | null; // Null for individual users
   settings: {
     permissions: string[];
     autoApply: boolean;
-    contentTypes: ContentItem['type'][];
+    contentTypes: ContentItem["type"][];
   };
-  createdBy: string;  // User UID
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdBy: string; // User UID
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export type SocialPlatform = 'twitter' | 'facebook' | 'linkedin' | 'instagram';
+export type SocialPlatform = "twitter" | "facebook" | "linkedin" | "instagram";
+
+export interface Invitation {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: User["role"];
+  organizationId: string;
+  token: string;
+  status: "pending" | "accepted" | "expired";
+  teamIds: string[];
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}

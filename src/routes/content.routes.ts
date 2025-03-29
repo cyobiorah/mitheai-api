@@ -12,7 +12,7 @@ import {
 } from "../controllers/content.controller";
 import {
   authenticateToken,
-  requireTeamAccess,
+  belongsToTeam,
 } from "../middleware/auth.middleware";
 import { firestore } from "firebase-admin";
 
@@ -61,8 +61,8 @@ router.post("/generate", authenticateToken, (req, res) => {
 router.get(
   "/team/:teamId",
   authenticateToken,
-  requireTeamAccess,
-  (req, res) => {
+  belongsToTeam,
+  (req: any, res: any) => {
     // console.log("[DEBUG] Team content route hit");
     // console.log("[DEBUG] Team ID:", req.params.teamId);
     return listTeamContent(req, res);

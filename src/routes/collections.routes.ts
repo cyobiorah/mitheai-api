@@ -9,7 +9,10 @@ import {
   removeContentFromCollection,
   getPersonalCollections,
 } from "../controllers/collections.controller";
-import { authenticateToken, requireTeamAccess } from '../middleware/auth.middleware';
+import {
+  authenticateToken,
+  belongsToTeam,
+} from "../middleware/auth.middleware";
 
 const router = express.Router();
 
@@ -19,9 +22,14 @@ router.get("/personal", authenticateToken, (req, res) => {
 });
 
 // Team routes
-router.get("/team/:teamId", authenticateToken, requireTeamAccess, (req, res) => {
-  return listTeamCollections(req, res);
-});
+router.get(
+  "/team/:teamId",
+  authenticateToken,
+  belongsToTeam,
+  (req: any, res: any) => {
+    return listTeamCollections(req, res);
+  }
+);
 
 // Standard CRUD routes
 router.post("/", authenticateToken, (req, res) => {
@@ -41,12 +49,20 @@ router.delete("/:collectionId", authenticateToken, (req, res) => {
 });
 
 // Collection content management
-router.post("/:collectionId/content/:contentId", authenticateToken, (req, res) => {
-  return addContentToCollection(req, res);
-});
+router.post(
+  "/:collectionId/content/:contentId",
+  authenticateToken,
+  (req, res) => {
+    return addContentToCollection(req, res);
+  }
+);
 
-router.delete("/:collectionId/content/:contentId", authenticateToken, (req, res) => {
-  return removeContentFromCollection(req, res);
-});
+router.delete(
+  "/:collectionId/content/:contentId",
+  authenticateToken,
+  (req, res) => {
+    return removeContentFromCollection(req, res);
+  }
+);
 
 export default router;

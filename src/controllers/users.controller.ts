@@ -1,10 +1,16 @@
 import { Request, Response } from "express";
-import { collections } from "../config/firebase";
+import { UserService } from "../services/user.service";
+import { OrganizationService } from "../services/organization.service";
+import { InvitationService } from "../services/invitation.service";
 import { Organization } from "../types";
-import type { User } from "../types"; // Keep this import for now
+import type { User } from "../types";
 import { sendInvitationEmail } from "../services/email.service";
 import { v4 as uuidv4 } from "uuid";
-import { Timestamp } from "firebase-admin/firestore";
+
+// Initialize services
+const userService = new UserService();
+const organizationService = new OrganizationService();
+const invitationService = new InvitationService();
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -16,14 +22,7 @@ export const getUsers = async (req: Request, res: Response) => {
       });
     }
 
-    const usersSnapshot = await collections.users
-      .where("organizationId", "==", organizationId)
-      .get();
-
-    const users = usersSnapshot.docs.map((doc) => ({
-      uid: doc.id,
-      ...doc.data(),
-    }));
+    const users = await userService.findByOrganization(organizationId);
 
     res.json(users);
   } catch (error) {
@@ -42,16 +41,13 @@ export const getUser = async (req: Request, res: Response) => {
       });
     }
 
-    const userDoc = await collections.users.doc(uid).get();
+    const user = await userService.findById(uid);
 
-    if (!userDoc.exists) {
+    if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({
-      uid: userDoc.id,
-      ...userDoc.data(),
-    });
+    res.json(user);
   } catch (error) {
     console.error("Error getting user:", error);
     res.status(500).json({ error: "Failed to get user" });
@@ -71,21 +67,17 @@ export const inviteUser = async (req: Request, res: Response) => {
 
     // Get organization for email
     console.log("Fetching organization:", organizationId);
-    const orgDoc = await collections.organizations.doc(organizationId).get();
-    if (!orgDoc.exists) {
+    const organization = await organizationService.findById(organizationId);
+
+    if (!organization) {
       console.error("Organization not found:", organizationId);
       return res.status(404).json({ error: "Organization not found" });
     }
-    const organization = orgDoc.data() as Organization;
     console.log("Found organization:", organization);
 
     // Check if user already exists
-    const existingUsers = await collections.users
-      .where("email", "==", email)
-      .where("organizationId", "==", organizationId)
-      .get();
-
-    if (!existingUsers.empty) {
+    const existingUser = await userService.findByEmail(email);
+    if (existingUser && existingUser.organizationId === organizationId) {
       return res.status(400).json({
         error: "User with this email already exists in the organization",
       });
@@ -94,9 +86,18 @@ export const inviteUser = async (req: Request, res: Response) => {
     // Generate invitation token
     const token = uuidv4();
 
-    // Create new user
-    const newUser: User = {
-      uid: email, // Using email as temporary uid until user accepts invitation
+    // Create invitation
+    const invitation = await invitationService.create({
+      email,
+      firstName,
+      lastName,
+      role,
+      organizationId,
+      teamIds: [],
+    });
+
+    // Create new user with pending status
+    const newUser = await userService.create({
       email,
       firstName,
       lastName,
@@ -111,12 +112,7 @@ export const inviteUser = async (req: Request, res: Response) => {
         theme: "light",
         notifications: [],
       },
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    };
-
-    // Add user to database
-    await collections.users.doc(newUser.uid).set(newUser);
+    });
 
     // Send invitation email
     try {
@@ -124,7 +120,7 @@ export const inviteUser = async (req: Request, res: Response) => {
         to: email,
         firstName,
         lastName,
-        invitationToken: token,
+        invitationToken: invitation.token,
         organizationName: organization.name,
       });
       console.log("Invitation email sent successfully");
@@ -150,20 +146,14 @@ export const updateUser = async (req: Request, res: Response) => {
       });
     }
 
-    const userRef = collections.users.doc(uid);
-    const userDoc = await userRef.get();
+    const existingUser = await userService.findById(uid);
 
-    if (!userDoc.exists) {
+    if (!existingUser) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    await userRef.update(req.body);
-
-    const updatedUser = await userRef.get();
-    res.json({
-      uid: updatedUser.id,
-      ...updatedUser.data(),
-    });
+    const updatedUser = await userService.update(uid, req.body);
+    res.json(updatedUser);
   } catch (error) {
     console.error("Error updating user:", error);
     res.status(500).json({ error: "Failed to update user" });
@@ -180,12 +170,12 @@ export const deleteUser = async (req: Request, res: Response) => {
       });
     }
 
-    const userDoc = await collections.users.doc(userId).get();
-    if (!userDoc.exists) {
+    const user = await userService.findById(userId);
+    if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    await collections.users.doc(userId).delete();
+    await userService.delete(userId);
     res.json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("Error deleting user:", error);

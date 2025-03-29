@@ -1,17 +1,15 @@
 import { Request, Response } from "express";
 import { TwitterService } from "../services/twitter.service";
-import { firestore } from "firebase-admin";
+import { SocialAccountService } from "../services/social-account.service";
 import { Client, auth } from "twitter-api-sdk";
-import { Timestamp } from "firebase-admin/firestore";
-import { collections } from "../config/firebase";
 
 export class SocialAccountController {
   private readonly twitterService: TwitterService;
-  private readonly db: firestore.Firestore;
+  private readonly socialAccountService: SocialAccountService;
 
   constructor() {
     this.twitterService = new TwitterService();
-    this.db = firestore();
+    this.socialAccountService = new SocialAccountService();
   }
 
   async handleTwitterCallback(req: Request, res: Response) {
@@ -101,16 +99,7 @@ export class SocialAccountController {
 
   async getSocialAccounts(userId: string) {
     try {
-      const accountsSnapshot = await this.db
-        .collection("social_accounts")
-        .where("userId", "==", userId)
-        .get();
-
-      const accounts = accountsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
+      const accounts = await this.socialAccountService.findByUser(userId);
       return accounts;
     } catch (error) {
       console.error("Error fetching social accounts:", error);
@@ -203,222 +192,214 @@ export class SocialAccountController {
               message: errorMessage.replace("TwitterAPIError: ", ""),
             });
           }
-
-          // Handle content validation errors (duplicates, etc.)
-          if (errorMessage.includes("duplicate")) {
-            return res.status(403).json({
-              error: "Tweet content rejected",
-              errorType: "content_rejected",
-              message:
-                "Tweet was rejected. This could be due to duplicate content or Twitter content policies.",
-            });
-          }
         }
 
-        // Generic error for all other cases
-        res.status(500).json({
+        // Generic error response for unhandled errors
+        return res.status(500).json({
           error: "Failed to post tweet",
-          message: error instanceof Error ? error.message : "Unknown error",
-          errorType: "posting_error",
+          message: error instanceof Error ? error.message : String(error),
         });
       }
     } catch (error) {
-      console.error("Controller error in postTweet:", error);
+      console.error("Error in postTweet controller:", error);
       res.status(500).json({
         error: "Internal server error",
-        message: "An unexpected error occurred in the server",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async getUserSocialAccounts(req: Request, res: Response) {
+    try {
+      const userId = req.user?.uid;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      const accounts = await this.socialAccountService.findByUser(userId);
+      
+      // Filter out sensitive information
+      const safeAccounts = accounts.map((account) => {
+        const { accessToken, refreshToken, ...safeAccount } = account;
+        return safeAccount;
+      });
+
+      res.json(safeAccounts);
+    } catch (error) {
+      console.error("Error fetching user social accounts:", error);
+      res.status(500).json({
+        error: "Failed to fetch social accounts",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async getOrganizationSocialAccounts(req: Request, res: Response) {
+    try {
+      const { organizationId } = req.params;
+
+      if (!organizationId) {
+        return res.status(400).json({
+          error: "Missing required parameter: organizationId",
+        });
+      }
+
+      // Check if user belongs to the organization
+      if (req.user?.organizationId !== organizationId) {
+        return res.status(403).json({
+          error: "Access denied",
+          message: "You do not have access to this organization's accounts",
+        });
+      }
+
+      const accounts = await this.socialAccountService.findByOrganization(organizationId);
+      
+      // Filter out sensitive information
+      const safeAccounts = accounts.map((account) => {
+        const { accessToken, refreshToken, ...safeAccount } = account;
+        return safeAccount;
+      });
+
+      res.json(safeAccounts);
+    } catch (error) {
+      console.error("Error fetching organization social accounts:", error);
+      res.status(500).json({
+        error: "Failed to fetch social accounts",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async getTeamSocialAccounts(req: Request, res: Response) {
+    try {
+      const { teamId } = req.params;
+
+      if (!teamId) {
+        return res.status(400).json({
+          error: "Missing required parameter: teamId",
+        });
+      }
+
+      // Check if user belongs to the team
+      if (!req.user?.teamIds?.includes(teamId)) {
+        return res.status(403).json({
+          error: "Access denied",
+          message: "You do not have access to this team's accounts",
+        });
+      }
+
+      const accounts = await this.socialAccountService.findByTeam(teamId);
+      
+      // Filter out sensitive information
+      const safeAccounts = accounts.map((account) => {
+        const { accessToken, refreshToken, ...safeAccount } = account;
+        return safeAccount;
+      });
+
+      res.json(safeAccounts);
+    } catch (error) {
+      console.error("Error fetching team social accounts:", error);
+      res.status(500).json({
+        error: "Failed to fetch social accounts",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async disconnectSocialAccount(req: Request, res: Response) {
+    try {
+      const { accountId } = req.params;
+
+      if (!accountId) {
+        return res.status(400).json({
+          error: "Missing required parameter: accountId",
+        });
+      }
+
+      const userId = req.user?.uid;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      // Get the account to check ownership
+      const account = await this.socialAccountService.findById(accountId);
+
+      if (!account) {
+        return res.status(404).json({ error: "Social account not found" });
+      }
+
+      // Check if user owns the account or has organization access
+      const hasAccess =
+        account.userId === userId ||
+        (req.user?.organizationId === account.organizationId &&
+          req.user?.role === "org_owner");
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          error: "Access denied",
+          message: "You do not have permission to disconnect this account",
+        });
+      }
+
+      // Delete the account
+      await this.socialAccountService.delete(accountId);
+
+      res.json({ message: "Social account disconnected successfully" });
+    } catch (error) {
+      console.error("Error disconnecting social account:", error);
+      res.status(500).json({
+        error: "Failed to disconnect social account",
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
   async scheduleTweet(req: Request, res: Response) {
     try {
-      const { accountId, message, scheduledTime } = req.body;
-
-      if (!accountId || !message || !scheduledTime) {
-        return res.status(400).json({ error: "Missing required parameters" });
-      }
-
-      await this.twitterService.scheduleTweet(
-        accountId,
-        message,
-        new Date(scheduledTime)
-      );
-
-      res.json({ success: true, message: "Tweet scheduled successfully" });
+      // Placeholder implementation
+      res.status(501).json({ 
+        message: "This method is not implemented in the MongoDB version yet",
+        info: "Tweet scheduling will be implemented in a future update"
+      });
     } catch (error) {
-      console.error("Failed to schedule tweet:", error);
-      res.status(500).json({ error: "Failed to schedule tweet" });
-    }
-  }
-
-  async initiateTwitterAuth(req: Request, res: Response) {
-    try {
-      const authUrl = await this.twitterService.getAuthUrl();
-      res.json({ authUrl });
-    } catch (error) {
-      console.error("Failed to get Twitter auth URL:", error);
-      res
-        .status(500)
-        .json({ error: "Failed to initiate Twitter authentication" });
-    }
-  }
-
-  async disconnectAccount(userId: string, accountId: string) {
-    try {
-      console.log(`Disconnecting account ${accountId} for user ${userId}`);
-      
-      // Find the specific account by ID and verify it belongs to the user
-      const accountDoc = await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .get();
-
-      if (!accountDoc.exists) {
-        throw new Error(`Account ${accountId} not found`);
-      }
-
-      const accountData = accountDoc.data();
-      if (accountData?.userId !== userId) {
-        throw new Error("Unauthorized: Account belongs to a different user");
-      }
-
-      // Delete just this specific account
-      await this.db.collection("social_accounts").doc(accountId).delete();
-      
-      console.log(`Successfully disconnected account ${accountId}`);
-      return { success: true, message: "Account disconnected successfully" };
-    } catch (error) {
-      console.error(`Error disconnecting account ${accountId}:`, error);
-      throw error;
+      console.error("Error in scheduleTweet:", error);
+      res.status(500).json({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   async debugTwitterConnection(req: Request, res: Response) {
     try {
-      const { accountId } = req.body;
-
-      if (!accountId) {
-        // If no specific account ID is provided, get the user's first Twitter account
-        const userId = req.user?.uid;
-        if (!userId) {
-          return res.status(401).json({ error: "Unauthorized" });
-        }
-
-        const accountsSnapshot = await this.db
-          .collection("social_accounts")
-          .where("userId", "==", userId)
-          .where("platform", "==", "twitter")
-          .limit(1)
-          .get();
-
-        if (accountsSnapshot.empty) {
-          return res
-            .status(404)
-            .json({ error: "No Twitter account found for this user" });
-        }
-
-        const userAccountId = accountsSnapshot.docs[0].id;
-
-        // Test the connection
-        const results = await this.twitterService.debugTwitterConnection(
-          userAccountId
-        );
-        return res.json({
-          ...results,
-          accountId: userAccountId,
-          accountName: accountsSnapshot.docs[0].data().accountName,
-        });
-      }
-
-      // If specific account ID is provided, test that account
-      const results = await this.twitterService.debugTwitterConnection(
-        accountId
-      );
-      res.json(results);
+      // Placeholder implementation
+      res.status(501).json({ 
+        message: "This method is not implemented in the MongoDB version yet",
+        info: "Twitter connection debugging will be implemented in a future update"
+      });
     } catch (error) {
-      console.error("Failed to debug Twitter connection:", error);
+      console.error("Error in debugTwitterConnection:", error);
       res.status(500).json({
-        error: "Failed to test Twitter connectivity",
-        message: error instanceof Error ? error.message : "Unknown error",
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
   async debugTwitterAccount(req: Request, res: Response) {
     try {
-      const { accountId } = req.params;
-
-      if (!accountId) {
-        return res
-          .status(400)
-          .json({ error: "Missing required parameter: accountId" });
-      }
-
-      // Get account and token info using the public getSocialAccount method
-      const account = await this.twitterService.getSocialAccount(accountId);
-
-      if (!account) {
-        return res.status(404).json({ error: "Twitter account not found" });
-      }
-
-      const results = {
-        accountInfo: {
-          id: account.id,
-          platform: account.platform,
-          accountName: account.accountName,
-          tokenType: typeof account.accessToken,
-          hasRefreshToken: !!account.refreshToken,
-          tokenExpiry: account.tokenExpiry ? "exists" : "null",
-          permissions: account.permissions,
-        },
-        userDataTest: { success: false, data: null as any, error: null as any },
-        postingTest: { success: false, data: null as any, error: null as any },
-        apiCapabilities: await this.twitterService.checkApiCapabilities(
-          accountId
-        ),
-        tokenData: {
-          accessTokenStart: account.accessToken
-            ? account.accessToken.substring(0, 10) + "..."
-            : "none",
-          refreshTokenStart: account.refreshToken
-            ? account.refreshToken.substring(0, 10) + "..."
-            : "none",
-        },
-      };
-
-      // 1. Test fetching user data (should work even with limited permissions)
-      try {
-        const client = new Client(new auth.OAuth2Bearer(account.accessToken));
-        const userData = await client.users.findMyUser();
-        results.userDataTest.success = true;
-        results.userDataTest.data = userData;
-      } catch (userError: any) {
-        results.userDataTest.success = false;
-        results.userDataTest.error = userError.message || "Unknown error";
-      }
-
-      // 2. Test posting a tweet
-      try {
-        const testMessage = `Testing MitheAI connection... ${new Date().toISOString()}`;
-        const tweet = await this.twitterService.postTweet(
-          accountId,
-          testMessage,
-          "v2"
-        );
-        results.postingTest.success = true;
-        results.postingTest.data = tweet;
-      } catch (postError: any) {
-        results.postingTest.success = false;
-        results.postingTest.error = postError.message || "Unknown error";
-      }
-
-      res.json(results);
+      // Placeholder implementation
+      res.status(501).json({ 
+        message: "This method is not implemented in the MongoDB version yet",
+        info: "Twitter account debugging will be implemented in a future update"
+      });
     } catch (error) {
-      console.error("Error debugging Twitter account:", error);
+      console.error("Error in debugTwitterAccount:", error);
       res.status(500).json({
-        error: "Error debugging Twitter account",
-        message: error instanceof Error ? error.message : "Unknown error",
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -428,35 +409,33 @@ export class SocialAccountController {
       const { accountId } = req.params;
       const { teamId } = req.body;
 
-      // Validate team exists and user has access
-      const teamRef = collections.teams.doc(teamId);
-      const team = await teamRef.get();
-
-      if (!team.exists) {
-        return res.status(404).json({ error: "Team not found" });
+      if (!accountId || !teamId) {
+        return res.status(400).json({ 
+          error: "Missing required parameters",
+          message: "Both accountId and teamId are required"
+        });
       }
 
-      const teamData = team.data();
-      if (!req.user) {
-        return res.status(401).json({ error: "Authentication required" });
+      // Get the account to check if it exists
+      const account = await this.socialAccountService.findById(accountId);
+      
+      if (!account) {
+        return res.status(404).json({ error: "Social account not found" });
       }
 
-      if (teamData?.organizationId !== req.user.organizationId) {
-        return res
-          .status(403)
-          .json({ error: "Not authorized to assign to this team" });
-      }
-
-      // Update social account
-      await this.db.collection("social_accounts").doc(accountId).update({
+      // Update the account with the new team ID
+      await this.socialAccountService.update(accountId, { 
         teamId,
-        updatedAt: Timestamp.now(),
+        updatedAt: new Date()
       });
 
       res.json({ message: "Team assigned successfully" });
     } catch (error) {
       console.error("Error assigning team:", error);
-      res.status(500).json({ error: "Failed to assign team" });
+      res.status(500).json({
+        error: "Failed to assign team",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

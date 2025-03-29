@@ -1,22 +1,27 @@
-import { firestore } from "firebase-admin";
-import {
-  SocialAccount,
-  // SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT,
-} from "../models/social-account.model";
+import { SocialAccount } from "../models/social-account.model";
 import { Client, auth } from "twitter-api-sdk";
 import { ContentItem } from "../types";
 import Twit from "twit";
-import { Timestamp } from "firebase-admin/firestore";
+import { RepositoryFactory } from "../repositories/repository.factory";
+import { SocialAccountRepository } from "../repositories/social-account.repository";
+import mongoose from "mongoose";
+
+const codeVerifierStore = new Map<string, string>();
 
 export class TwitterService {
-  private readonly db: firestore.Firestore;
+  private socialAccountRepository!: SocialAccountRepository;
   private readonly clientId: string;
   private readonly clientSecret: string;
 
   constructor() {
     this.clientId = process.env.TWITTER_CLIENT_ID!;
     this.clientSecret = process.env.TWITTER_CLIENT_SECRET!;
-    this.db = firestore();
+    this.initialize();
+  }
+
+  private async initialize() {
+    this.socialAccountRepository =
+      await RepositoryFactory.createSocialAccountRepository();
   }
 
   /**
@@ -27,27 +32,18 @@ export class TwitterService {
     platformAccountId: string,
     userId?: string
   ): Promise<SocialAccount | null> {
-    const query = this.db
-      .collection("social_accounts")
-      .where("platform", "==", platform)
-      .where("platformAccountId", "==", platformAccountId);
+    try {
+      let query: any = { platform, platformAccountId };
 
-    // If userId is provided, check if this specific user already connected this account
-    if (userId) {
-      query.where("userId", "==", userId);
-    }
+      if (userId) {
+        query.userId = userId;
+      }
 
-    const snapshot = await query.get();
-
-    if (snapshot.empty) {
+      return await this.socialAccountRepository.findOne(query);
+    } catch (error) {
+      console.error("Error finding existing social account:", error);
       return null;
     }
-
-    const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data(),
-    } as SocialAccount;
   }
 
   async createSocialAccount(
@@ -80,8 +76,8 @@ export class TwitterService {
       }
 
       // Create new social account if no existing connection found
-      const socialAccount: SocialAccount = {
-        id: this.db.collection("social_accounts").doc().id,
+      const socialAccount: Omit<SocialAccount, "_id"> = {
+        id: new mongoose.Types.ObjectId().toString(),
         platform: "twitter",
         platformAccountId: profile.id,
         accountType: "personal",
@@ -90,7 +86,7 @@ export class TwitterService {
         accessToken,
         refreshToken,
         tokenExpiry: null,
-        lastRefreshed: Timestamp.now(),
+        lastRefreshed: new Date(),
         status: "active",
         userId,
         ownershipLevel: this.determineOwnershipLevel(organizationId),
@@ -98,15 +94,15 @@ export class TwitterService {
           profileUrl: `https://twitter.com/${profile.username}`,
           followerCount: profile.public_metrics?.followers_count,
           followingCount: profile.public_metrics?.following_count,
-          lastChecked: Timestamp.now(),
+          lastChecked: new Date(),
         },
         permissions: {
           canPost: true,
           canSchedule: true,
           canAnalyze: true,
         },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       // Only add optional fields if they have values
@@ -119,25 +115,7 @@ export class TwitterService {
       }
 
       // Create with transaction to ensure atomicity
-      await this.db.runTransaction(async (transaction) => {
-        // Double-check no duplicate was created while we were processing
-        const duplicateCheck = await transaction.get(
-          this.db
-            .collection("social_accounts")
-            .where("platform", "==", "twitter")
-            .where("platformAccountId", "==", profile.id)
-            .where("userId", "==", userId)
-        );
-
-        if (!duplicateCheck.empty) {
-          throw new Error("Account already connected");
-        }
-
-        transaction.set(
-          this.db.collection("social_accounts").doc(socialAccount.id),
-          socialAccount
-        );
-      });
+      await this.socialAccountRepository.create(socialAccount);
 
       return socialAccount;
     } catch (error: any) {
@@ -236,7 +214,7 @@ export class TwitterService {
         console.log("Duplicate welcome tweet detected, marking as sent anyway");
 
         // Update the account to mark welcome tweet as sent
-        await this.db.collection("social_accounts").doc(accountId).update({
+        await this.socialAccountRepository.update(accountId, {
           welcomeTweetSent: true,
         });
 
@@ -374,19 +352,16 @@ export class TwitterService {
     apiError: any
   ): Promise<void> {
     if (apiError.status === 403) {
-      await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .update({
-          status: "permission_denied",
-          lastError: {
-            message: apiError.error?.detail || "Permission denied by Twitter",
-            timestamp: firestore.Timestamp.now(),
-            code: 403,
-          },
-          "permissions.canPost": false,
-          updatedAt: firestore.Timestamp.now(),
-        });
+      await this.socialAccountRepository.update(accountId, {
+        status: "error",
+        // lastError: {
+        //   message: apiError.error?.detail || "Permission denied by Twitter",
+        //   timestamp: new Date(),
+        //   code: 403,
+        // },
+        // "permissions.canPost": false,
+        updatedAt: new Date(),
+      });
     }
   }
 
@@ -590,61 +565,68 @@ export class TwitterService {
     message: string,
     scheduledTime: Date
   ): Promise<void> {
-    const accountRef = this.db.collection("social_accounts").doc(accountId);
-    const account = await accountRef.get();
+    const accountRef = await this.socialAccountRepository.findById(accountId);
 
-    if (!account.exists) {
+    if (!accountRef) {
       throw new Error("Account not found");
     }
 
-    // Store the scheduled tweet in Firestore
-    await this.db.collection("scheduled_tweets").add({
-      accountId,
-      message,
-      scheduledTime: firestore.Timestamp.fromDate(scheduledTime),
+    // Store the scheduled tweet in MongoDB
+    await this.socialAccountRepository.createScheduledTweet({
+      socialAccountId: accountId,
+      content: message,
+      scheduledFor: scheduledTime,
       status: "pending",
-      createdAt: firestore.Timestamp.now(),
-      updatedAt: firestore.Timestamp.now(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
   }
 
   // This method would be called by a cron job or scheduler
   async processScheduledTweets(): Promise<void> {
-    const now = firestore.Timestamp.now();
+    const now = new Date();
 
-    const scheduledTweets = await this.db
-      .collection("scheduled_tweets")
-      .where("status", "==", "pending")
-      .where("scheduledTime", "<=", now)
-      .get();
+    // Find tweets that are scheduled for now or earlier
+    const scheduledTweets =
+      await this.socialAccountRepository.findPendingScheduledTweets();
 
-    for (const tweet of scheduledTweets.docs) {
-      const tweetData = tweet.data();
+    for (const tweet of scheduledTweets) {
       try {
-        await this.postTweet(tweetData.accountId, tweetData.message);
-        await tweet.ref.update({
-          status: "published",
-          updatedAt: now,
-        });
+        // Make sure we have a string ID before passing to postTweet
+        const tweetId =
+          typeof tweet._id === "string" ? tweet._id : tweet._id?.toString();
+
+        await this.postTweet(tweet.socialAccountId, tweet.content);
+        await this.socialAccountRepository.updateScheduledTweet(
+          tweetId as string,
+          {
+            status: "sent",
+            updatedAt: now,
+          }
+        );
       } catch (error: any) {
-        await tweet.ref.update({
-          status: "failed",
-          error: error.message,
-          updatedAt: now,
-        });
+        const tweetId =
+          typeof tweet._id === "string" ? tweet._id : tweet._id?.toString();
+
+        await this.socialAccountRepository.updateScheduledTweet(
+          tweetId as string,
+          {
+            status: "failed",
+            errorMessage: error.message,
+            updatedAt: now,
+          }
+        );
       }
     }
   }
 
   async getSocialAccount(accountId: string): Promise<SocialAccount | null> {
-    const doc = await this.db
-      .collection("social_accounts")
-      .doc(accountId)
-      .get();
-    if (!doc.exists) {
+    try {
+      return await this.socialAccountRepository.findById(accountId);
+    } catch (error) {
+      console.error(`Error retrieving social account ${accountId}:`, error);
       return null;
     }
-    return doc.data() as SocialAccount;
   }
 
   async refreshAccessToken(accountId: string): Promise<SocialAccount> {
@@ -686,18 +668,13 @@ export class TwitterService {
         // If a new refresh token is provided, update it
         ...(data.refresh_token && { refreshToken: data.refresh_token }),
         // Set new expiry time (default to 2 hours if not specified)
-        tokenExpiry: firestore.Timestamp.fromMillis(
-          Date.now() + (data.expires_in || 7200) * 1000
-        ),
-        lastRefreshed: firestore.Timestamp.now(),
-        updatedAt: firestore.Timestamp.now(),
+        tokenExpiry: new Date(Date.now() + (data.expires_in || 7200) * 1000),
+        lastRefreshed: new Date(),
+        updatedAt: new Date(),
       };
 
-      // Update in Firestore
-      await this.db
-        .collection("social_accounts")
-        .doc(accountId)
-        .update(updatedAccount);
+      // Update in MongoDB
+      await this.socialAccountRepository.update(accountId, updatedAccount);
 
       return updatedAccount;
     } catch (error) {
@@ -710,9 +687,9 @@ export class TwitterService {
         (error.message.includes("401") ||
           error.message.includes("invalid_grant"))
       ) {
-        await this.db.collection("social_accounts").doc(accountId).update({
-          status: "refresh_token_expired",
-          updatedAt: firestore.Timestamp.now(),
+        await this.socialAccountRepository.update(accountId, {
+          status: "error",
+          updatedAt: new Date(),
         });
         throw new Error(
           "Refresh token expired, user needs to reconnect account"
@@ -818,7 +795,7 @@ export class TwitterService {
 
     // Add a buffer of 5 minutes to refresh before actual expiry
     const expiryBuffer = 5 * 60 * 1000; // 5 minutes in milliseconds
-    const expiryTime = account.tokenExpiry.toMillis();
+    const expiryTime = account.tokenExpiry.getTime();
 
     return Date.now() > expiryTime - expiryBuffer;
   }
@@ -841,10 +818,14 @@ export class TwitterService {
 
   async getAuthUrl(): Promise<string> {
     // Determine the appropriate callback URL based on the environment
-    const callbackUrl = process.env.NODE_ENV === "production"
-      ? `${process.env.API_URL || "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app"}/api/social-accounts/twitter/callback`
-      : process.env.TWITTER_CALLBACK_URL!;
-    
+    const callbackUrl =
+      process.env.NODE_ENV === "production"
+        ? `${
+            process.env.API_URL ||
+            "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app"
+          }/api/social-accounts/twitter/callback`
+        : process.env.TWITTER_CALLBACK_URL!;
+
     console.log("Twitter OAuth Config:", {
       clientId: process.env.TWITTER_CLIENT_ID,
       callbackUrl: callbackUrl,
@@ -854,9 +835,17 @@ export class TwitterService {
     const cleanCallbackUrl = callbackUrl.replace("www.", "");
     const { verifier, challenge } = await this.generateCodeChallenge();
 
-    // Store verifier for later use
-    // TODO: Store this securely, perhaps in session or temporary storage
-    console.log("Code verifier (save this):", verifier);
+    const state = JSON.stringify({
+      uid: "super_admin", // replace with actual user ID dynamically if needed
+      skipWelcome: true,
+      timestamp: Date.now(),
+    });
+
+    // Explicitly store the verifier using a temporary in-memory map keyed by the state
+    codeVerifierStore.set(state, verifier);
+
+    // Log the verifier (for debugging; in production, ensure secure storage)
+    console.log("Code verifier (saved in temporary store):", verifier);
 
     // Make sure URL matches exactly what Twitter expects
     const authUrl =
@@ -866,7 +855,8 @@ export class TwitterService {
       `scope=${encodeURIComponent("tweet.read tweet.write users.read")}&` +
       "response_type=code&" +
       `code_challenge=${challenge}&` +
-      "code_challenge_method=S256";
+      "code_challenge_method=S256&" +
+      `state=${encodeURIComponent(state)}`;
 
     return authUrl;
   }
@@ -880,20 +870,17 @@ export class TwitterService {
     }
 
     // Get the social account for this user
-    const accountSnapshot = await this.db
-      .collection("social_accounts")
-      .where("userId", "==", content.createdBy)
-      .where("platform", "==", "twitter")
-      .where("status", "==", "active")
-      .limit(1)
-      .get();
+    const account = await this.socialAccountRepository.findOne({
+      userId: content.createdBy,
+      platform: "twitter",
+      status: "active",
+    });
 
-    if (accountSnapshot.empty) {
+    if (!account) {
       throw new Error("No active Twitter account found for user");
     }
 
-    const accountData = accountSnapshot.docs[0].data() as SocialAccount;
-    const accountId = accountSnapshot.docs[0].id;
+    const accountId = account.id;
 
     try {
       // Reuse the postTweet method which already handles token refresh

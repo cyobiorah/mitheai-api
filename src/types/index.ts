@@ -24,10 +24,13 @@ export interface Team {
 
 export interface User {
   id: string;
+  _id?: any; // MongoDB ObjectId
   uid?: string;
   email: string;
   firstName: string;
   lastName: string;
+  password?: string;
+  userType?: 'individual' | 'organization';
   role: 'super_admin' | 'org_owner' | 'team_manager' | 'user';
   organizationId: string;
   teamIds: string[];

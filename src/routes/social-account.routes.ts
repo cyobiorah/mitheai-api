@@ -2,6 +2,7 @@ import { Router } from "express";
 import { SocialAccountController } from "../controllers/social-account.controller";
 import {
   authenticateToken,
+  belongsToTeam,
   requireOrgAccess,
 } from "../middleware/auth.middleware";
 import passport from "../config/passport.config";
@@ -259,28 +260,28 @@ router.get("/facebook/direct-auth", authenticateToken, (req: any, res) => {
 });
 
 // Disconnect social account by ID (not platform)
-router.post("/disconnect/:accountId", authenticateToken, async (req, res) => {
-  try {
-    if (!req.user?.uid) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+// router.post("/disconnect/:accountId", authenticateToken, async (req, res) => {
+//   try {
+//     if (!req.user?.uid) {
+//       return res.status(401).json({ error: "Unauthorized" });
+//     }
 
-    const { accountId } = req.params;
-    if (!accountId) {
-      return res.status(400).json({ error: "Account ID is required" });
-    }
+//     const { accountId } = req.params;
+//     if (!accountId) {
+//       return res.status(400).json({ error: "Account ID is required" });
+//     }
 
-    // Call the updated disconnectAccount method with account ID
-    const result = await controller.disconnectAccount(req.user.uid, accountId);
-    res.json(result);
-  } catch (error: any) {
-    console.error("Error disconnecting account:", error);
-    res.status(500).json({
-      error: "Failed to disconnect account",
-      message: error.message || "Unknown error occurred",
-    });
-  }
-});
+//     // Call the updated disconnectAccount method with account ID
+//     const result = await controller.disconnectSocialAccount(req.user.uid, accountId);
+//     res.json(result);
+//   } catch (error: any) {
+//     console.error("Error disconnecting account:", error);
+//     res.status(500).json({
+//       error: "Failed to disconnect account",
+//       message: error.message || "Unknown error occurred",
+//     });
+//   }
+// });
 
 // Legacy endpoint - maintain for backward compatibility but updated to use account ID
 router.post("/:platform/disconnect", authenticateToken, async (req, res) => {
@@ -300,7 +301,7 @@ router.post("/:platform/disconnect", authenticateToken, async (req, res) => {
     }
 
     // Call the updated disconnectAccount method with account ID
-    const result = await controller.disconnectAccount(req.user.uid, accountId);
+    const result = await controller.disconnectSocialAccount(req.user.uid, accountId);
     res.json(result);
   } catch (error: any) {
     console.error("Error disconnecting account:", error);
@@ -310,6 +311,33 @@ router.post("/:platform/disconnect", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// New endpoints for MongoDB implementation
+router.get(
+  "/user",
+  authenticateToken,
+  controller.getUserSocialAccounts.bind(controller)
+);
+
+router.get(
+  "/organization/:organizationId",
+  authenticateToken,
+  requireOrgAccess(),
+  controller.getOrganizationSocialAccounts.bind(controller)
+);
+
+router.get(
+  "/team/:teamId",
+  authenticateToken,
+  belongsToTeam(),
+  controller.getTeamSocialAccounts.bind(controller)
+);
+
+router.delete(
+  "/:accountId",
+  authenticateToken,
+  controller.disconnectSocialAccount.bind(controller)
+);
 
 // Tweet management routes - add validateSocialAccountOperation middleware once created
 router.post(

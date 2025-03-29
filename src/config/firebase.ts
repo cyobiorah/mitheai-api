@@ -29,4 +29,5 @@ export const collections = {
   organizations: db.collection('organizations'),
   teams: db.collection('teams'),
   invitations: db.collection('invitations'),
+  socialAccounts: db.collection('social_accounts'),
 } as const;

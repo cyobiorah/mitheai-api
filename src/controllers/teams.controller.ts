@@ -1,11 +1,15 @@
 import { Request, Response } from 'express';
-import { collections, db } from '../config/firebase';
+import { TeamService } from '../services/team.service';
+import { UserService } from '../services/user.service';
 import { Team, User } from '../types';
-import { DocumentData, Timestamp } from 'firebase-admin/firestore';
+
+// Initialize services
+const teamService = new TeamService();
+const userService = new UserService();
 
 export const createTeam = async (req: Request, res: Response) => {
   try {
-    const { name, organizationId } = req.body;
+    const { name, description, organizationId } = req.body;
 
     // Validate required fields
     if (!name || !organizationId) {
@@ -15,21 +19,15 @@ export const createTeam = async (req: Request, res: Response) => {
     }
 
     // Create new team
-    const newTeam: Team = {
-      id: '', // Will be set after creation
+    const newTeam = await teamService.create({
       name,
+      description,
       organizationId,
       memberIds: [],
       settings: {
         permissions: ['basic'],
       },
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    };
-
-    const teamRef = await collections.teams.add(newTeam);
-    newTeam.id = teamRef.id;
-    await teamRef.update({ id: teamRef.id });
+    });
 
     res.status(201).json(newTeam);
   } catch (error) {
@@ -48,14 +46,7 @@ export const getTeams = async (req: Request, res: Response) => {
       });
     }
 
-    const teamsSnapshot = await collections.teams
-      .where('organizationId', '==', organizationId)
-      .get();
-
-    const teams = teamsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const teams = await teamService.findByOrganization(organizationId);
 
     res.json(teams);
   } catch (error) {
@@ -74,16 +65,13 @@ export const getTeam = async (req: Request, res: Response) => {
       });
     }
 
-    const team = await collections.teams.doc(id).get();
+    const team = await teamService.findById(id);
 
-    if (!team.exists) {
+    if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    res.json({
-      id: team.id,
-      ...team.data(),
-    });
+    res.json(team);
   } catch (error) {
     console.error('Error getting team:', error);
     res.status(500).json({ error: 'Failed to get team' });
@@ -101,17 +89,15 @@ export const updateTeam = async (req: Request, res: Response) => {
       });
     }
 
-    await collections.teams.doc(id).update({
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    });
+    const team = await teamService.findById(id);
+    
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
 
-    const updatedTeam = await collections.teams.doc(id).get();
+    const updatedTeam = await teamService.update(id, updates);
 
-    res.json({
-      id: updatedTeam.id,
-      ...updatedTeam.data(),
-    });
+    res.json(updatedTeam);
   } catch (error) {
     console.error('Error updating team:', error);
     res.status(500).json({ error: 'Failed to update team' });
@@ -128,30 +114,23 @@ export const deleteTeam = async (req: Request, res: Response) => {
       });
     }
 
-    const team = await collections.teams.doc(id).get();
+    const team = await teamService.findById(id);
 
-    if (!team.exists) {
+    if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const teamData = team.data() as Team;
-
+    // Get all team members
+    const members = await userService.findByTeam(id);
+    
     // Remove team from all members
-    const batch = db.batch();
-    const membersSnapshot = await collections.users
-      .where('teamIds', 'array-contains', id)
-      .get();
-
-    membersSnapshot.docs.forEach(doc => {
-      const user = doc.data() as User;
-      const updatedTeamIds = user.teamIds?.filter(teamId => teamId !== id) || [];
-      batch.update(doc.ref, { teamIds: updatedTeamIds });
-    });
+    for (const member of members) {
+      const updatedTeamIds = member.teamIds?.filter(teamId => teamId !== id) || [];
+      await userService.update(member.uid, { teamIds: updatedTeamIds });
+    }
 
     // Delete the team
-    batch.delete(team.ref);
-
-    await batch.commit();
+    await teamService.delete(id);
 
     res.json({ message: 'Team deleted successfully' });
   } catch (error) {
@@ -170,48 +149,36 @@ export const addTeamMember = async (req: Request, res: Response) => {
       });
     }
 
-    // First try to find user by uid (Firebase Auth ID)
-    const usersSnapshot = await collections.users
-      .where('uid', '==', userId)
-      .limit(1)
-      .get();
+    // Find user
+    const user = await userService.findById(userId);
 
-    if (usersSnapshot.empty) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const userDoc = usersSnapshot.docs[0];
-    const teamRef = collections.teams.doc(teamId);
-    const team = await teamRef.get();
+    // Find team
+    const team = await teamService.findById(teamId);
 
-    if (!team.exists) {
+    if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const teamData = team.data() as Team;
-    const userData = userDoc.data() as User;
-
-    if (teamData.memberIds.includes(userId)) {
+    if (team.memberIds.includes(userId)) {
       return res.status(400).json({ error: 'User is already a member of this team' });
     }
 
-    const batch = db.batch();
+    // Add user to team
+    const updatedTeam = await teamService.addMember(teamId, userId);
+    
+    // Add team to user's teamIds
+    const userTeamIds = user.teamIds || [];
+    if (!userTeamIds.includes(teamId)) {
+      await userService.update(userId, {
+        teamIds: [...userTeamIds, teamId],
+      });
+    }
 
-    // Add user to team using uid
-    batch.update(teamRef, {
-      memberIds: [...teamData.memberIds, userId],
-      updatedAt: new Date().toISOString(),
-    });
-
-    // Add team to user
-    batch.update(userDoc.ref, {
-      teamIds: [...(userData.teamIds || []), teamId],
-      updatedAt: new Date().toISOString(),
-    });
-
-    await batch.commit();
-
-    res.json({ message: 'Member added successfully' });
+    res.json(updatedTeam);
   } catch (error) {
     console.error('Error adding team member:', error);
     res.status(500).json({ error: 'Failed to add team member' });
@@ -228,46 +195,34 @@ export const removeTeamMember = async (req: Request, res: Response) => {
       });
     }
 
-    const teamRef = collections.teams.doc(teamId);
-    const userRef = collections.users.doc(userId);
+    // Find user
+    const user = await userService.findById(userId);
 
-    const [team, user] = await Promise.all([
-      teamRef.get(),
-      userRef.get(),
-    ]);
-
-    if (!team.exists) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-
-    if (!user.exists) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const teamData = team.data() as Team;
-    const userData = user.data() as User;
+    // Find team
+    const team = await teamService.findById(teamId);
 
-    if (!teamData.memberIds.includes(userId)) {
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    if (!team.memberIds.includes(userId)) {
       return res.status(400).json({ error: 'User is not a member of this team' });
     }
 
-    const batch = db.batch();
-
     // Remove user from team
-    batch.update(teamRef, {
-      memberIds: teamData.memberIds.filter(id => id !== userId),
-      updatedAt: new Date().toISOString(),
+    const updatedTeam = await teamService.removeMember(teamId, userId);
+    
+    // Remove team from user's teamIds
+    const userTeamIds = user.teamIds || [];
+    await userService.update(userId, {
+      teamIds: userTeamIds.filter(id => id !== teamId),
     });
 
-    // Remove team from user
-    batch.update(userRef, {
-      teamIds: (userData.teamIds || []).filter(id => id !== teamId),
-      updatedAt: new Date().toISOString(),
-    });
-
-    await batch.commit();
-
-    res.json({ message: 'Member removed successfully' });
+    res.json(updatedTeam);
   } catch (error) {
     console.error('Error removing team member:', error);
     res.status(500).json({ error: 'Failed to remove team member' });

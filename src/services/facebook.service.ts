@@ -1,12 +1,28 @@
-import { firestore } from "firebase-admin";
 import { SocialAccount } from "../models/social-account.model";
-import { Timestamp } from "firebase-admin/firestore";
+import { RepositoryFactory } from "../repositories/repository.factory";
+import { SocialAccountRepository } from "../repositories/social-account.repository";
+import mongoose from "mongoose";
+
+export class SocialAccountError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public metadata?: Record<string, any>
+  ) {
+    super(message);
+  }
+}
 
 export class FacebookService {
-  private readonly db: firestore.Firestore;
+  private socialAccountRepository!: SocialAccountRepository;
 
   constructor() {
-    this.db = firestore();
+    this.initialize();
+  }
+
+  private async initialize() {
+    this.socialAccountRepository =
+      await RepositoryFactory.createSocialAccountRepository();
   }
 
   /**
@@ -17,39 +33,33 @@ export class FacebookService {
     platformAccountId: string,
     userId?: string
   ): Promise<SocialAccount | null> {
-    let query = this.db
-      .collection("social_accounts")
-      .where("platform", "==", platform)
-      .where("platformAccountId", "==", platformAccountId);
+    try {
+      let query: any = { platform, platformAccountId };
 
-    if (userId) {
-      query = query.where("userId", "==", userId);
-    }
+      if (userId) {
+        query.userId = userId;
+      }
 
-    const snapshot = await query.get();
-
-    if (snapshot.empty) {
+      return await this.socialAccountRepository.findOne(query);
+    } catch (error) {
+      console.error("Error finding existing social account:", error);
       return null;
     }
-
-    const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data(),
-    } as SocialAccount;
   }
 
   async createSocialAccount(
-    userId: string,
     profile: any,
     accessToken: string,
-    refreshToken: string,
+    refreshToken: string | null,
+    userId: string,
     organizationId?: string,
     teamId?: string
   ): Promise<SocialAccount> {
     try {
-      console.log(`Checking for existing Facebook account for user ${userId} with Facebook ID ${profile.id}`);
-      
+      console.log(
+        `Checking for existing Facebook account for user ${userId} with Facebook ID ${profile.id}`
+      );
+
       // Check for existing connection with the same Facebook ID and user ID
       const existingAccount = await this.findExistingSocialAccount(
         "facebook",
@@ -58,66 +68,69 @@ export class FacebookService {
       );
 
       if (existingAccount) {
-        console.log(`Found existing Facebook account for this user: ${existingAccount.id}`);
-        
+        console.log(
+          `Found existing Facebook account for this user: ${existingAccount.id}`
+        );
+
         // Update the tokens in the existing account
-        await this.db.collection("social_accounts").doc(existingAccount.id).update({
+        await this.socialAccountRepository.update(existingAccount.id, {
           accessToken: accessToken,
           refreshToken: refreshToken || "",
-          lastRefreshed: Timestamp.now(),
-          updatedAt: Timestamp.now()
+          lastRefreshed: new Date(),
+          updatedAt: new Date(),
         });
-        
-        console.log(`Updated tokens for existing account ${existingAccount.id}`);
+
+        console.log(
+          `Updated tokens for existing account ${existingAccount.id}`
+        );
         return existingAccount;
       }
 
-      // Check for any existing account with this Facebook ID (from any user)
-      const anyExistingAccount = await this.findExistingSocialAccount(
+      console.log(`Creating new Facebook social account for user ${userId}`);
+
+      // Before creating, check if this account is already connected to another user
+      const duplicateCheck = await this.findExistingSocialAccount(
         "facebook",
         profile.id
       );
 
-      if (anyExistingAccount && anyExistingAccount.userId !== userId) {
-        console.error(
-          `Facebook account ${profile.id} already connected to user ${anyExistingAccount.userId}, cannot connect to ${userId}`
-        );
+      if (duplicateCheck && duplicateCheck.userId !== userId) {
         throw new SocialAccountError(
           "ACCOUNT_ALREADY_LINKED",
           "This Facebook account is already connected to another user"
         );
       }
 
-      console.log(`Creating new Facebook social account for user ${userId}`);
-      
       // Create new social account if no existing connection found
-      const socialAccount: SocialAccount = {
-        id: this.db.collection("social_accounts").doc().id,
+      const socialAccount: Omit<SocialAccount, "_id"> = {
+        id: new mongoose.Types.ObjectId().toString(),
         platform: "facebook",
         platformAccountId: profile.id,
         accountType: "personal",
-        accountName:
-          profile.displayName ?? profile.name?.givenName ?? "Unknown",
+        accountName: profile.displayName || profile.name || "Facebook User",
         accountId: profile.id,
         accessToken,
-        refreshToken: refreshToken || "", // Ensure refreshToken is never undefined
+        refreshToken: refreshToken ?? "", // Ensure refreshToken is never undefined
         tokenExpiry: null,
-        lastRefreshed: Timestamp.now(),
-        status: "active",
+        lastRefreshed: new Date(),
+        status: "active", // Type assertion for literal type
         userId,
-        ownershipLevel: this.determineOwnershipLevel(organizationId),
+        ownershipLevel: this.determineOwnershipLevel(organizationId) as
+          | "user"
+          | "team"
+          | "organization", // Type assertion
         metadata: {
           profileUrl: `https://facebook.com/${profile.id}`,
           email: profile.emails?.[0]?.value ?? "",
-          lastChecked: Timestamp.now(),
+          lastChecked: new Date(),
         },
         permissions: {
           canPost: true,
           canSchedule: true,
           canAnalyze: true,
         },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       // Only add optional fields if they have values
@@ -129,88 +142,52 @@ export class FacebookService {
         socialAccount.teamId = teamId;
       }
 
-      // Create with transaction to ensure atomicity
-      await this.db.runTransaction(async (transaction) => {
-        // Double-check no duplicate was created while we were processing - much more thorough check
-        const userDuplicateCheck = await transaction.get(
-          this.db
-            .collection("social_accounts")
-            .where("platform", "==", "facebook")
-            .where("platformAccountId", "==", profile.id)
-            .where("userId", "==", userId)
-        );
-        
-        // If we already have this account for this user, don't create another one
-        if (!userDuplicateCheck.empty) {
-          console.log(`Transaction found existing account for this user, skipping creation`);
-          throw new Error("SKIP_CREATION_EXISTING_FOUND");
-        }
-        
-        // Check if any other user has this account
-        const otherUserCheck = await transaction.get(
-          this.db
-            .collection("social_accounts")
-            .where("platform", "==", "facebook")
-            .where("platformAccountId", "==", profile.id)
-        );
-        
-        if (!otherUserCheck.empty) {
-          for (const doc of otherUserCheck.docs) {
-            const existingData = doc.data();
-            if (existingData.userId !== userId) {
-              console.error(`Transaction found account connected to user ${existingData.userId}`);
-              throw new SocialAccountError(
-                "ACCOUNT_ALREADY_LINKED", 
-                "This Facebook account is already connected to another user"
-              );
-            }
-          }
-        }
+      // Create the account in MongoDB
+      const createdAccount = await this.socialAccountRepository.create(
+        socialAccount
+      );
+      console.log(`Created new Facebook account with ID ${createdAccount.id}`);
 
-        // If we get here, we're clear to create the account
-        console.log(`Creating new Facebook account with ID ${socialAccount.id}`);
-        transaction.set(
-          this.db.collection("social_accounts").doc(socialAccount.id),
-          socialAccount
-        );
-      }).catch(error => {
-        // If we're skipping creation because we found an existing account, this isn't a real error
-        if (error.message === "SKIP_CREATION_EXISTING_FOUND") {
-          console.log("Skipped creating duplicate account");
-          // Find and return the existing account
-          return this.findExistingSocialAccount("facebook", profile.id, userId);
-        }
-        throw error;
-      });
-
-      return socialAccount;
+      return createdAccount;
     } catch (error: any) {
-      if (error.code === "account_already_connected" || error.code === "ACCOUNT_ALREADY_LINKED") {
+      if (
+        error.code === "account_already_connected" ||
+        error.code === "ACCOUNT_ALREADY_LINKED"
+      ) {
         throw error;
       }
-      
-      // If this is our special case for found duplicates, don't treat as an error
-      if (error.message === "SKIP_CREATION_EXISTING_FOUND") {
-        console.log("Found existing account during transaction, returning that instead");
-        const existingAccount = await this.findExistingSocialAccount("facebook", profile.id, userId);
-        if (existingAccount) return existingAccount;
-      }
-      
+
       console.error("Error creating social account:", error);
       throw new SocialAccountError(
         "ACCOUNT_ALREADY_LINKED",
-        "This Facebook account is already connected to another user"
+        "This Facebook account could not be connected"
       );
     }
   }
 
-  private determineOwnershipLevel(
-    organizationId?: string
-  ): "user" | "organization" {
-    if (organizationId) {
-      return "organization";
+  /**
+   * Determine the ownership level based on the provided organization ID
+   */
+  private determineOwnershipLevel(organizationId?: string): string {
+    return organizationId ? "organization" : "user";
+  }
+
+  async getSocialAccount(accountId: string): Promise<SocialAccount | null> {
+    try {
+      return await this.socialAccountRepository.findById(accountId);
+    } catch (error) {
+      console.error("Error getting social account:", error);
+      return null;
     }
-    return "user";
+  }
+
+  async disconnectAccount(accountId: string): Promise<boolean> {
+    try {
+      return await this.socialAccountRepository.delete(accountId);
+    } catch (error) {
+      console.error("Error disconnecting account:", error);
+      return false;
+    }
   }
 
   /**
@@ -251,26 +228,5 @@ export class FacebookService {
       console.error("Error posting to Facebook:", error);
       throw error;
     }
-  }
-
-  async getSocialAccount(accountId: string): Promise<SocialAccount | null> {
-    const doc = await this.db
-      .collection("social_accounts")
-      .doc(accountId)
-      .get();
-    if (!doc.exists) {
-      return null;
-    }
-    return doc.data() as SocialAccount;
-  }
-}
-
-export class SocialAccountError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public metadata?: Record<string, any>
-  ) {
-    super(message);
   }
 }

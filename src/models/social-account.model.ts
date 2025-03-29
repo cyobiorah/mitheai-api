@@ -1,16 +1,14 @@
-import { Timestamp } from "firebase-admin/firestore";
-
 export interface SocialAccount {
   id: string;
-  platform: "twitter" | "linkedin" | "instagram" | "facebook";
+  platform: "twitter" | "linkedin" | "instagram" | "facebook" | "threads";
   platformAccountId: string; // Unique identifier from the platform (e.g., Twitter user ID)
   accountType: "personal" | "business";
   accountName: string;
   accountId: string;
   accessToken: string;
   refreshToken: string; // For Twitter, this is the access token secret
-  tokenExpiry: Timestamp | null; // Null for Twitter (OAuth 1.0a tokens don't expire)
-  lastRefreshed: Timestamp;
+  tokenExpiry: Date | null; // Null for Twitter (OAuth 1.0a tokens don't expire)
+  lastRefreshed: Date;
   status: "active" | "expired" | "revoked" | "error";
   organizationId?: string;
   teamId?: string;
@@ -18,20 +16,21 @@ export interface SocialAccount {
   ownershipLevel: "user" | "team" | "organization"; // Indicates who owns/controls this account
   metadata: {
     email?: string;
-    profileUrl: string;
+    profileUrl?: string;
     followerCount?: number;
     followingCount?: number;
-    lastChecked?: Timestamp;
-    tokenExpiresAt?: Timestamp;
+    lastChecked?: Date;
+    tokenExpiresAt?: Date;
+    profile?: any;
   };
   permissions: {
-    canPost: boolean;
-    canSchedule: boolean;
-    canAnalyze: boolean;
+    canPost?: boolean;
+    canSchedule?: boolean;
+    canAnalyze?: boolean;
   };
   welcomeTweetSent?: boolean; // Track whether a welcome tweet has been sent
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // This represents the unique index that should be created in Firestore

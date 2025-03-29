@@ -1,7 +1,9 @@
 import passport from "passport";
+const verifierMap = new Map<string, string>();
 import { Strategy as OAuth2Strategy } from "passport-oauth2";
 import { TwitterService } from "../services/twitter.service";
 import { firestore } from "firebase-admin";
+import crypto from "crypto";
 import "./facebook.config";
 import threadsStrategy from "./threads.config";
 
@@ -242,9 +244,6 @@ const strategy = new OAuth2Strategy(
   }
 );
 
-// Create a state mapping to store our state data
-const stateMap = new Map<string, string>();
-
 // Override the authenticate method to preserve the state parameter
 const originalAuthenticate = (strategy as any).authenticate;
 (strategy as any).authenticate = function (req: any, options: any) {
@@ -257,38 +256,46 @@ const originalAuthenticate = (strategy as any).authenticate;
       headers: req.headers,
     });
 
-    // Generate a random state key for Twitter
-    const twitterState = Math.random().toString(36).substring(2, 15);
-
-    // Store our state mapped to Twitter's state
-    stateMap.set(twitterState, req.query.state as string);
-    console.log(
-      `Mapped our state to Twitter state: ${twitterState} -> ${req.query.state}`
-    );
-
+    const state = req.query.state as string;
+    
     // Make sure options has an authorizationParams property
     options = options || {};
     options.authorizationParams = options.authorizationParams || {};
+    
+    // Generate code_verifier and code_challenge using crypto for better randomness
+    const codeVerifier = crypto.randomBytes(32)
+      .toString("base64url")
+      .replace(/=/g, "");
 
-    // Set the state parameter
-    options.state = twitterState;
+    const base64urlEncode = (buffer: Buffer) =>
+      buffer.toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
 
-    // Let the built-in PKCE handle code verifier and challenge
-    console.log("Using built-in PKCE support");
+    const codeChallenge = base64urlEncode(
+      crypto.createHash("sha256").update(codeVerifier).digest()
+    );
 
-    // Hack to access the code verifier that will be generated
-    const originalGetAuthorizeUrl = this._oauth2.getAuthorizeUrl;
-    this._oauth2.getAuthorizeUrl = function (params: any) {
-      console.log("PKCE Code Verifier:", this._pkceVerifier);
-      console.log("Authorization params:", params);
-      return originalGetAuthorizeUrl.call(this, params);
-    };
+    // Store the code verifier for this state
+    verifierMap.set(state, codeVerifier);
+    console.log(`Stored code verifier for state ${state}:`, codeVerifier);
+    
+    // Set the PKCE parameters
+    options.authorizationParams.code_challenge = codeChallenge;
+    options.authorizationParams.code_challenge_method = "S256";
+    
+    // Use the state directly
+    options.state = state;
+
+    console.log("Using code challenge:", codeChallenge);
+    console.log("Using state:", state);
 
     // Call the original authenticate method
     return originalAuthenticate.call(this, req, options);
   }
 
-  // If this is the callback and we have a state parameter, make sure it's available in the verify callback
+  // If this is the callback and we have a state parameter
   if (req.query.code && req.query.state) {
     console.log("Twitter callback received:", {
       url: req.url,
@@ -297,42 +304,30 @@ const originalAuthenticate = (strategy as any).authenticate;
       headers: req.headers,
     });
 
-    // Get the Twitter state from the callback
-    const twitterState = req.query.state as string;
-    console.log("Received Twitter state in callback:", twitterState);
+    // Get the state from the callback
+    const callbackState = req.query.state as string;
+    console.log("Received state in callback:", callbackState);
 
-    // Look up our original state
-    const ourState = stateMap.get(twitterState);
-    if (ourState) {
-      console.log("Found our state in map:", ourState);
+    // Store the state in the request object so it's available in the verify callback
+    req._twitterState = callbackState;
+    
+    // Store the state in the OAuth2 instance for token exchange
+    this._oauth2._state = callbackState;
+    
+    try {
+      // Try to parse the state parameter
+      const stateData = JSON.parse(
+        Buffer.from(callbackState, "base64").toString("utf-8")
+      );
+      console.log("Parsed state data:", stateData);
 
-      // Replace Twitter's state with our state to maintain compatibility
-      req.query.state = ourState;
-
-      // Store it on the request object so it's available in the verify callback
-      req._twitterState = ourState;
-      console.log("Restored our state parameter:", ourState);
-
-      try {
-        // Try to parse the state parameter
-        const stateData = JSON.parse(
-          Buffer.from(ourState, "base64").toString("utf-8")
-        );
-        console.log("Parsed state data:", stateData);
-
-        // If the state contains a user ID, restore the user object
-        if (stateData.uid) {
-          req.user = { uid: stateData.uid };
-          console.log("Restored user from state parameter:", req.user);
-        }
-      } catch (e) {
-        console.warn("Failed to parse state data:", e);
+      // If the state contains a user ID, restore the user object
+      if (stateData.uid) {
+        req.user = { uid: stateData.uid };
+        console.log("Restored user from state parameter:", req.user);
       }
-
-      // Clean up the maps
-      stateMap.delete(twitterState);
-    } else {
-      console.warn("Could not find our state for Twitter state:", twitterState);
+    } catch (e) {
+      console.warn("Failed to parse state data:", e);
     }
   }
 
@@ -345,8 +340,7 @@ const originalAuthenticate = (strategy as any).authenticate;
   store: async function (req: any, callback: any) {
     // The state is already being handled in our authenticate override
     // Just call the callback with the state from the request
-    const state =
-      req.query.state || Math.random().toString(36).substring(2, 15);
+    const state = req.query.state || Math.random().toString(36).substring(2, 15);
     callback(null, state);
   },
   verify: async function (req: any, providedState: string, callback: any) {
@@ -363,9 +357,29 @@ const originalOAuthGetToken = (strategy as any)._oauth2.getOAuthAccessToken;
   params: any,
   callback: any
 ) {
-  console.log("Token exchange initiated with code:", code);
-  console.log("Token exchange params:", params);
-  console.log("PKCE Code Verifier for token exchange:", this._pkceVerifier);
+  // Get the state from the OAuth2 instance or params
+  const state = this._state || params.state;
+  console.log("Token exchange state:", state);
+  
+  // Get the code verifier for this state
+  const codeVerifier = verifierMap.get(state);
+  console.log("PKCE Code Verifier for token exchange:", codeVerifier);
+  
+  if (!codeVerifier) {
+    console.error("Missing code verifier for state:", state);
+    return callback(new Error("Missing code verifier for token exchange"));
+  }
+
+  // Add the code verifier to the params
+  params.code_verifier = codeVerifier;
+  
+  // Set redirect_uri and log params
+  params.redirect_uri = callbackUrl;
+  console.log("Token request params:", params);
+  console.log("Expected redirect_uri:", callbackUrl);
+  
+  // Clean up the map
+  verifierMap.delete(state);
 
   return originalOAuthGetToken.call(this, code, params, callback);
 };

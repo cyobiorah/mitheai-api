@@ -371,8 +371,8 @@ export const createContent = async (req: Request, res: Response) => {
       organizationId:
         user.userType === "organization" ? user.organizationId || null : null,
       createdBy: user.uid,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     // Add socialPost only if it's a social post type
@@ -761,19 +761,29 @@ export const getPersonalContent = async (req: Request, res: Response) => {
   try {
     const user = req.user as User;
 
-    // Verify this is an individual user
-    if (user.userType !== "individual") {
-      return res.status(403).json({
-        error: "This endpoint is only for individual users",
-      });
+    // Different query based on user type
+    let snapshot;
+    
+    // Determine if user is part of an organization based on organizationId
+    const isOrganizationUser = !!user.organizationId;
+    
+    if (!isOrganizationUser) {
+      // For individual users, get their personal content
+      snapshot = await db
+        .collection("content")
+        .where("createdBy", "==", user.uid)
+        .where("teamId", "==", null)
+        .orderBy("createdAt", "desc")
+        .get();
+    } else {
+      // For organization users, get content associated with their organization
+      snapshot = await db
+        .collection("content")
+        .where("organizationId", "==", user.organizationId)
+        .orderBy("createdAt", "desc")
+        .limit(10) // Limit to recent items for organization overview
+        .get();
     }
-
-    const snapshot = await db
-      .collection("content")
-      .where("createdBy", "==", user.uid)
-      .where("teamId", "==", null)
-      .orderBy("createdAt", "desc")
-      .get();
 
     const content = snapshot.docs.map((doc) => ({
       ...doc.data(),

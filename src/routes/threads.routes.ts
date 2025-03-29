@@ -1,7 +1,7 @@
 import express from "express";
-import passport from "passport";
 import { ThreadsService } from "../services/threads.service";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { RepositoryFactory } from "../repositories/repository.factory";
 
 const router = express.Router();
 const threadsService = new ThreadsService();
@@ -66,10 +66,7 @@ router.get("/threads/connect", (req, res) => {
   );
   threadsAuthUrl.searchParams.append("state", userId);
 
-  console.log(
-    "Redirecting to Threads OAuth:",
-    threadsAuthUrl.toString()
-  );
+  console.log("Redirecting to Threads OAuth:", threadsAuthUrl.toString());
   res.redirect(threadsAuthUrl.toString());
 });
 
@@ -134,7 +131,7 @@ router.get("/threads/callback", async (req, res) => {
       // Get user profile from Threads Graph API (which includes Threads access)
       const userProfile = await threadsService.getUserProfile(accessToken);
 
-      if (!userProfile || !userProfile.id) {
+      if (!userProfile?.id) {
         console.error("Failed to fetch user profile from Threads Graph API");
         return res.redirect(
           `${process.env.FRONTEND_URL}/settings?error=true&message=Failed to fetch user profile`
@@ -235,80 +232,81 @@ router.post("/threads/:accountId/post", async (req, res) => {
       });
     }
 
-    // Check if the user has access to this account
-    const db = threadsService.getDb();
-    const accountSnap = await db
-      .collection("social_accounts")
-      .doc(accountId)
-      .get();
+    try {
+      // Get the social account using the repository
+      const account = await threadsService.getAccountWithValidToken(accountId);
 
-    if (!accountSnap.exists) {
-      return res.status(404).json({
+      if (!account) {
+        return res.status(404).json({
+          status: "error",
+          message: "Social account not found",
+        });
+      }
+
+      // Security check: Verify the account belongs to the authenticated user
+      // Unless the user is an admin or belongs to the organization/team
+      if (account.userId !== userId) {
+        // Get user from repository
+        const userRepository = await RepositoryFactory.createUserRepository();
+        const user = await userRepository.findById(userId);
+
+        if (!user) {
+          return res.status(401).json({
+            status: "error",
+            message: "Authentication failed",
+          });
+        }
+
+        const hasAccess =
+          (account.organizationId &&
+            account.organizationId === user.organizationId) ||
+          (account.teamId && user.teamIds?.includes(account.teamId)) ||
+          user.role === "super_admin";
+
+        if (!hasAccess) {
+          return res.status(403).json({
+            status: "error",
+            message: "You don't have access to this account",
+          });
+        }
+      }
+
+      // Post to Threads using the account
+      const post = await threadsService.postContent(
+        accountId,
+        content,
+        mediaUrls
+      );
+
+      // Return the post details
+      return res.status(200).json({
+        status: "success",
+        data: post,
+      });
+    } catch (error: any) {
+      console.error("Error posting to Threads:", error);
+
+      // Handle specific error types
+      if (error.message?.includes("Media uploads")) {
+        return res.status(400).json({
+          status: "error",
+          message: error.message,
+          code: "MEDIA_NOT_SUPPORTED",
+        });
+      }
+
+      // Return appropriate error response
+      return res.status(error.response?.status || 500).json({
         status: "error",
-        message: "Social account not found",
+        message: error.message || "An error occurred while posting to Threads",
+        details: error.response?.data || null,
       });
     }
-
-    const account = { id: accountSnap.id, ...accountSnap.data() } as any;
-
-    // Security check: Verify the account belongs to the authenticated user
-    // Unless the user is an admin or belongs to the organization/team
-    if (account.userId !== userId) {
-      // Check if the user belongs to the organization/team
-      const userSnap = await db.collection("users").doc(userId).get();
-
-      if (!userSnap.exists) {
-        return res.status(401).json({
-          status: "error",
-          message: "Authentication failed",
-        });
-      }
-
-      const user = userSnap.data();
-
-      const hasAccess =
-        (account.organizationId &&
-          account.organizationId === user?.organizationId) ||
-        (account.teamId && account.teamId === user?.currentTeamId) ||
-        user?.role === "admin";
-
-      if (!hasAccess) {
-        return res.status(403).json({
-          status: "error",
-          message: "You don't have access to this account",
-        });
-      }
-    }
-
-    // Post to Threads using the account
-    const post = await threadsService.postContent(
-      accountId,
-      content,
-      mediaUrls
-    );
-
-    // Return the post details
-    return res.status(200).json({
-      status: "success",
-      data: post,
-    });
   } catch (error: any) {
-    console.error("Error posting to Threads:", error);
-
-    // Handle specific error types
-    if (error.message?.includes("Media uploads")) {
-      return res.status(400).json({
-        status: "error",
-        message: error.message,
-        code: "MEDIA_NOT_SUPPORTED",
-      });
-    }
-
-    // Return appropriate error response
-    return res.status(error.response?.status || 500).json({
+    console.error("Unexpected error in Threads post:", error);
+    return res.status(500).json({
       status: "error",
-      message: error.message || "An error occurred while posting to Threads",
-      details: error.response?.data || null,
+      message: "An unexpected error occurred",
     });
   }
 });
