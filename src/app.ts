@@ -27,6 +27,9 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3001",
   "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
+  "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
+  // Add wildcard for all subdomains of vercel.app for development
+  "https://*.vercel.app"
 ];
 
 // Middleware
@@ -34,16 +37,35 @@ app.use(helmet());
 app.use(
   cors({
     origin: function (origin, callback) {
-      console.log({ origin });
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+      // For development/testing - allow requests with no origin (like mobile apps, curl, etc)
+      if (!origin) {
+        return callback(null, true);
       }
+      
+      // Check if the origin is in our allowedOrigins list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // Check for wildcard domains (for vercel.app subdomains)
+      const wildcardMatches = allowedOrigins
+        .filter(allowed => allowed.includes('*'))
+        .some(pattern => {
+          const regexPattern = pattern.replace('*', '.*');
+          return new RegExp(regexPattern).test(origin);
+        });
+        
+      if (wildcardMatches) {
+        return callback(null, true);
+      }
+      
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   })
 );
 
