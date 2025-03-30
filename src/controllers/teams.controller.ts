@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
+import { Team, User, isOrganizationUser } from "../app-types";
+import { initAuthController } from "../controllers/auth.controller";
 import { TeamService } from "../services/team.service";
 import { UserService } from "../services/user.service";
-import { Team, User } from "../types";
-import { initAuthController } from "./auth.controller";
 
 // Initialize services
 const teamService = new TeamService();
@@ -127,9 +127,12 @@ export const deleteTeam = async (req: Request, res: Response) => {
 
     // Remove team from all members
     for (const member of members) {
-      const updatedTeamIds =
-        member.teamIds?.filter((teamId: string) => teamId !== id) || [];
-      await userService.update(member.uid, { teamIds: updatedTeamIds });
+      // Only organization users have teamIds
+      if (isOrganizationUser(member)) {
+        const updatedTeamIds =
+          member.teamIds.filter((teamId: string) => teamId !== id) || [];
+        await userService.update(member.uid, { teamIds: updatedTeamIds });
+      }
     }
 
     // Delete the team
@@ -177,11 +180,13 @@ export const addTeamMember = async (req: Request, res: Response) => {
     const updatedTeam = await teamService.addMember(teamId, userId);
 
     // Add team to user's teamIds
-    const userTeamIds = user.teamIds || [];
-    if (!userTeamIds.includes(teamId)) {
-      await userService.update(userId, {
-        teamIds: [...userTeamIds, teamId],
-      });
+    if (isOrganizationUser(user)) {
+      const userTeamIds = user.teamIds || [];
+      if (!userTeamIds.includes(teamId)) {
+        await userService.update(userId, {
+          teamIds: [...userTeamIds, teamId],
+        });
+      }
     }
 
     res.json(updatedTeam);
@@ -226,10 +231,13 @@ export const removeTeamMember = async (req: Request, res: Response) => {
     const updatedTeam = await teamService.removeMember(teamId, userId);
 
     // Remove team from user's teamIds
-    const userTeamIds = user.teamIds || [];
-    await userService.update(userId, {
-      teamIds: userTeamIds.filter((id: string) => id !== teamId),
-    });
+    if (isOrganizationUser(user)) {
+      const userTeamIds = user.teamIds || [];
+
+      await userService.update(userId, {
+        teamIds: userTeamIds.filter((id: string) => id !== teamId),
+      });
+    }
 
     res.json(updatedTeam);
   } catch (error) {

@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { UserService } from "../services/user.service";
+import { v4 as uuidv4 } from "uuid";
+import { OrganizationUser, isOrganizationUser } from "../app-types";
+import { initAuthController } from "./auth.controller";
 import { OrganizationService } from "../services/organization.service";
 import { InvitationService } from "../services/invitation.service";
 import { sendInvitationEmail } from "../services/email.service";
-import { v4 as uuidv4 } from "uuid";
-import { initAuthController } from "./auth.controller";
 
 // Initialize services
 // const userService = new UserService();
@@ -79,10 +79,16 @@ export const inviteUser = async (req: Request, res: Response) => {
 
     // Check if user already exists
     const existingUser = await userService.findByEmail(email);
-    if (existingUser && existingUser.organizationId === organizationId) {
-      return res.status(400).json({
-        error: "User with this email already exists in the organization",
-      });
+    if (existingUser) {
+      // Check if user is already in this organization
+      if (
+        isOrganizationUser(existingUser) &&
+        existingUser.organizationId === organizationId
+      ) {
+        return res.status(400).json({
+          error: "User with this email already exists in the organization",
+        });
+      }
     }
 
     // Generate invitation token
@@ -104,9 +110,7 @@ export const inviteUser = async (req: Request, res: Response) => {
       firstName,
       lastName,
       role,
-      organizationId,
       userType: "organization",
-      teamIds: [],
       status: "pending",
       invitationToken: token,
       settings: {
@@ -114,7 +118,12 @@ export const inviteUser = async (req: Request, res: Response) => {
         theme: "light",
         notifications: [],
       },
-    });
+      organizationId,
+      teamIds: [],
+      organizationSettings: {
+        defaultTeamId: "",
+      },
+    } as Omit<OrganizationUser, "uid" | "createdAt" | "updatedAt">);
 
     // Send invitation email
     try {

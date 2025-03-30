@@ -2,18 +2,20 @@ import { Request, Response } from "express";
 import {
   LoginRequest,
   RegisterRequest,
-  IndividualRegisterRequest,
-  OrganizationRegisterRequest,
-} from "../types/auth";
+  JwtPayload,
+  AuthResponse,
+} from "../app-types/auth";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 import { UserService } from "../services/user.service";
 import { OrganizationService } from "../services/organization.service";
 import { TeamService } from "../services/team.service";
+import { isOrganizationUser, User, IndividualUser } from "../app-types/index";
+import { sendWelcomeEmail } from "../services/email.service";
 
 // Initialize services
-// const userService = await UserService.create();
+let userServiceInstance: UserService | null = null;
 const organizationService = new OrganizationService();
 const teamService = new TeamService();
 
@@ -22,6 +24,10 @@ export const initAuthController = async () => {
   return userService;
 };
 
+/**
+ * Login controller
+ * Handles user authentication and returns a JWT token
+ */
 export const login = async (
   req: Request<{}, {}, LoginRequest>,
   res: Response
@@ -51,162 +57,189 @@ export const login = async (
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    // Create JWT payload
+    const payload: JwtPayload = {
+      uid: user.uid,
+      email: user.email,
+      userType: user.userType,
+    };
+
     // Generate JWT token
     const token = jwt.sign(
-      {
-        id: user.uid,
-        uid: user.uid,
-        email: user.email,
-      },
+      payload,
       process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
       { expiresIn: "24h" }
     );
 
-    // Remove password from response
+    // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
 
-    // Get organization data if user is organization type
-    let organizationData;
-    if (user.userType === "organization" && user.organizationId) {
-      organizationData = await organizationService.findById(
+    // Prepare response based on user type
+    const response: AuthResponse = {
+      token,
+      user: userWithoutPassword as User,
+    };
+
+    // Add organization and team data for organization users
+    if (isOrganizationUser(user) && user.organizationId) {
+      const organization = await organizationService.findById(
         user.organizationId
       );
+      if (organization) {
+        response.organization = organization;
+      }
+
+      // Get the first team if user has any teams
+      if (user.teamIds && user.teamIds.length > 0) {
+        const team = await teamService.findById(user.teamIds[0]);
+        if (team) {
+          response.team = team;
+        }
+      }
     }
 
-    res.json({
-      token,
-      user: userWithoutPassword,
-      ...(organizationData && { organization: organizationData }),
-    });
+    res.json(response);
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
+/**
+ * Register controller
+ * Handles user registration for both individual and organization users
+ */
 export const register = async (
   req: Request<{}, {}, RegisterRequest>,
   res: Response
 ) => {
   const userService = await initAuthController();
   try {
-    const { firstName, lastName, email, password, userType } = req.body;
+    const { firstName, lastName, email, password, userType, role } = req.body;
 
     // Check if user already exists
     const existingUser = await userService.findByEmail(email);
-
     if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Base user data
+    // Generate a unique UID
+    const uid = uuidv4();
+
+    // Common user data
     const baseUserData = {
+      uid,
       email,
       firstName,
       lastName,
       password: hashedPassword,
-      userType,
-      status: "active" as "active" | "pending" | "inactive",
+      role: role || (userType === "organization" ? "org_owner" : "user"),
+      status: "active" as const,
       settings: {
         permissions: ["content_management"],
-        theme: "light" as "light" | "dark",
+        theme: "light" as const,
         notifications: [],
       },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
-    let organizationId, teamId;
-    let organizationData, teamData;
-
-    // Handle organization-specific setup
+    // Handle organization-specific registration
     if (userType === "organization") {
       const { organizationName } = req.body;
+      if (!organizationName) {
+        return res
+          .status(400)
+          .json({ message: "Organization name is required" });
+      }
 
-      // Create user first to get the ID
-      const user = await userService.create({
+      // Create organization user without organization ID initially
+      const orgUser = await userService.create({
         ...baseUserData,
-        role: "org_owner",
-        teamIds: [],
+        userType: "organization",
+        // teamIds: [], // Empty array initially
+        // Will set organizationId after creating the organization
       });
 
       // Create organization
       const organization = await organizationService.create({
         name: organizationName,
-        ownerId: user.uid,
+        ownerId: orgUser.uid,
         type: "business",
         settings: {
-          permissions: ["content_management", "team_management"],
           maxTeams: 10,
           maxUsers: 50,
           features: ["content_management", "team_management", "analytics"],
+          permissions: [""],
         },
       });
-
-      organizationId = organization.id;
 
       // Create default team
       const team = await teamService.create({
         name: "Default Team",
         description: "Default team for organization",
         organizationId: organization.id,
-        memberIds: [user.uid],
+        memberIds: [orgUser.uid],
         settings: {
           permissions: ["content_write", "team_read"],
         },
       });
 
-      teamId = team.id;
-
       // Update user with organization and team IDs
-      await userService.update(user.uid, {
+      const updatedUser = await userService.update(orgUser.uid, {
         organizationId: organization.id,
         teamIds: [team.id],
       });
 
-      // Get updated user data
-      const updatedUser = await userService.findById(user.uid);
+      // Create JWT payload
+      const payload: JwtPayload = {
+        uid: orgUser.uid,
+        email: orgUser.email,
+        userType: "organization",
+      };
 
       // Generate JWT token
       const token = jwt.sign(
-        {
-          id: updatedUser?.uid,
-          uid: user.uid,
-          email,
-        },
+        payload,
         process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
         { expiresIn: "24h" }
       );
 
-      // Get organization and team data
-      organizationData = organization;
-      teamData = team;
+      // Prepare response
+      const finalUser = updatedUser || orgUser;
+      const { password: _, ...userWithoutPassword } = finalUser;
 
-      // Remove password from response
-      let userWithoutPassword;
-      if (updatedUser) {
-        const { password: _, ...rest } = updatedUser;
-        userWithoutPassword = rest;
-      } else {
-        // Fallback to original user if updatedUser is null
-        const { password: _, ...rest } = user;
-        userWithoutPassword = rest;
+      // Send welcome email
+      try {
+        await sendWelcomeEmail({
+          to: email,
+          firstName,
+          lastName,
+          userType: "organization",
+          organizationName,
+        });
+      } catch (emailError) {
+        console.error("Failed to send welcome email:", emailError);
+        // Continue with registration even if email fails
       }
 
       return res.status(201).json({
         token,
-        user: userWithoutPassword,
-        organization: organizationData,
-        team: teamData,
+        user: userWithoutPassword as User,
+        organization,
+        team,
       });
     } else {
-      // Individual user
-      const individualUserData = {
+      // Handle individual user registration
+      const individualUser = await userService.create({
         ...baseUserData,
-        settings: {
-          ...baseUserData.settings,
-          personalPreferences: {
+        userType: "individual",
+        individualSettings: {
+          preferences: {
             defaultContentType: "social_post",
             aiPreferences: {
               tone: "professional",
@@ -214,28 +247,41 @@ export const register = async (
             },
           },
         },
-      };
+      } as Omit<IndividualUser, "uid" | "createdAt" | "updatedAt">);
 
-      // Create individual user
-      const user = await userService.createWithPassword(individualUserData);
+      // Create JWT payload
+      const payload: JwtPayload = {
+        uid: individualUser.uid,
+        email: individualUser.email,
+        userType: "individual",
+      };
 
       // Generate JWT token
       const token = jwt.sign(
-        {
-          id: user.uid,
-          uid: user.uid,
-          email,
-        },
+        payload,
         process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
         { expiresIn: "24h" }
       );
 
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
+      // Remove password from user object
+      const { password: _, ...userWithoutPassword } = individualUser;
+
+      // Send welcome email for individual users
+      try {
+        await sendWelcomeEmail({
+          to: email,
+          firstName,
+          lastName,
+          userType: "individual",
+        });
+      } catch (emailError) {
+        console.error("Failed to send welcome email:", emailError);
+        // Continue with registration even if email fails
+      }
 
       return res.status(201).json({
         token,
-        user: userWithoutPassword,
+        user: userWithoutPassword as User,
       });
     }
   } catch (error) {
@@ -244,6 +290,10 @@ export const register = async (
   }
 };
 
+/**
+ * Me controller
+ * Returns the current authenticated user's information
+ */
 export const me = async (req: Request, res: Response) => {
   const userService = await initAuthController();
   try {
@@ -251,34 +301,43 @@ export const me = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Authentication required" });
     }
 
-    // Use findOne with uid instead of findById to avoid ObjectId conversion issues
-    const user = await userService.findOne({ uid: req.user.uid });
+    const { uid } = req.user;
 
+    // Get user data
+    const user = await userService.findById(uid);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Remove password from response
-    const { password, ...userWithoutPassword } = user;
+    // Remove password from user object
+    const { password: _, ...userWithoutPassword } = user;
 
-    // Get organization data if user is organization type
-    let organizationData;
-    if (user.userType === "organization" && user.organizationId) {
-      try {
-        organizationData = await organizationService.findById(
-          user.organizationId
-        );
-      } catch (error) {
-        console.error("Error fetching organization data:", error);
+    // Prepare response
+    const response: Partial<AuthResponse> = {
+      user: userWithoutPassword as User,
+    };
+
+    // Add organization data for organization users
+    if (isOrganizationUser(user) && user.organizationId) {
+      const organization = await organizationService.findById(
+        user.organizationId
+      );
+      if (organization) {
+        response.organization = organization;
+      }
+
+      // Get the first team if user has any teams
+      if (user.teamIds && user.teamIds.length > 0) {
+        const team = await teamService.findById(user.teamIds[0]);
+        if (team) {
+          response.team = team;
+        }
       }
     }
 
-    res.json({
-      user: userWithoutPassword,
-      ...(organizationData && { organization: organizationData }),
-    });
+    res.json(response);
   } catch (error) {
-    console.error("Me endpoint error:", error);
+    console.error("Error fetching user data:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

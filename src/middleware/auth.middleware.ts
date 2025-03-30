@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { RepositoryFactory } from "../repositories/repository.factory";
+import { JwtPayload } from "../app-types/auth";
 
 // Extend Express Request type to include user
 declare global {
@@ -29,24 +30,25 @@ export const authenticate = async (
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production"
-    ) as any;
+    ) as JwtPayload;
 
     // Get user from database
     const userRepository = await RepositoryFactory.createUserRepository();
+    let user = await userRepository.findOne({ uid: decoded.uid });
 
     // Try to find user using multiple methods
-    let user;
+    // let user;
     try {
       // First try to find by id (most reliable if present)
-      if (decoded.id) {
+      if (decoded.uid) {
         try {
           // Try to find by id directly first
-          user = await userRepository.findOne({ id: decoded.id });
+          user = await userRepository.findOne({ uid: decoded.uid });
 
           // If not found and it looks like a MongoDB ObjectId, try findById
-          if (!user && /^[0-9a-fA-F]{24}$/.test(decoded.id)) {
+          if (!user && /^[0-9a-fA-F]{24}$/.test(decoded.uid)) {
             try {
-              user = await userRepository.findById(decoded.id);
+              user = await userRepository.findById(decoded.uid);
             } catch (error) {
               console.error("Error finding user by ObjectId:", error);
             }

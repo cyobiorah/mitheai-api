@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { MongoDBRepository } from "./mongodb.repository";
-import { Organization } from "../types";
+import { Organization } from "../app-types";
 
 export class OrganizationRepository extends MongoDBRepository<Organization> {
   constructor(db: Db) {

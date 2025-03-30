@@ -2,6 +2,7 @@ import express from "express";
 import { ThreadsService } from "../services/threads.service";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { RepositoryFactory } from "../repositories/repository.factory";
+import { isOrganizationUser } from "../app-types";
 
 const router = express.Router();
 const threadsService = new ThreadsService();
@@ -259,8 +260,11 @@ router.post("/threads/:accountId/post", async (req, res) => {
 
         const hasAccess =
           (account.organizationId &&
+            isOrganizationUser(user) &&
             account.organizationId === user.organizationId) ||
-          (account.teamId && user.teamIds?.includes(account.teamId)) ||
+          (account.teamId &&
+            isOrganizationUser(user) &&
+            user.teamIds?.includes(account.teamId)) ||
           user.role === "super_admin";
 
         if (!hasAccess) {

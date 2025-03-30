@@ -1,7 +1,7 @@
-import { User } from "../types";
 import { RepositoryFactory } from "../repositories/repository.factory";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { User } from "../app-types";
 
 export class UserService {
   private userRepository: any;
@@ -16,7 +16,20 @@ export class UserService {
   }
 
   async findById(id: string): Promise<User | null> {
-    return await this.userRepository.findById(id);
+    // Try to find by uid first, since that's what we store in JWT
+    const userByUid = await this.userRepository.findOne({ uid: id });
+    if (userByUid) {
+      return userByUid;
+    }
+    
+    // Fall back to MongoDB ObjectId lookup if uid not found
+    try {
+      return await this.userRepository.findById(id);
+    } catch (error) {
+      // If ObjectId conversion fails, return null
+      console.error("Error finding user by ID:", error);
+      return null;
+    }
   }
 
   async findByEmail(email: string): Promise<User | null> {

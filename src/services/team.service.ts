@@ -1,5 +1,6 @@
-import { Team, User } from "../types";
+import { Team } from "../types";
 import { RepositoryFactory } from "../repositories/repository.factory";
+import { User } from "../app-types";
 
 export class TeamService {
   private teamRepository: any;

@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { MongoDBRepository } from "./mongodb.repository";
-import { User } from "../types";
+import { User } from "../app-types";
 
 export class UserRepository extends MongoDBRepository<User> {
   constructor(db: Db) {
