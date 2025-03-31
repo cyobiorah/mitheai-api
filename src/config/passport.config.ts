@@ -25,11 +25,11 @@ const callbackUrl = (
 ).replace(/:\d+/, ":3001"); // Force port 3001 for local
 
 // Log OAuth configuration
-console.log("Twitter OAuth Config:", {
-  clientId: process.env.TWITTER_CLIENT_ID,
-  callbackUrl: callbackUrl,
-  environment: process.env.NODE_ENV ?? "development",
-});
+// console.log("Twitter OAuth Config:", {
+//   clientId: process.env.TWITTER_CLIENT_ID,
+//   callbackUrl: callbackUrl,
+//   environment: process.env.NODE_ENV ?? "development",
+// });
 
 passport.serializeUser((user: any, done) => {
   done(null, user);
@@ -248,7 +248,7 @@ const strategy = new OAuth2Strategy(
 const originalAuthenticate = (strategy as any).authenticate;
 (strategy as any).authenticate = function (req: any, options: any) {
   // If this is an authorization request (not a callback)
-  if (req.query.state && !req.query.code) {
+  if (!req.query.code) {
     console.log("Twitter auth request:", {
       url: req.url,
       query: req.query,
@@ -256,35 +256,39 @@ const originalAuthenticate = (strategy as any).authenticate;
       headers: req.headers,
     });
 
-    const state = req.query.state as string;
-    
+    // Get state from query or generate a new one
+    const state = req.query.state || crypto.randomBytes(16).toString("hex");
+
     // Make sure options has an authorizationParams property
     options = options || {};
     options.authorizationParams = options.authorizationParams || {};
-    
-    // Generate code_verifier and code_challenge using crypto for better randomness
-    const codeVerifier = crypto.randomBytes(32)
+
+    // Generate code_verifier according to RFC 7636
+    // Must be between 43-128 chars - we'll use 64 for better compatibility
+    const codeVerifier = crypto
+      .randomBytes(48) // 48 bytes gives us ~64 characters in base64url
       .toString("base64url")
-      .replace(/=/g, "");
+      .substring(0, 64); // Ensure exactly 64 chars
 
-    const base64urlEncode = (buffer: Buffer) =>
-      buffer.toString("base64")
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/, "");
+    // Store the code verifier for this state in both the map and the OAuth2 instance
+    verifierMap.set(state as string, codeVerifier);
+    this._oauth2._pkceVerifier = codeVerifier;
 
-    const codeChallenge = base64urlEncode(
-      crypto.createHash("sha256").update(codeVerifier).digest()
-    );
-
-    // Store the code verifier for this state
-    verifierMap.set(state, codeVerifier);
     console.log(`Stored code verifier for state ${state}:`, codeVerifier);
-    
+
+    // Generate code_challenge according to RFC 7636
+    const codeChallenge = crypto
+      .createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url")
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
     // Set the PKCE parameters
     options.authorizationParams.code_challenge = codeChallenge;
     options.authorizationParams.code_challenge_method = "S256";
-    
+
     // Use the state directly
     options.state = state;
 
@@ -310,25 +314,9 @@ const originalAuthenticate = (strategy as any).authenticate;
 
     // Store the state in the request object so it's available in the verify callback
     req._twitterState = callbackState;
-    
+
     // Store the state in the OAuth2 instance for token exchange
     this._oauth2._state = callbackState;
-    
-    try {
-      // Try to parse the state parameter
-      const stateData = JSON.parse(
-        Buffer.from(callbackState, "base64").toString("utf-8")
-      );
-      console.log("Parsed state data:", stateData);
-
-      // If the state contains a user ID, restore the user object
-      if (stateData.uid) {
-        req.user = { uid: stateData.uid };
-        console.log("Restored user from state parameter:", req.user);
-      }
-    } catch (e) {
-      console.warn("Failed to parse state data:", e);
-    }
   }
 
   // Call the original authenticate method
@@ -340,7 +328,8 @@ const originalAuthenticate = (strategy as any).authenticate;
   store: async function (req: any, callback: any) {
     // The state is already being handled in our authenticate override
     // Just call the callback with the state from the request
-    const state = req.query.state || Math.random().toString(36).substring(2, 15);
+    const state =
+      req.query.state || Math.random().toString(36).substring(2, 15);
     callback(null, state);
   },
   verify: async function (req: any, providedState: string, callback: any) {
@@ -360,28 +349,76 @@ const originalOAuthGetToken = (strategy as any)._oauth2.getOAuthAccessToken;
   // Get the state from the OAuth2 instance or params
   const state = this._state || params.state;
   console.log("Token exchange state:", state);
-  
+
   // Get the code verifier for this state
-  const codeVerifier = verifierMap.get(state);
-  console.log("PKCE Code Verifier for token exchange:", codeVerifier);
-  
+  let codeVerifier = verifierMap.get(state);
+  console.log("PKCE Code Verifier from verifierMap:", codeVerifier);
+
   if (!codeVerifier) {
     console.error("Missing code verifier for state:", state);
-    return callback(new Error("Missing code verifier for token exchange"));
+    // Try to get code verifier from the OAuth2 instance as a fallback
+    if (this._pkceVerifier) {
+      codeVerifier = this._pkceVerifier;
+      console.log(
+        "Using fallback code verifier from OAuth2 instance:",
+        codeVerifier
+      );
+    } else {
+      return callback(new Error("Missing code verifier for token exchange"));
+    }
   }
 
   // Add the code verifier to the params
   params.code_verifier = codeVerifier;
-  
+
   // Set redirect_uri and log params
   params.redirect_uri = callbackUrl;
-  console.log("Token request params:", params);
+  console.log("Token request params:", {
+    ...params,
+    code: code ? `${code.substring(0, 10)}...` : "undefined",
+    code_verifier: codeVerifier
+      ? `${codeVerifier.substring(0, 10)}...`
+      : "undefined",
+  });
   console.log("Expected redirect_uri:", callbackUrl);
-  
+
   // Clean up the map
   verifierMap.delete(state);
 
-  return originalOAuthGetToken.call(this, code, params, callback);
+  // Store the code verifier in the OAuth2 instance as a fallback
+  this._pkceVerifier = codeVerifier;
+
+  // Call the original method with our parameters
+  return originalOAuthGetToken.call(
+    this,
+    code,
+    params,
+    function (
+      err: any,
+      accessToken: string,
+      refreshToken: string,
+      results: any
+    ) {
+      if (err) {
+        console.error("Token exchange error:", err);
+
+        // Log more detailed error information
+        if (err.data) {
+          try {
+            const errorData = JSON.parse(err.data);
+            console.error("Token exchange error details:", errorData);
+          } catch (e) {
+            console.error("Token exchange error raw data:", err.data);
+          }
+        }
+      } else {
+        console.log("Token exchange successful");
+      }
+
+      // Call the original callback
+      callback(err, accessToken, refreshToken, results);
+    }
+  );
 };
 
 // Override the OAuth2Strategy's userProfile method to handle our custom state

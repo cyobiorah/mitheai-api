@@ -25,12 +25,21 @@ export const authenticate = async (
     }
 
     const token = authHeader.split(" ")[1];
+    // console.log("Authenticating with token:", token.substring(0, 15) + "...");
 
     // Verify token
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production"
     ) as JwtPayload;
+
+    // console.log("Decoded token:", {
+    //   uid: decoded.uid,
+    //   email: decoded.email,
+    //   userType: decoded.userType,
+    //   organizationId: decoded.organizationId,
+    //   teamIds: decoded.teamIds
+    // });
 
     // Get user from database
     const userRepository = await RepositoryFactory.createUserRepository();
@@ -44,11 +53,16 @@ export const authenticate = async (
         try {
           // Try to find by id directly first
           user = await userRepository.findOne({ uid: decoded.uid });
+          console.log("User lookup by uid:", user ? "Found" : "Not found");
 
           // If not found and it looks like a MongoDB ObjectId, try findById
           if (!user && /^[0-9a-fA-F]{24}$/.test(decoded.uid)) {
             try {
               user = await userRepository.findById(decoded.uid);
+              console.log(
+                "User lookup by ObjectId:",
+                user ? "Found" : "Not found"
+              );
             } catch (error) {
               console.error("Error finding user by ObjectId:", error);
             }
@@ -61,11 +75,16 @@ export const authenticate = async (
       // If not found by id, try by email
       if (!user && decoded.email) {
         user = await userRepository.findOne({ email: decoded.email });
+        console.log("User lookup by email:", user ? "Found" : "Not found");
       }
 
       // Last resort, try by uid
       if (!user && decoded.uid) {
         user = await userRepository.findOne({ uid: decoded.uid });
+        console.log(
+          "User lookup by uid (last resort):",
+          user ? "Found" : "Not found"
+        );
       }
     } catch (error) {
       console.error("Error finding user:", error);
@@ -100,6 +119,26 @@ export const authenticate = async (
 
 // For backward compatibility with existing routes
 export const authenticateToken = authenticate;
+
+// Add a simple middleware to log all requests
+export const logRequests = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  console.log(
+    `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
+    {
+      headers: {
+        authorization: req.headers.authorization ? "Present" : "Missing",
+        cookie: req.headers.cookie ? "Present" : "Missing",
+      },
+      sessionID: req.sessionID,
+      hasSession: !!req.session,
+    }
+  );
+  next();
+};
 
 // Middleware to check if user has required role
 export const authorize = (roles: string[]) => {
@@ -149,7 +188,11 @@ export const belongsToOrganization = (paramName: string = "organizationId") => {
       return res.status(400).json({ message: "Organization ID is required" });
     }
 
-    if (req.user.organizationId !== organizationId) {
+    // Convert both to strings for comparison
+    const userOrgId = String(req.user.organizationId || "");
+    const targetOrgId = String(organizationId);
+
+    if (userOrgId !== targetOrgId) {
       return res
         .status(403)
         .json({ message: "Access denied to this organization" });
@@ -174,7 +217,21 @@ export const belongsToTeam = (paramName: string = "teamId") => {
 
     const userTeams = req.user.teamIds || [];
 
-    if (!userTeams.includes(teamId)) {
+    // Convert team ID to string for comparison
+    const targetTeamId = String(teamId);
+
+    // Check if any of the user's team IDs match the target team ID
+    const hasTeamAccess = userTeams.some(
+      (userTeamId: string) => String(userTeamId) === targetTeamId
+    );
+
+    console.log("Team access check:", {
+      userTeams: userTeams.map((id: string) => String(id)),
+      targetTeamId,
+      hasAccess: hasTeamAccess,
+    });
+
+    if (!hasTeamAccess) {
       return res.status(403).json({ message: "Access denied to this team" });
     }
 
@@ -195,9 +252,19 @@ export const requireOrgAccess = (paramName: string = "organizationId") => {
       return res.status(400).json({ message: "Organization ID is required" });
     }
 
+    // Convert both to strings for comparison to handle ObjectId vs string
+    const userOrgId = String(req.user.organizationId || "");
+    const targetOrgId = String(organizationId);
+
+    console.log("Organization access check:", {
+      userOrgId,
+      targetOrgId,
+      role: req.user.role,
+      user: req.user,
+    });
+
     // Check if user belongs to organization or is admin
-    const hasAccess =
-      req.user.organizationId === organizationId || req.user.role === "admin";
+    const hasAccess = userOrgId === targetOrgId || req.user.role === "admin";
 
     if (!hasAccess) {
       return res

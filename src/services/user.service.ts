@@ -5,17 +5,50 @@ import { User } from "../app-types";
 
 export class UserService {
   private userRepository: any;
+  private static instance: UserService | null = null;
+  private initialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
 
-  private constructor(userRepository: any) {
-    this.userRepository = userRepository;
+  private constructor() {
+    this.initPromise = this.initialize();
   }
 
+  private async initialize(): Promise<void> {
+    try {
+      this.userRepository = await RepositoryFactory.createUserRepository();
+      this.initialized = true;
+    } catch (error) {
+      console.error("Failed to initialize UserService:", error);
+      throw error;
+    }
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      if (this.initPromise) {
+        await this.initPromise;
+      } else {
+        this.initPromise = this.initialize();
+        await this.initPromise;
+      }
+    }
+  }
+
+  public static getInstance(): UserService {
+    if (!UserService.instance) {
+      UserService.instance = new UserService();
+    }
+    return UserService.instance;
+  }
+
+  // For backward compatibility
   public static async create(): Promise<UserService> {
-    const userRepository = await RepositoryFactory.createUserRepository();
-    return new UserService(userRepository);
+    return UserService.getInstance();
   }
 
   async findById(id: string): Promise<User | null> {
+    await this.ensureInitialized();
+    
     // Try to find by uid first, since that's what we store in JWT
     const userByUid = await this.userRepository.findOne({ uid: id });
     if (userByUid) {
@@ -33,25 +66,31 @@ export class UserService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
+    await this.ensureInitialized();
     return await this.userRepository.findByEmail(email);
   }
 
   async findOne(query: any): Promise<User | null> {
+    await this.ensureInitialized();
     return await this.userRepository.findOne(query);
   }
 
   async findByOrganization(organizationId: string): Promise<User[]> {
+    await this.ensureInitialized();
     return await this.userRepository.findByOrganization(organizationId);
   }
 
   async findByTeam(teamId: string): Promise<User[]> {
+    await this.ensureInitialized();
     return await this.userRepository.findByTeam(teamId);
   }
 
   async create(
     userData: Omit<User, "uid" | "createdAt" | "updatedAt">
   ): Promise<User> {
-    // Create user without password for now
+    await this.ensureInitialized();
+    
+    // Let MongoDB generate the _id automatically
     const newUser = await this.userRepository.create({
       ...userData,
       createdAt: new Date(),
@@ -67,6 +106,7 @@ export class UserService {
     email: string;
     password: string;
   }): Promise<User> {
+    await this.ensureInitialized();
     const { password, ...userDataWithoutPassword } = userData;
 
     // Hash the password
@@ -85,10 +125,12 @@ export class UserService {
   }
 
   async update(id: string, userData: Partial<User>): Promise<User | null> {
+    await this.ensureInitialized();
     return await this.userRepository.update(id, userData);
   }
 
   async delete(id: string): Promise<boolean> {
+    await this.ensureInitialized();
     return await this.userRepository.delete(id);
   }
 
@@ -96,6 +138,7 @@ export class UserService {
     email: string,
     password: string
   ): Promise<{ user: User; token: string } | null> {
+    await this.ensureInitialized();
     const user = await this.userRepository.findByEmail(email);
 
     if (!user?.password) {

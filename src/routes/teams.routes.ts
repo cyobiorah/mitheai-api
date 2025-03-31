@@ -9,37 +9,23 @@ import {
   removeTeamMember,
 } from "../controllers/teams.controller";
 import {
-  authenticateToken,
-  requireOrgAccess,
   belongsToTeam,
+  authenticateToken,
 } from "../middleware/auth.middleware";
 
 const router = express.Router();
 
+router.use(authenticateToken);
+
 // Team routes - all team routes require organization access
-router.post("/", authenticateToken, requireOrgAccess, createTeam);
-router.get(
-  "/organization/:organizationId",
-  authenticateToken,
-  requireOrgAccess,
-  getTeams
-);
-router.get("/:teamId", authenticateToken, belongsToTeam, getTeam);
-router.put("/:teamId", authenticateToken, belongsToTeam, updateTeam);
-router.delete("/:teamId", authenticateToken, belongsToTeam, deleteTeam);
+router.post("/", createTeam);
+router.get("/organization/:organizationId", getTeams);
+router.get("/:teamId", belongsToTeam, getTeam);
+router.put("/:teamId", belongsToTeam, updateTeam);
+router.delete("/:teamId", belongsToTeam, deleteTeam);
 
 // Team member routes - require team access
-router.post(
-  "/:teamId/members/:userId",
-  authenticateToken,
-  belongsToTeam,
-  addTeamMember
-);
-router.delete(
-  "/:teamId/members/:userId",
-  authenticateToken,
-  belongsToTeam,
-  removeTeamMember
-);
+router.post("/:teamId/members/:userId", belongsToTeam, addTeamMember);
+router.delete("/:teamId/members/:userId", belongsToTeam, removeTeamMember);
 
 export default router;

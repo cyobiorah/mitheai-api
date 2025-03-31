@@ -5,31 +5,62 @@ import { User } from "../app-types";
 export class TeamService {
   private teamRepository: any;
   private userRepository: any;
+  private initialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
+  private static instance: TeamService | null = null;
 
-  constructor() {
-    this.initialize();
+  private constructor() {
+    this.initPromise = this.initialize();
   }
 
-  private async initialize() {
-    this.teamRepository = await RepositoryFactory.createTeamRepository();
-    this.userRepository = await RepositoryFactory.createUserRepository();
+  public static getInstance(): TeamService {
+    if (!TeamService.instance) {
+      TeamService.instance = new TeamService();
+    }
+    return TeamService.instance;
+  }
+
+  private async initialize(): Promise<void> {
+    try {
+      this.teamRepository = await RepositoryFactory.createTeamRepository();
+      this.userRepository = await RepositoryFactory.createUserRepository();
+      this.initialized = true;
+    } catch (error) {
+      console.error("Failed to initialize TeamService:", error);
+      throw error;
+    }
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      if (this.initPromise) {
+        await this.initPromise;
+      } else {
+        this.initPromise = this.initialize();
+        await this.initPromise;
+      }
+    }
   }
 
   async findById(id: string): Promise<Team | null> {
+    await this.ensureInitialized();
     return await this.teamRepository.findById(id);
   }
 
   async findByOrganization(organizationId: string): Promise<Team[]> {
+    await this.ensureInitialized();
     return await this.teamRepository.findByOrganization(organizationId);
   }
 
   async findByMember(userId: string): Promise<Team[]> {
+    await this.ensureInitialized();
     return await this.teamRepository.findByMember(userId);
   }
 
   async create(
     teamData: Omit<Team, "id" | "createdAt" | "updatedAt">
   ): Promise<Team> {
+    await this.ensureInitialized();
     // Generate a unique ID for the team
     const newTeam = await this.teamRepository.create({
       ...teamData,
@@ -41,14 +72,17 @@ export class TeamService {
   }
 
   async update(id: string, teamData: Partial<Team>): Promise<Team | null> {
+    await this.ensureInitialized();
     return await this.teamRepository.update(id, teamData);
   }
 
   async delete(id: string): Promise<boolean> {
+    await this.ensureInitialized();
     return await this.teamRepository.delete(id);
   }
 
   async addMember(teamId: string, userId: string): Promise<Team | null> {
+    await this.ensureInitialized();
     // Check if user exists
     const user = await this.userRepository.findById(userId);
     if (!user) {
@@ -71,6 +105,7 @@ export class TeamService {
   }
 
   async removeMember(teamId: string, userId: string): Promise<Team | null> {
+    await this.ensureInitialized();
     // Check if user exists
     const user = await this.userRepository.findById(userId);
     if (!user) {
@@ -93,6 +128,7 @@ export class TeamService {
   }
 
   async getMembers(teamId: string): Promise<User[]> {
+    await this.ensureInitialized();
     const team = await this.teamRepository.findById(teamId);
     if (!team) {
       throw new Error("Team not found");

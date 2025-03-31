@@ -3,7 +3,7 @@ import { OrganizationService } from "../services/organization.service";
 import { Organization } from "../types";
 
 // Initialize services
-const organizationService = new OrganizationService();
+const organizationService = OrganizationService.getInstance();
 
 export const createOrUpdateOrganization = async (
   req: Request,

@@ -14,13 +14,13 @@ import { TeamService } from "../services/team.service";
 import { isOrganizationUser, User, IndividualUser } from "../app-types/index";
 import { sendWelcomeEmail } from "../services/email.service";
 
-// Initialize services
-let userServiceInstance: UserService | null = null;
-const organizationService = new OrganizationService();
-const teamService = new TeamService();
+// Initialize services using the singleton pattern
+const userService = UserService.getInstance();
+const organizationService = OrganizationService.getInstance();
+const teamService = TeamService.getInstance();
 
+// For backward compatibility
 export const initAuthController = async () => {
-  const userService = await UserService.create();
   return userService;
 };
 
@@ -32,7 +32,6 @@ export const login = async (
   req: Request<{}, {}, LoginRequest>,
   res: Response
 ) => {
-  const userService = await initAuthController();
   try {
     const { email, password } = req.body;
 
@@ -57,19 +56,8 @@ export const login = async (
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Create JWT payload
-    const payload: JwtPayload = {
-      uid: user.uid,
-      email: user.email,
-      userType: user.userType,
-    };
-
     // Generate JWT token
-    const token = jwt.sign(
-      payload,
-      process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
-      { expiresIn: "24h" }
-    );
+    const token = generateToken(user);
 
     // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
@@ -89,12 +77,16 @@ export const login = async (
         response.organization = organization;
       }
 
-      // Get the first team if user has any teams
+      // Get all teams the user belongs to
       if (user.teamIds && user.teamIds.length > 0) {
-        const team = await teamService.findById(user.teamIds[0]);
-        if (team) {
-          response.team = team;
-        }
+        const teams = await Promise.all(
+          user.teamIds.map(teamId => teamService.findById(teamId))
+        );
+        // Filter out any null values (in case a team was deleted)
+        response.teams = teams.filter(team => team !== null);
+        console.log(`Found ${response.teams.length} teams for user ${user.email}`);
+      } else {
+        response.teams = [];
       }
     }
 
@@ -113,7 +105,6 @@ export const register = async (
   req: Request<{}, {}, RegisterRequest>,
   res: Response
 ) => {
-  const userService = await initAuthController();
   try {
     const { firstName, lastName, email, password, userType, role } = req.body;
 
@@ -168,7 +159,7 @@ export const register = async (
       // Create organization
       const organization = await organizationService.create({
         name: organizationName,
-        ownerId: orgUser.uid,
+        ownerId: orgUser._id,
         type: "business",
         settings: {
           maxTeams: 10,
@@ -183,31 +174,20 @@ export const register = async (
         name: "Default Team",
         description: "Default team for organization",
         organizationId: organization.id,
-        memberIds: [orgUser.uid],
+        memberIds: [orgUser._id],
         settings: {
           permissions: ["content_write", "team_read"],
         },
       });
 
       // Update user with organization and team IDs
-      const updatedUser = await userService.update(orgUser.uid, {
+      const updatedUser = await userService.update(orgUser._id, {
         organizationId: organization.id,
         teamIds: [team.id],
       });
 
-      // Create JWT payload
-      const payload: JwtPayload = {
-        uid: orgUser.uid,
-        email: orgUser.email,
-        userType: "organization",
-      };
-
       // Generate JWT token
-      const token = jwt.sign(
-        payload,
-        process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
-        { expiresIn: "24h" }
-      );
+      const token = generateToken(updatedUser || orgUser);
 
       // Prepare response
       const finalUser = updatedUser || orgUser;
@@ -249,19 +229,8 @@ export const register = async (
         },
       } as Omit<IndividualUser, "uid" | "createdAt" | "updatedAt">);
 
-      // Create JWT payload
-      const payload: JwtPayload = {
-        uid: individualUser.uid,
-        email: individualUser.email,
-        userType: "individual",
-      };
-
       // Generate JWT token
-      const token = jwt.sign(
-        payload,
-        process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
-        { expiresIn: "24h" }
-      );
+      const token = generateToken(individualUser);
 
       // Remove password from user object
       const { password: _, ...userWithoutPassword } = individualUser;
@@ -295,7 +264,6 @@ export const register = async (
  * Returns the current authenticated user's information
  */
 export const me = async (req: Request, res: Response) => {
-  const userService = await initAuthController();
   try {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required" });
@@ -326,12 +294,17 @@ export const me = async (req: Request, res: Response) => {
         response.organization = organization;
       }
 
-      // Get the first team if user has any teams
+      // Get all teams the user belongs to
       if (user.teamIds && user.teamIds.length > 0) {
-        const team = await teamService.findById(user.teamIds[0]);
-        if (team) {
-          response.team = team;
-        }
+        const teams = await Promise.all(
+          user.teamIds.map(teamId => teamService.findById(teamId))
+        );
+        // Filter out any null values (in case a team was deleted)
+        response.teams = teams.filter(team => team !== null);
+        console.log(`Found ${response.teams.length} teams for user ${user.email}`);
+      } else {
+        response.teams = [];
+        console.log(`No teams found for user ${user.email}`);
       }
     }
 
@@ -340,4 +313,23 @@ export const me = async (req: Request, res: Response) => {
     console.error("Error fetching user data:", error);
     res.status(500).json({ message: "Internal server error" });
   }
+};
+
+// Generate JWT token
+const generateToken = (user: User): string => {
+  const payload: JwtPayload = {
+    uid: user._id.toString(), // Use MongoDB _id converted to string
+    email: user.email,
+    userType: user.userType,
+    // role: user.role || "user",
+  };
+
+  if (isOrganizationUser(user)) {
+    payload.organizationId = user.organizationId;
+    payload.teamIds = user.teamIds ?? [];
+  }
+
+  return jwt.sign(payload, process.env.JWT_SECRET ?? "", {
+    expiresIn: "7d",
+  });
 };

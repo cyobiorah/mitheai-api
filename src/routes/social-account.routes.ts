@@ -9,6 +9,9 @@ import passport from "../config/passport.config";
 import { validateSocialAccountOperation } from "../middleware/social-account.middleware";
 import facebookRoutes from "./facebook.routes";
 import threadsRoutes from "./threads.routes";
+import * as crypto from "crypto";
+import { TwitterService } from "../services/twitter.service";
+import { SocialAccountService } from "../services/social-account.service";
 
 // Extend express-session types
 declare module "express-session" {
@@ -30,6 +33,29 @@ declare module "express-session" {
     };
     skipWelcome?: boolean;
   }
+}
+
+interface TwitterTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  scope?: string;
+  token_type?: string;
+}
+
+interface TwitterUserResponse {
+  data: {
+    id: string;
+    name: string;
+    username: string;
+    profile_image_url?: string;
+    public_metrics?: {
+      followers_count?: number;
+      following_count?: number;
+      tweet_count?: number;
+      listed_count?: number;
+    };
+  };
 }
 
 const router = Router();
@@ -64,72 +90,165 @@ router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
 
     const skipWelcome = req.query.skipWelcome === "true";
 
-    // Store user data in session for non-serverless environments
+    // Generate PKCE code verifier (43-128 chars)
+    const codeVerifier = crypto
+      .randomBytes(64)
+      .toString("base64url")
+      .substring(0, 64);
+
+    // Generate code challenge using SHA-256
+    const codeChallenge = crypto
+      .createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    // Store user data and PKCE info in session
     req.session.user = req.user;
     req.session.skipWelcome = skipWelcome;
+    req.session.codeVerifier = codeVerifier;
 
-    // Generate a secure state parameter with encoded user data
-    const userState = Buffer.from(
-      JSON.stringify({
-        uid: req.user.uid,
-        skipWelcome: skipWelcome,
-        timestamp: Date.now(),
-      })
-    ).toString("base64");
+    // Generate a random state string for CSRF protection
+    const randomState = crypto.randomBytes(16).toString("hex");
 
+    // Create user data object to encode in state
+    const userData = {
+      uid: req.user.uid,
+      email: req.user.email,
+      organizationId: req.user.organizationId,
+      currentTeamId: req.user.currentTeamId,
+      skipWelcome,
+      timestamp: Date.now(),
+      codeVerifier, // Include code verifier in the state
+    };
+
+    // Encode user data as base64
+    const encodedUserData = Buffer.from(JSON.stringify(userData)).toString(
+      "base64"
+    );
+
+    // Force session save and wait for it to complete
     req.session.save((err: any) => {
       if (err) {
         console.error("Session save error:", err);
-        // Continue anyway since we'll use the state parameter
+        return res
+          .status(500)
+          .json({ error: "Session error", details: err.message });
       }
 
-      // Return the full URL with state parameter
-      const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-      res.send(
-        `${baseUrl}/api/social-accounts/twitter/auth?state=${encodeURIComponent(
-          userState
-        )}`
+      console.log("Session saved successfully:", {
+        sessionID: req.sessionID,
+        hasUser: !!req.session.user,
+        codeVerifier: codeVerifier.substring(0, 10) + "...",
+        codeChallenge: codeChallenge.substring(0, 10) + "...",
+      });
+
+      // Build the authorization URL manually with all required parameters
+      const authUrl = new URL("https://twitter.com/i/oauth2/authorize");
+      authUrl.searchParams.append("response_type", "code");
+      authUrl.searchParams.append("client_id", process.env.TWITTER_CLIENT_ID!);
+      authUrl.searchParams.append(
+        "redirect_uri",
+        process.env.TWITTER_CALLBACK_URL ||
+          process.env.API_URL + "/api/social-accounts/twitter/callback"
       );
+      authUrl.searchParams.append(
+        "scope",
+        "tweet.read tweet.write users.read offline.access"
+      );
+      authUrl.searchParams.append("state", randomState);
+      authUrl.searchParams.append("code_challenge", codeChallenge);
+      authUrl.searchParams.append("code_challenge_method", "S256");
+      authUrl.searchParams.append("user_data", encodedUserData);
+
+      console.log("Generated auth URL with PKCE:", {
+        url: authUrl.toString(),
+        redirect_uri: authUrl.searchParams.get("redirect_uri"),
+        code_challenge:
+          authUrl.searchParams.get("code_challenge")?.substring(0, 10) + "...",
+        code_challenge_method: authUrl.searchParams.get(
+          "code_challenge_method"
+        ),
+      });
+
+      res.send(authUrl.toString());
     });
   } catch (error) {
     console.error("Error in direct-auth:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({
+      error: "Internal server error",
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 });
 
 // Update the auth route to use state parameter if session is missing
 router.get(
   "/twitter/auth",
-  (req, res, next) => {
-    // Check if we have user data in session first (works in local)
+  (req: any, res, next) => {
+    // Check if we have user data in session
     if (req.session.user) {
+      console.log("Session found for Twitter auth:", {
+        user: req.session.user,
+        skipWelcome: req.session.skipWelcome,
+      });
       return next();
     }
 
-    // For serverless: check for state parameter
-    const { state } = req.query;
-    if (!state) {
-      return res.status(401).json({ error: "No authentication state found" });
+    // For serverless: check for state parameter and user_data
+    const { state, user_data } = req.query;
+    if (!state || !user_data) {
+      console.error("No state or user_data parameter found in request:", {
+        query: req.query,
+        cookies: req.headers.cookie,
+      });
+      return res
+        .status(400)
+        .json({ error: "Missing state or user_data parameter" });
     }
 
     try {
-      // Decode and validate the state parameter
+      // Decode and validate the user_data parameter
       const userData = JSON.parse(
-        Buffer.from(state as string, "base64").toString()
+        Buffer.from(user_data as string, "base64").toString()
       );
 
       // Check for timestamp expiration (10 minute window)
-      if (Date.now() - userData.timestamp > 10 * 60 * 1000) {
-        return res.status(401).json({ error: "Authentication state expired" });
+      const now = Date.now();
+      const timestamp = userData.timestamp || 0;
+      if (now - timestamp > 10 * 60 * 1000) {
+        return res.status(401).json({ error: "Authentication link expired" });
       }
 
-      // Recreate the session from state
-      req.session.user = { uid: userData.uid };
+      // Restore user data to session
+      req.session.user = {
+        uid: userData.uid,
+        email: userData.email,
+      };
       req.session.skipWelcome = userData.skipWelcome;
-      next();
+
+      // Store the state in the session for the callback
+      req.session._twitterState = state;
+
+      console.log("Restored session from user_data parameter:", {
+        user: req.session.user,
+        skipWelcome: req.session.skipWelcome,
+        state,
+      });
+
+      // Save the session before continuing
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Session error" });
+        }
+        next();
+      });
     } catch (error) {
-      console.error("Error parsing state parameter:", error);
-      return res.status(401).json({ error: "Invalid authentication state" });
+      console.error("Failed to parse user_data parameter:", error);
+      return res.status(400).json({ error: "Invalid user_data parameter" });
     }
   },
   passport.authenticate("oauth2", {
@@ -137,102 +256,336 @@ router.get(
   })
 );
 
-// Twitter callback route with duplicate account checking
-router.get(
-  "/twitter/callback",
-  (req, res, next) => {
-    // Log all request details for debugging
+// Twitter callback route
+router.get("/twitter/callback", async (req: any, res) => {
+  try {
     console.log("Twitter callback received:", {
-      url: req.url,
       query: req.query,
-      session: req.session,
-      headers: req.headers,
+      session: req.session
+        ? {
+            id: req.sessionID,
+            hasUser: !!req.session.user,
+            hasCodeVerifier: !!req.session.codeVerifier,
+          }
+        : "No session",
+      cookies: req.headers.cookie ? "Present" : "None",
     });
 
-    // Add error handling for the OAuth callback
-    passport.authenticate("oauth2", (err: any, user: any, info: any) => {
-      console.log("Twitter OAuth callback result:", {
-        error: err ? { message: err.message, code: err.code } : null,
-        user: user ? "Present" : "Missing",
-        info,
-        session: req.session,
-        query: req.query,
-      });
+    // Check for error in the callback
+    if (req.query.error) {
+      console.error("Twitter OAuth error:", req.query.error);
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          req.query.error_description || "Authentication failed"
+        )}`
+      );
+    }
 
-      if (err) {
-        console.error("OAuth authentication error:", err);
+    // Check for authorization code
+    const { code, state, user_data } = req.query;
+    if (!code) {
+      console.error("No authorization code in callback");
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          "No authorization code received"
+        )}`
+      );
+    }
 
-        // Check for specific error types
-        if (err.code === "account_already_connected") {
-          // Redirect with specific error for duplicate accounts
-          const frontendUrl =
-            process.env.FRONTEND_URL ??
-            "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
+    // Get code verifier from session or user_data
+    let codeVerifier = req.session?.codeVerifier;
+    let userId = req.session?.user?.uid;
+    let organizationId = req.session?.user?.organizationId;
+    let currentTeamId = req.session?.user?.currentTeamId;
+    let skipWelcome = req.session?.skipWelcome;
+
+    // If no session data, try to get from user_data parameter
+    if ((!codeVerifier || !userId) && user_data) {
+      try {
+        const userData = JSON.parse(
+          Buffer.from(user_data as string, "base64").toString()
+        );
+        console.log("Parsed user data:", userData);
+
+        // Check for timestamp expiration (10 minute window)
+        if (
+          userData.timestamp &&
+          Date.now() - userData.timestamp > 10 * 60 * 1000
+        ) {
           return res.redirect(
-            `${frontendUrl}/settings?error=duplicate_account&message=${encodeURIComponent(
-              err.message
+            `${
+              process.env.FRONTEND_URL
+            }/settings?error=true&message=${encodeURIComponent(
+              "Authentication link expired"
             )}`
           );
         }
 
-        // Handle other errors
-        const frontendUrl =
-          process.env.FRONTEND_URL ??
-          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
+        codeVerifier = userData.codeVerifier;
+        userId = userData.uid;
+        organizationId = userData.organizationId;
+        currentTeamId = userData.currentTeamId;
+        skipWelcome = userData.skipWelcome;
+
+        // Restore session if possible
+        if (userId && !req.session.user) {
+          req.session.user = {
+            uid: userId,
+            email: userData.email,
+            organizationId,
+            currentTeamId,
+          };
+          req.session.skipWelcome = skipWelcome;
+          req.session.codeVerifier = codeVerifier;
+
+          // Save the session
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err: any) => {
+              if (err) {
+                console.error("Error saving session:", err);
+                reject(err);
+              } else {
+                resolve();
+              }
+            });
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing user_data:", error);
+      }
+    }
+
+    // Verify we have the necessary data
+    if (!codeVerifier) {
+      console.error("No code verifier found in session or user_data");
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          "Authentication failed: No code verifier found"
+        )}`
+      );
+    }
+
+    if (!userId) {
+      console.error("No user ID found in session or user_data");
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          "Authentication failed: User not found"
+        )}`
+      );
+    }
+
+    console.log("Proceeding with token exchange:", {
+      code: (code as string).substring(0, 10) + "...",
+      codeVerifier: codeVerifier.substring(0, 10) + "...",
+      redirect_uri:
+        process.env.TWITTER_CALLBACK_URL ||
+        "http://localhost:3001/api/social-accounts/twitter/callback",
+    });
+
+    // Exchange the authorization code for an access token
+    const tokenResponse = await fetch(
+      "https://api.twitter.com/2/oauth2/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${Buffer.from(
+            `${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`
+          ).toString("base64")}`,
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code as string,
+          redirect_uri:
+            process.env.TWITTER_CALLBACK_URL ||
+            "http://localhost:3001/api/social-accounts/twitter/callback",
+          code_verifier: codeVerifier,
+        }).toString(),
+      }
+    );
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error("Token exchange failed:", {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        body: errorText,
+      });
+
+      try {
+        const errorData = JSON.parse(errorText);
+        console.error("Token exchange error details:", errorData);
+      } catch (e) {
+        // If it's not JSON, just log the raw text
+      }
+
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          `Token exchange failed: ${tokenResponse.status} ${tokenResponse.statusText}`
+        )}`
+      );
+    }
+
+    const tokenData = (await tokenResponse.json()) as TwitterTokenResponse;
+    console.log("Token exchange successful:", {
+      accessToken: tokenData.access_token
+        ? tokenData.access_token.substring(0, 10) + "..."
+        : "none",
+      refreshToken: tokenData.refresh_token
+        ? tokenData.refresh_token.substring(0, 10) + "..."
+        : "none",
+    });
+
+    // Get user profile from Twitter API
+    const profileResponse = await fetch(
+      "https://api.twitter.com/2/users/me?user.fields=username,name,profile_image_url,public_metrics",
+      {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+          "User-Agent": "MitheAI/1.0",
+        },
+      }
+    );
+
+    if (!profileResponse.ok) {
+      console.error("Failed to fetch user profile:", {
+        status: profileResponse.status,
+        statusText: profileResponse.statusText,
+      });
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          "Failed to fetch Twitter profile"
+        )}`
+      );
+    }
+
+    const profileData = (await profileResponse.json()) as TwitterUserResponse;
+    console.log("Twitter user profile:", profileData);
+
+    // Create or update the social account
+    try {
+      // We need to use the controller's instance since it's already initialized
+      const twitterService = controller.getTwitterService();
+      
+      if (!twitterService) {
+        throw new Error("Failed to get TwitterService instance");
+      }
+      
+      const account = await twitterService.createSocialAccount(
+        userId,
+        profileData.data,
+        tokenData.access_token,
+        tokenData.refresh_token ?? "",
+        organizationId,
+        currentTeamId
+      );
+
+      // Post welcome tweet if needed
+      if (!skipWelcome && !account.welcomeTweetSent) {
+        try {
+          console.log("Posting welcome tweet...");
+          await twitterService.postWelcomeTweet(
+            account.id,
+            profileData.data.name
+          );
+
+          // Use the controller's social account service
+          const socialAccountService = controller.getSocialAccountService();
+          if (!socialAccountService) {
+            throw new Error("Failed to get SocialAccountService instance");
+          }
+          
+          // Mark that we've sent the welcome tweet
+          await socialAccountService.update(account.id, {
+            welcomeTweetSent: true,
+          });
+
+          console.log("Welcome tweet posted successfully");
+        } catch (tweetError: any) {
+          // Handle duplicate content errors
+          if (
+            tweetError.message &&
+            (tweetError.message.includes("duplicate content") ||
+              tweetError.message.includes("duplicate status") ||
+              tweetError.message.includes("already tweeted"))
+          ) {
+            console.log("Welcome tweet already posted (duplicate content)");
+
+            // Still mark the account as having sent a welcome tweet
+            const socialAccountService = controller.getSocialAccountService();
+            if (socialAccountService) {
+              await socialAccountService.update(account.id, {
+                welcomeTweetSent: true,
+              });
+            }
+          } else {
+            console.error("Failed to post welcome tweet:", tweetError);
+          }
+        }
+      }
+
+      // Clear the code verifier from session as it's no longer needed
+      if (req.session) {
+        req.session.codeVerifier = undefined;
+        await new Promise<void>((resolve) => {
+          req.session.save(() => resolve());
+        });
+      }
+
+      // Redirect to settings page with success message
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?success=true&message=${encodeURIComponent(
+          "Twitter account connected successfully"
+        )}`
+      );
+    } catch (error: any) {
+      console.error("Failed to create social account:", error);
+
+      // Check for specific error types
+      if (error.code === "account_already_connected") {
+        // Redirect with specific error for duplicate accounts
         return res.redirect(
-          `${frontendUrl}/settings?error=true&message=${encodeURIComponent(
-            err.message || "Authentication failed"
+          `${
+            process.env.FRONTEND_URL
+          }/settings?error=duplicate_account&message=${encodeURIComponent(
+            error.message
           )}`
         );
       }
 
-      if (!user) {
-        const frontendUrl =
-          process.env.FRONTEND_URL ??
-          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
-        return res.redirect(
-          `${frontendUrl}/settings?error=true&message=No user data received`
-        );
-      }
-
-      // For serverless environments, try to get user data from state parameter
-      if (!req.user && req.query.state) {
-        try {
-          const stateData = JSON.parse(
-            Buffer.from(req.query.state as string, "base64").toString()
-          );
-          if (stateData.uid) {
-            // Recreate user object from state
-            req.user = { uid: stateData.uid };
-            console.log("Restored user from state parameter:", req.user);
-          }
-        } catch (error) {
-          console.error("Failed to parse state parameter:", error);
-        }
-      }
-
-      // Authentication successful, continue
-      req.logIn(user, (loginErr) => {
-        if (loginErr) {
-          console.error("Login error:", loginErr);
-          const frontendUrl =
-            process.env.FRONTEND_URL ??
-            "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
-          return res.redirect(
-            `${frontendUrl}/settings?error=true&message=Login failed`
-          );
-        }
-
-        // Success - redirect to settings page
-        const frontendUrl =
-          process.env.FRONTEND_URL ??
-          "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app";
-        return res.redirect(`${frontendUrl}/settings?success=true`);
-      });
-    })(req, res, next);
-  },
-  controller.handleTwitterCallback.bind(controller)
-);
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=true&message=${encodeURIComponent(
+          `Failed to create social account: ${error.message}`
+        )}`
+      );
+    }
+  } catch (error: any) {
+    console.error("Twitter callback error:", error);
+    return res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/settings?error=true&message=${encodeURIComponent(
+        `Authentication error: ${error.message}`
+      )}`
+    );
+  }
+});
 
 // Facebook direct auth route similar to Twitter
 router.get("/facebook/direct-auth", authenticateToken, (req: any, res) => {
@@ -265,12 +618,10 @@ router.get("/facebook/direct-auth", authenticateToken, (req: any, res) => {
 //     if (!req.user?.uid) {
 //       return res.status(401).json({ error: "Unauthorized" });
 //     }
-
 //     const { accountId } = req.params;
 //     if (!accountId) {
 //       return res.status(400).json({ error: "Account ID is required" });
 //     }
-
 //     // Call the updated disconnectAccount method with account ID
 //     const result = await controller.disconnectSocialAccount(req.user.uid, accountId);
 //     res.json(result);
@@ -289,19 +640,19 @@ router.post("/:platform/disconnect", authenticateToken, async (req, res) => {
     if (!req.user?.uid) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-
     // For backward compatibility - get the account ID from the request body
     const { accountId } = req.body;
-
     if (!accountId) {
       return res.status(400).json({
         error: "Account ID is required",
         message: "Please provide an account ID to disconnect",
       });
     }
-
     // Call the updated disconnectAccount method with account ID
-    const result = await controller.disconnectSocialAccount(req.user.uid, accountId);
+    const result = await controller.disconnectSocialAccount(
+      req.user.uid,
+      accountId
+    );
     res.json(result);
   } catch (error: any) {
     console.error("Error disconnecting account:", error);

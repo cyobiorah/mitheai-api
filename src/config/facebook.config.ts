@@ -31,7 +31,7 @@ const callbackUrl =
     ? `${process.env.API_URL}/api/social-accounts/facebook/callback`
     : "http://localhost:3001/api/social-accounts/facebook/callback";
 
-console.log("Facebook callback URL:", callbackUrl);
+// console.log("Facebook callback URL:", callbackUrl);
 
 passport.serializeUser((user: any, done) => {
   done(null, user);

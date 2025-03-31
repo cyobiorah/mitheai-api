@@ -8,7 +8,7 @@ import { sendInvitationEmail } from "../services/email.service";
 
 // Initialize services
 // const userService = new UserService();
-const organizationService = new OrganizationService();
+const organizationService = OrganizationService.getInstance();
 const invitationService = new InvitationService();
 
 export const getUsers = async (req: Request, res: Response) => {

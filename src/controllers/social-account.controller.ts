@@ -438,4 +438,13 @@ export class SocialAccountController {
       });
     }
   }
+
+  // Getter methods to expose services
+  getTwitterService(): TwitterService {
+    return this.twitterService;
+  }
+
+  getSocialAccountService(): SocialAccountService {
+    return this.socialAccountService;
+  }
 }

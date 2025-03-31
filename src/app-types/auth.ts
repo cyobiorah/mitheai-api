@@ -56,8 +56,8 @@ export type IndividualRegisterRequest = z.infer<
 export interface AuthResponse {
   token: string;
   user: User;
-  organization?: Organization; // Only for organization users
-  team?: Team; // Only for organization users
+  organization?: Organization;
+  teams?: Team[];
 }
 
 // JWT Payload structure
@@ -65,6 +65,9 @@ export interface JwtPayload {
   uid: string; // Primary user identifier
   email: string; // User's email
   userType: "individual" | "organization"; // User type
+  organizationId?: string; // Organization ID for organization users
+  teamIds?: string[]; // Team IDs for organization users
+  currentTeamId?: string; // Current team ID for organization users
   iat?: number; // Issued at timestamp
   exp?: number; // Expiration timestamp
 }

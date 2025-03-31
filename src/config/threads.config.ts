@@ -13,11 +13,11 @@ const callbackUrl =
       }/api/social-accounts/threads/callback`;
 
 // Debug information
-console.log("Threads (via Instagram) OAuth configuration:", {
-  appId: process.env.THREADS_APP_ID,
-  callbackUrl,
-  hasSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
-});
+// console.log("Threads (via Instagram) OAuth configuration:", {
+//   appId: process.env.THREADS_APP_ID,
+//   callbackUrl,
+//   hasSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
+// });
 
 /*
  * According to Meta documentation:

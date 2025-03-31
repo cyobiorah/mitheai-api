@@ -4,9 +4,10 @@ import morgan from "morgan";
 import helmet from "helmet";
 import compression from "compression";
 import session from "express-session";
+import connectMongoDBSession from "connect-mongodb-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
-import { authenticateToken } from "./middleware/auth.middleware";
+import { authenticateToken, logRequests } from "./middleware/auth.middleware";
 import passport from "./config/passport.config";
 
 import authRoutes from "./routes/auth.routes";
@@ -18,13 +19,10 @@ import collectionsRouter from "./routes/collections.routes";
 import analysisRouter from "./routes/analysis.routes";
 import socialAccountRouter from "./routes/social-account.routes";
 import analyticsRouter from "./routes/analytics.routes";
-// import { initAuthController } from "./controllers/auth.controller";
 
 config();
 
 const app = express();
-
-// initAuthController();
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -65,31 +63,50 @@ app.use(
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Time"],
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })
 );
 
+app.use(logRequests);
+
 app.use(compression());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session configuration
+// Create MongoDB session store
+const MongoDBStore = connectMongoDBSession(session);
+const store = new MongoDBStore({
+  uri: process.env.MONGODB_URI ?? "mongodb://localhost:27017/mitheai",
+  collection: "sessions",
+  expires: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
+  connectionOptions: {
+    serverSelectionTimeoutMS: 10000,
+  },
+});
+
+// Handle store errors
+store.on("error", function (error) {
+  console.error("Session store error:", error);
+});
+
+// Configure session middleware
 app.use(
   session({
-    secret: process.env.SESSION_SECRET ?? "",
+    secret: process.env.SESSION_SECRET ?? "your-secret-key-change-this",
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Only use secure in production
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // For cross-site requests in production
+    },
+    store: store,
     resave: false,
     saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: "lax",
-    },
-    name: "mitheai.sid",
+    name: "mitheai.sid", // Custom name for the session cookie
   })
 );
 

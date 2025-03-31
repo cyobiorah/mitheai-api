@@ -96,6 +96,15 @@ const sampleData = {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      name: "Marketing Team",
+      settings: {
+        permissions: ["content_write", "team_read", "analytics_view"],
+      },
+      memberIds: [], // Will be populated after users are created
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ],
 };
 
@@ -137,15 +146,19 @@ async function reseedMongoDB() {
     const organizationId = orgResult.insertedId;
     console.log(`Created organization with ID: ${organizationId}`);
 
-    // Create team with organization reference
-    const team = {
-      ...sampleData.teams[0],
-      organizationId,
-      memberIds: [],
-    };
-    const teamResult = await db.collection("teams").insertOne(team);
-    const teamId = teamResult.insertedId;
-    console.log(`Created team with ID: ${teamId}`);
+    // Create teams with organization reference
+    const teamIds: any[] = [];
+    for (const teamData of sampleData.teams) {
+      const team = {
+        ...teamData,
+        organizationId,
+        memberIds: [],
+      };
+      const teamResult = await db.collection("teams").insertOne(team);
+      const teamId = teamResult.insertedId;
+      teamIds.push(teamId);
+      console.log(`Created team "${team.name}" with ID: ${teamId}`);
+    }
 
     // Create users with hashed passwords
     const userPromises = sampleData.users.map(async (user) => {
@@ -160,11 +173,12 @@ async function reseedMongoDB() {
       // Only add organization and team references for organization users
       if (user.userType === "organization") {
         userWithRefs.organizationId = organizationId.toString();
-        userWithRefs.teamIds = [teamId.toString()];
+        userWithRefs.teamIds = teamIds.map((id) => id.toString()); // Assign to all teams
 
-        // Update organization settings with default team
+        // Update organization settings with default team (first team)
         if (userWithRefs.organizationSettings) {
-          userWithRefs.organizationSettings.defaultTeamId = teamId.toString();
+          userWithRefs.organizationSettings.defaultTeamId =
+            teamIds[0].toString();
         }
       }
 
@@ -172,24 +186,29 @@ async function reseedMongoDB() {
       const userId = result.insertedId;
       console.log(`Created user: ${user.email} with ID: ${userId}`);
 
-      // Only add organization users to the team
+      // Only add organization users to the teams
       if (user.userType === "organization") {
-        // Get current team to access existing memberIds
-        const currentTeam = await db
-          .collection("teams")
-          .findOne({ _id: teamId });
-        const currentMemberIds = currentTeam?.memberIds || [];
+        // Add user to all teams
+        for (const teamId of teamIds) {
+          // Get current team to access existing memberIds
+          const currentTeam = await db
+            .collection("teams")
+            .findOne({ _id: teamId });
+          const currentMemberIds = currentTeam?.memberIds || [];
 
-        // Add the new userId to the array
-        const updatedMemberIds = [...currentMemberIds, userId.toString()];
+          // Add the new userId to the array
+          const updatedMemberIds = [...currentMemberIds, userId.toString()];
 
-        // Add user to team members
-        await db
-          .collection("teams")
-          .updateOne(
-            { _id: teamId },
-            { $set: { memberIds: updatedMemberIds } }
-          );
+          // Add user to team members
+          await db
+            .collection("teams")
+            .updateOne(
+              { _id: teamId },
+              { $set: { memberIds: updatedMemberIds } }
+            );
+
+          console.log(`Added user ${userId} to team ${teamId}`);
+        }
       }
 
       return {
