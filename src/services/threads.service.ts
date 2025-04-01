@@ -87,8 +87,9 @@ export class ThreadsService {
         redirectUri,
       });
 
+      // Try using the Facebook Graph API endpoint instead of the Threads endpoint
       const response = await axios.post(
-        "https://threads.net/oauth/access_token",
+        "https://graph.facebook.com/v18.0/oauth/access_token",
         params,
         {
           headers: {
@@ -100,6 +101,7 @@ export class ThreadsService {
       console.log("Threads token exchange response:", {
         status: response.status,
         hasAccessToken: !!response.data.access_token,
+        data: response.data,
       });
 
       // Return the access token
@@ -109,6 +111,14 @@ export class ThreadsService {
         "Error exchanging code for Threads token:",
         error.response?.data || error.message
       );
+      
+      // Log more detailed error information
+      if (error.response) {
+        console.error("Response status:", error.response.status);
+        console.error("Response headers:", error.response.headers);
+        console.error("Response data:", error.response.data);
+      }
+      
       return null;
     }
   }
