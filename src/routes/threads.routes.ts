@@ -111,9 +111,8 @@ router.get("/threads/connect", async (req, res) => {
     );
     threadsAuthUrl.searchParams.append(
       "redirect_uri",
-      process.env.NODE_ENV === "production"
-        ? `${process.env.API_URL}/api/social-accounts/threads/callback`
-        : "https://localhost:3001/api/social-accounts/threads/callback"
+      process.env.THREADS_CALLBACK_URL ??
+        "http://localhost:3001/api/social-accounts/threads/callback"
     );
     threadsAuthUrl.searchParams.append("response_type", "code");
     threadsAuthUrl.searchParams.append(

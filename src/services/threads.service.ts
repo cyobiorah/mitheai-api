@@ -71,13 +71,7 @@ export class ThreadsService {
   async exchangeCodeForToken(code: string): Promise<string | null> {
     try {
       // Prepare the token exchange request for Threads
-      const redirectUri =
-        process.env.NODE_ENV === "production"
-          ? `${process.env.API_URL}/api/social-accounts/threads/callback`
-          : `${
-              process.env.API_URL ??
-              "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app"
-            }/api/social-accounts/threads/callback`;
+      const redirectUri = process.env.THREADS_CALLBACK_URL ?? "http://localhost:3001/api/social-accounts/threads/callback";
 
       const params = new URLSearchParams();
       params.append("client_id", process.env.THREADS_APP_ID ?? "");
