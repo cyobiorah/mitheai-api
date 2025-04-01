@@ -3,29 +3,44 @@ import { ThreadsService } from "../services/threads.service";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { RepositoryFactory } from "../repositories/repository.factory";
 import { isOrganizationUser } from "../app-types";
+import * as crypto from "crypto";
+import redisService from "../services/redis.service";
 
 const router = express.Router();
 const threadsService = new ThreadsService();
 
 // Direct auth route for Threads
-router.get("/threads/direct-auth", authenticateToken, (req: any, res) => {
+router.get("/threads/direct-auth", authenticateToken, async (req: any, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Store user data in session
-    req.session.user = req.user;
-    req.session.save((err: any) => {
-      if (err) {
-        console.error("Session save error:", err);
-        return res.status(500).json({ error: "Session error" });
-      }
+    // Generate a unique state ID
+    const stateId = crypto.randomBytes(16).toString("hex");
 
-      // Return the full URL
-      const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-      res.send(`${baseUrl}/api/social-accounts/threads/connect`);
-    });
+    // Create state data object
+    const stateData = {
+      uid: req.user.uid,
+      email: req.user.email,
+      organizationId: req.user.organizationId,
+      currentTeamId: req.user.currentTeamId,
+      timestamp: Date.now(),
+    };
+
+    // Store in Redis with 10 minute expiration
+    await redisService.set(`threads:${stateId}`, stateData, 600);
+
+    // Return the full URL with state parameter
+    const baseUrl = process.env.API_URL ?? "http://localhost:3001";
+    const authUrl = `${baseUrl}/api/social-accounts/threads/connect?state=${stateId}`;
+
+    console.log(
+      `Threads direct-auth: Generated state ID ${stateId} for user ${req.user.uid}`
+    );
+    console.log(`Threads direct-auth: Redirecting to ${authUrl}`);
+
+    res.send(authUrl);
   } catch (error) {
     console.error("Error in Threads direct-auth:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -37,146 +52,216 @@ router.get("/threads/direct-auth", authenticateToken, (req: any, res) => {
  * According to Meta documentation, Threads API is accessed through Threads OAuth:
  * https://developers.facebook.com/docs/threads/get-started
  */
-router.get("/threads/connect", (req, res) => {
-  // Store the user ID in the session for the callback
-  const userId = req.session?.user?.uid;
+router.get("/threads/connect", async (req, res) => {
+  console.log("Threads connect request:", {
+    query: req.query,
+    headers: {
+      authorization: req.headers.authorization ? "Present" : "Missing",
+      cookie: req.headers.cookie ? "Present" : "Missing",
+    },
+    sessionID: req.sessionID,
+    hasSession: !!req.session,
+  });
 
-  if (!userId) {
-    console.error("No user ID found in session for Threads connect");
+  // Check for state parameter
+  const { state } = req.query;
+
+  if (!state) {
+    console.error("No state parameter found in Threads connect request");
     return res.redirect(
-      `${process.env.FRONTEND_URL}/settings?error=true&message=Authentication required`
+      `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+        "Missing state parameter"
+      )}`
     );
   }
 
-  // Set up Threads OAuth URL with proper scopes
-  const threadsAuthUrl = new URL("https://threads.net/oauth/authorize");
-  threadsAuthUrl.searchParams.append(
-    "client_id",
-    process.env.THREADS_APP_ID ?? ""
-  );
-  threadsAuthUrl.searchParams.append(
-    "redirect_uri",
-    process.env.NODE_ENV === "production"
-      ? `${process.env.API_URL}/api/social-accounts/threads/callback`
-      : "https://localhost:3001/api/social-accounts/threads/callback"
-  );
-  threadsAuthUrl.searchParams.append("response_type", "code");
-  threadsAuthUrl.searchParams.append(
-    "scope",
-    "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
-  );
-  threadsAuthUrl.searchParams.append("state", userId);
+  try {
+    // Retrieve state data from Redis
+    const stateData = await redisService.get(`threads:${state as string}`);
 
-  console.log("Redirecting to Threads OAuth:", threadsAuthUrl.toString());
-  res.redirect(threadsAuthUrl.toString());
+    console.log(
+      `Threads connect: Retrieved state data for state ${state}:`,
+      stateData
+    );
+
+    if (!stateData) {
+      console.error("No state data found in Redis for Threads connect");
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          "Invalid or expired state"
+        )}`
+      );
+    }
+
+    // Check for timestamp expiration (10 minute window)
+    if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
+      await redisService.delete(`threads:${state as string}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          "Authentication link expired"
+        )}`
+      );
+    }
+
+    // Set up Threads OAuth URL with proper scopes
+    const threadsAuthUrl = new URL("https://threads.net/oauth/authorize");
+    threadsAuthUrl.searchParams.append(
+      "client_id",
+      process.env.THREADS_APP_ID ?? ""
+    );
+    threadsAuthUrl.searchParams.append(
+      "redirect_uri",
+      process.env.NODE_ENV === "production"
+        ? `${process.env.API_URL}/api/social-accounts/threads/callback`
+        : "https://localhost:3001/api/social-accounts/threads/callback"
+    );
+    threadsAuthUrl.searchParams.append("response_type", "code");
+    threadsAuthUrl.searchParams.append(
+      "scope",
+      "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
+    );
+    threadsAuthUrl.searchParams.append("state", state as string);
+
+    console.log("Redirecting to Threads OAuth:", threadsAuthUrl.toString());
+    res.redirect(threadsAuthUrl.toString());
+  } catch (error) {
+    console.error("Error in Threads connect:", error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+        "Internal server error"
+      )}`
+    );
+  }
 });
 
 /**
- * Threads callback handler for Threads OAuth
- * Processes the Threads OAuth callback and creates a Threads social account
- * https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions
+ * Threads callback - handles the OAuth callback from Threads
  */
 router.get("/threads/callback", async (req, res) => {
   try {
     const { code, state, error, error_description } = req.query;
 
     console.log("Threads callback received:", {
-      hasCode: !!code,
-      state,
-      error,
-      error_description,
+      query: req.query,
+      headers: {
+        authorization: req.headers.authorization ? "Present" : "Missing",
+        cookie: req.headers.cookie ? "Present" : "Missing",
+      },
+      sessionID: req.sessionID,
+      hasSession: !!req.session,
+      stateParam: state || "Missing",
     });
 
-    // Check for errors from Threads OAuth
+    // Handle errors from Threads
     if (error) {
-      console.error("OAuth error:", error, error_description);
+      console.error("Threads OAuth error:", error, error_description);
       return res.redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/settings?error=true&message=${encodeURIComponent(
-          error_description?.toString() ?? "Authentication failed"
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          error_description?.toString() || "Authentication failed"
         )}`
       );
     }
 
-    // Validate code parameter
-    if (!code) {
-      console.error("No authorization code received");
+    // Check for required parameters
+    if (!code || !state) {
+      console.error("Missing code or state in Threads callback");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/settings?error=true&message=No authorization code received`
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          "Missing required parameters"
+        )}`
       );
     }
 
-    // Check for user ID in session or state
-    const userId = state?.toString() ?? req.session?.user?.uid;
-    if (!userId) {
-      console.error("No user ID found in session or state");
+    // Try to retrieve state data from Redis
+    const stateData = await redisService.get(`threads:${state as string}`);
+
+    console.log(
+      `Threads callback: Retrieved state data for state ${state}:`,
+      stateData
+    );
+
+    if (!stateData) {
+      console.error(`No state data found in Redis for state: ${state}`);
       return res.redirect(
-        `${process.env.FRONTEND_URL}/settings?error=true&message=Authentication required`
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          "Invalid or expired authentication link"
+        )}`
       );
     }
+
+    // Get user ID from state data
+    const userId = stateData.uid;
+    const organizationId = stateData.organizationId;
+    const currentTeamId = stateData.currentTeamId;
+
+    if (!userId) {
+      console.error("No user ID found in state data");
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          "User identification failed"
+        )}`
+      );
+    }
+
+    console.log(
+      `Threads callback: Using user ID ${userId} from Redis state data`
+    );
 
     try {
-      // Exchange the code for an Threads access token
+      // Exchange the code for an access token
       const accessToken = await threadsService.exchangeCodeForToken(
-        code.toString()
+        code.toString() as string
       );
 
       if (!accessToken) {
         console.error("Failed to exchange code for token");
         return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?error=true&message=Failed to authenticate with Threads`
+          `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+            "Failed to authenticate with Threads"
+          )}`
         );
       }
 
-      // Get user profile from Threads Graph API (which includes Threads access)
+      // Get user profile from Threads
       const userProfile = await threadsService.getUserProfile(accessToken);
 
       if (!userProfile?.id) {
-        console.error("Failed to fetch user profile from Threads Graph API");
+        console.error("Failed to get user profile:", userProfile);
         return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?error=true&message=Failed to fetch user profile`
+          `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+            "Failed to retrieve Threads profile"
+          )}`
         );
       }
 
-      console.log("Threads user profile:", {
-        id: userProfile.id,
-        username: userProfile.username,
-      });
-
-      // Create or update the social account with proper organization/team context
-      const organizationId = req.session?.user?.organizationId;
-      const teamId = req.session?.user?.currentTeamId;
-
+      // Create or update the social account
       const account = await threadsService.createSocialAccount(
         userId,
         userProfile,
-        userProfile.longLivedToken || accessToken,
+        accessToken,
         "", // Threads doesn't provide refresh tokens in this flow
         organizationId,
-        teamId
+        currentTeamId
       );
 
-      console.log("Threads account connected successfully:", {
-        accountId: account.id,
-        organizationId,
-        teamId,
-      });
+      // Clean up Redis state
+      await redisService.delete(`threads:${state as string}`);
 
+      console.log("Threads account connected successfully:", account.id);
+
+      // Redirect to settings page with success
       return res.redirect(`${process.env.FRONTEND_URL}/settings?success=true`);
     } catch (error: any) {
       console.error("Error in Threads callback:", error);
 
-      // Handle duplicate account error based on uniqueness constraints
+      // Handle duplicate account error
       if (
         error.code === "ACCOUNT_ALREADY_LINKED" ||
         error.code === "account_already_connected"
       ) {
         return res.redirect(
-          `${
-            process.env.FRONTEND_URL
-          }/settings?error=duplicate_account&message=${encodeURIComponent(
-            error.message ??
+          `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+            error.message ||
               "This Threads account is already connected to another user"
           )}`
         );
@@ -184,17 +269,17 @@ router.get("/threads/callback", async (req, res) => {
 
       // Handle other errors
       return res.redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/settings?error=true&message=${encodeURIComponent(
-          error.message ?? "Failed to connect Threads account"
+        `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+          error.message || "Failed to connect Threads account"
         )}`
       );
     }
   } catch (error: any) {
     console.error("Unexpected error in Threads callback:", error);
     return res.redirect(
-      `${process.env.FRONTEND_URL}/settings?error=true&message=An unexpected error occurred`
+      `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+        error.message || "An unexpected error occurred"
+      )}`
     );
   }
 });
