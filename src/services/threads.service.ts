@@ -85,16 +85,23 @@ export class ThreadsService {
         clientId: process.env.THREADS_APP_ID ?? "",
         hasClientSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
         redirectUri,
+        code: code.substring(0, 10) + "..." // Log partial code for debugging without exposing full code
       });
 
-      // Try using the Facebook Graph API endpoint instead of the Threads endpoint
+      // Use the Threads-specific endpoint as per the official documentation
       const response = await axios.post(
-        "https://graph.facebook.com/v18.0/oauth/access_token",
+        "https://threads.net/oauth/access_token",
         params,
         {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
           },
+          // Add timeout to prevent hanging requests
+          timeout: 10000,
+          // Add validateStatus to get full error responses
+          validateStatus: function (status) {
+            return status < 500; // Resolve only if the status code is less than 500
+          }
         }
       );
 
