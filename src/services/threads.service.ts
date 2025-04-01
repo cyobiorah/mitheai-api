@@ -23,7 +23,7 @@ export class ThreadsService {
     try {
       // Exchange short-lived token for a long-lived token
       const longLivedTokenResponse = await axios.get(
-        `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${accessToken}`
+        `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_id=${process.env.THREADS_APP_ID}&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${accessToken}`
       );
 
       if (!longLivedTokenResponse.data?.access_token) {
@@ -71,7 +71,9 @@ export class ThreadsService {
   async exchangeCodeForToken(code: string): Promise<string | null> {
     try {
       // Prepare the token exchange request for Threads
-      const redirectUri = process.env.THREADS_CALLBACK_URL ?? "http://localhost:3001/api/social-accounts/threads/callback";
+      const redirectUri =
+        process.env.THREADS_CALLBACK_URL ??
+        "http://localhost:3001/api/social-accounts/threads/callback";
 
       const params = new URLSearchParams();
       params.append("client_id", process.env.THREADS_APP_ID ?? "");
@@ -85,7 +87,7 @@ export class ThreadsService {
         clientId: process.env.THREADS_APP_ID ?? "",
         hasClientSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
         redirectUri,
-        code: code.substring(0, 10) + "..." // Log partial code for debugging without exposing full code
+        code: code.substring(0, 10) + "...", // Log partial code for debugging without exposing full code
       });
 
       // Use the Threads-specific endpoint as per the official documentation
@@ -101,7 +103,7 @@ export class ThreadsService {
           // Add validateStatus to get full error responses
           validateStatus: function (status) {
             return status < 500; // Resolve only if the status code is less than 500
-          }
+          },
         }
       );
 
@@ -118,14 +120,14 @@ export class ThreadsService {
         "Error exchanging code for Threads token:",
         error.response?.data || error.message
       );
-      
+
       // Log more detailed error information
       if (error.response) {
         console.error("Response status:", error.response.status);
         console.error("Response headers:", error.response.headers);
         console.error("Response data:", error.response.data);
       }
-      
+
       return null;
     }
   }
@@ -384,7 +386,7 @@ export class ThreadsService {
       // Refresh the token
       try {
         const response = await axios.get(
-          `https://threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${socialAccount.accessToken}`
+          `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_id=${process.env.THREADS_APP_ID}&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${socialAccount.accessToken}`
         );
 
         if (!response.data?.access_token) {
