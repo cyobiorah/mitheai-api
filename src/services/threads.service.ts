@@ -23,7 +23,7 @@ export class ThreadsService {
     try {
       // Exchange short-lived token for a long-lived token
       const longLivedTokenResponse = await axios.get(
-        `https://threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${accessToken}`
+        `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${accessToken}`
       );
 
       if (!longLivedTokenResponse.data?.access_token) {
@@ -90,7 +90,7 @@ export class ThreadsService {
 
       // Use the Threads-specific endpoint as per the official documentation
       const response = await axios.post(
-        "https://threads.net/oauth/access_token",
+        "https://graph.threads.net/oauth/access_token",
         params,
         {
           headers: {
