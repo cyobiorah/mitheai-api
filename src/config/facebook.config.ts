@@ -20,6 +20,8 @@ declare module "express-session" {
       };
     };
     skipWelcome?: boolean;
+    facebookStateId?: string;
+    codeVerifier?: string;
   }
 }
 
@@ -78,21 +80,46 @@ const strategy = new FacebookStrategy(
       });
 
       // Check for userId in session
-      const userId = req.session?.user?.uid;
+      let userId = req.session?.user?.uid;
+      let organizationId = req.session?.user?.organizationId;
+      let currentTeamId = req.session?.user?.currentTeamId;
+
+      // If no user ID in session, try to get from Redis using state ID
+      if (!userId && req.session?.facebookStateId) {
+        try {
+          // Import Redis service
+          const redisService = require("../services/redis.service").default;
+
+          // Get state data from Redis
+          const stateData = await redisService.get(`facebook:${req.session.facebookStateId}`);
+
+          if (stateData) {
+            userId = stateData.uid;
+            organizationId = stateData.organizationId;
+            currentTeamId = stateData.currentTeamId;
+
+            // Clean up Redis state
+            await redisService.delete(`facebook:${req.session.facebookStateId}`);
+          }
+        } catch (redisError) {
+          console.error("Error retrieving state from Redis:", redisError);
+        }
+      }
+
       if (!userId) {
-        console.error("No user ID found in session for Facebook callback");
+        console.error("No user ID found in session or Redis for Facebook callback");
         return done(new Error("No user ID found in session"));
       }
 
       try {
         // Create/update the social account
         const account = await facebookService.createSocialAccount(
-          userId,
           profile,
           accessToken,
           refreshToken ?? "", // Use empty string instead of undefined
-          req.session?.user?.organizationId,
-          req.session?.user?.currentTeamId
+          userId,
+          organizationId,
+          currentTeamId
         );
 
         // Return the account object to the callback
