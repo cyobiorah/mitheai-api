@@ -29,8 +29,12 @@ const allowedOrigins = [
   "http://localhost:3001",
   "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
   "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
-  // Add wildcard for all subdomains of vercel.app for development
-  "https://*.vercel.app",
+  // Add specific Vercel preview domains instead of wildcards
+  "https://mitheai-app.vercel.app",
+  "https://mitheai-api.vercel.app",
+  // Add production domains if different
+  "https://app.mitheai.com",
+  "https://api.mitheai.com"
 ];
 
 // Middleware
@@ -45,19 +49,12 @@ app.use(
 
       // Check if the origin is in our allowedOrigins list
       if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+        return callback(null, origin); // Return the actual origin instead of true
       }
 
-      // Check for wildcard domains (for vercel.app subdomains)
-      const wildcardMatches = allowedOrigins
-        .filter((allowed) => allowed.includes("*"))
-        .some((pattern) => {
-          const regexPattern = pattern.replace("*", ".*");
-          return new RegExp(regexPattern).test(origin);
-        });
-
-      if (wildcardMatches) {
-        return callback(null, true);
+      // For Vercel preview deployments which have dynamic URLs
+      if (origin.includes('vercel.app')) {
+        return callback(null, origin); // Allow all vercel.app domains and return the specific origin
       }
 
       callback(new Error(`Origin ${origin} not allowed by CORS`));
