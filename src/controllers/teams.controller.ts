@@ -45,14 +45,14 @@ export const getTeams = async (req: Request, res: Response) => {
       });
     }
 
-    console.log("Getting teams for organization:", {
-      organizationId,
-      user: req.user,
-      params: req.params,
-      headers: {
-        authorization: req.headers.authorization ? "Present" : "Missing"
-      }
-    });
+    // console.log("Getting teams for organization:", {
+    //   organizationId,
+    //   user: req.user,
+    //   params: req.params,
+    //   headers: {
+    //     authorization: req.headers.authorization ? "Present" : "Missing"
+    //   }
+    // });
 
     try {
       const teams = await teamService.findByOrganization(organizationId);

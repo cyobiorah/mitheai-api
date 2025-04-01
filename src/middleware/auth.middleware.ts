@@ -53,16 +53,16 @@ export const authenticate = async (
         try {
           // Try to find by id directly first
           user = await userRepository.findOne({ uid: decoded.uid });
-          console.log("User lookup by uid:", user ? "Found" : "Not found");
+          // console.log("User lookup by uid:", user ? "Found" : "Not found");
 
           // If not found and it looks like a MongoDB ObjectId, try findById
           if (!user && /^[0-9a-fA-F]{24}$/.test(decoded.uid)) {
             try {
               user = await userRepository.findById(decoded.uid);
-              console.log(
-                "User lookup by ObjectId:",
-                user ? "Found" : "Not found"
-              );
+              // console.log(
+              //   "User lookup by ObjectId:",
+              //   user ? "Found" : "Not found"
+              // );
             } catch (error) {
               console.error("Error finding user by ObjectId:", error);
             }
@@ -81,10 +81,10 @@ export const authenticate = async (
       // Last resort, try by uid
       if (!user && decoded.uid) {
         user = await userRepository.findOne({ uid: decoded.uid });
-        console.log(
-          "User lookup by uid (last resort):",
-          user ? "Found" : "Not found"
-        );
+        // console.log(
+        //   "User lookup by uid (last resort):",
+        //   user ? "Found" : "Not found"
+        // );
       }
     } catch (error) {
       console.error("Error finding user:", error);

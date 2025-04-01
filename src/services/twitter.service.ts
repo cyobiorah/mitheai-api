@@ -26,6 +26,8 @@ export class TwitterService {
 
   /**
    * Check if a social account with the given platform and platformAccountId already exists
+   * If userId is provided, it checks if the account exists for this specific user
+   * If userId is not provided, it checks if the account exists for ANY user
    */
   private async findExistingSocialAccount(
     platform: string,
@@ -33,13 +35,20 @@ export class TwitterService {
     userId?: string
   ): Promise<SocialAccount | null> {
     try {
-      let query: any = { platform, platformAccountId };
-
+      // If userId is provided, check if this specific user has connected this account
       if (userId) {
-        query.userId = userId;
+        return await this.socialAccountRepository.findOne({
+          platform,
+          platformAccountId,
+          userId,
+        });
       }
 
-      return await this.socialAccountRepository.findOne(query);
+      // Otherwise, check if ANY user has connected this account
+      return await this.socialAccountRepository.findOne({
+        platform,
+        platformAccountId,
+      });
     } catch (error) {
       console.error("Error finding existing social account:", error);
       return null;
@@ -55,6 +64,49 @@ export class TwitterService {
     teamId?: string
   ): Promise<SocialAccount> {
     try {
+      // First check if this account is connected to ANY user
+      const anyExistingAccount = await this.findExistingSocialAccount(
+        "twitter",
+        profile.id
+        // No userId parameter means check for ANY user
+      );
+
+      if (anyExistingAccount && anyExistingAccount.userId !== userId) {
+        // Account exists but belongs to a different user
+        const error: any = new Error(
+          "This social account is already connected to another user in the system"
+        );
+        error.code = "account_already_connected_to_other_user";
+        error.details = {
+          existingAccountId: anyExistingAccount.id,
+          connectedUserId: anyExistingAccount.userId,
+          organizationId: anyExistingAccount.organizationId,
+          teamId: anyExistingAccount.teamId,
+          connectionDate: anyExistingAccount.createdAt,
+        };
+        throw error;
+      }
+
+      // Now check if this specific user has already connected this account
+      const userExistingAccount = await this.findExistingSocialAccount(
+        "twitter",
+        profile.id,
+        userId
+      );
+
+      if (userExistingAccount) {
+        const error: any = new Error("Account already connected by this user");
+        error.code = "account_already_connected";
+        error.details = {
+          existingAccountId: userExistingAccount.id,
+          connectedUserId: userExistingAccount.userId,
+          organizationId: userExistingAccount.organizationId,
+          teamId: userExistingAccount.teamId,
+          connectionDate: userExistingAccount.createdAt,
+        };
+        throw error;
+      }
+
       // Check for existing connection with the same Twitter ID and user ID
       const existingAccount = await this.findExistingSocialAccount(
         "twitter",
@@ -826,11 +878,11 @@ export class TwitterService {
           }/api/social-accounts/twitter/callback`
         : process.env.TWITTER_CALLBACK_URL!;
 
-    console.log("Twitter OAuth Config:", {
-      clientId: process.env.TWITTER_CLIENT_ID,
-      callbackUrl: callbackUrl,
-      environment: process.env.NODE_ENV,
-    });
+    // console.log("Twitter OAuth Config:", {
+    //   clientId: process.env.TWITTER_CLIENT_ID,
+    //   callbackUrl: callbackUrl,
+    //   environment: process.env.NODE_ENV,
+    // });
 
     const cleanCallbackUrl = callbackUrl.replace("www.", "");
     const { verifier, challenge } = await this.generateCodeChallenge();

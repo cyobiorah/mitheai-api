@@ -81,6 +81,88 @@ router.get("/", authenticateToken, async (req, res) => {
   }
 });
 
+// Twitter direct auth route
+// router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
+//   try {
+//     // Generate code verifier and challenge for PKCE
+//     const codeVerifier = crypto.randomBytes(32).toString("hex");
+//     const codeChallenge = crypto
+//       .createHash("sha256")
+//       .update(codeVerifier)
+//       .digest("base64")
+//       .replace(/\+/g, "-")
+//       .replace(/\//g, "_")
+//       .replace(/=/g, "");
+
+//     // Generate a state parameter to prevent CSRF
+//     // const state = crypto.randomBytes(16).toString("hex");
+
+//     // Store user data and code verifier in an encrypted state parameter
+//     // This allows us to recover the data in serverless environments where session might not persist
+//     const stateData = {
+//       uid: req.user.uid,
+//       email: req.user.email,
+//       organizationId: req.user.organizationId,
+//       teamIds: req.user.teamIds,
+//       currentTeamId:
+//         req.user.currentTeamId || (req.user.teamIds && req.user.teamIds[0]),
+//       codeVerifier: codeVerifier,
+//       timestamp: Date.now(),
+//       skipWelcome: req.query.skipWelcome === "true",
+//     };
+
+//     // Encrypt the state data
+//     const encryptedState = Buffer.from(JSON.stringify(stateData)).toString(
+//       "base64"
+//     );
+
+//     // Store in session as backup if session works
+//     req.session.codeVerifier = codeVerifier;
+//     req.session.skipWelcome = req.query.skipWelcome === "true";
+
+//     // Save session
+//     req.session.save((err: any) => {
+//       if (err) {
+//         console.error("Session save error:", err);
+//       }
+
+//       // Redirect to Twitter auth with PKCE
+//       const authUrl = new URL("https://twitter.com/i/oauth2/authorize");
+//       authUrl.searchParams.append("response_type", "code");
+//       authUrl.searchParams.append(
+//         "client_id",
+//         process.env.TWITTER_CLIENT_ID || ""
+//       );
+//       authUrl.searchParams.append(
+//         "redirect_uri",
+//         process.env.TWITTER_CALLBACK_URL ||
+//           "http://localhost:3001/api/social-accounts/twitter/callback"
+//       );
+//       authUrl.searchParams.append(
+//         "scope",
+//         "tweet.read tweet.write users.read offline.access"
+//       );
+//       authUrl.searchParams.append("state", encryptedState);
+//       authUrl.searchParams.append("code_challenge", codeChallenge);
+//       authUrl.searchParams.append("code_challenge_method", "S256");
+
+//       console.log("Redirecting to Twitter auth with PKCE:", {
+//         codeVerifier: codeVerifier.substring(0, 10) + "...",
+//         codeChallenge: codeChallenge.substring(0, 10) + "...",
+//         state: encryptedState.substring(0, 10) + "...",
+//       });
+
+//       res.redirect(authUrl.toString());
+//     });
+//   } catch (error) {
+//     console.error("Twitter direct auth error:", error);
+//     res.status(500).json({
+//       error: "Failed to initiate Twitter authentication",
+//       message: error instanceof Error ? error.message : String(error),
+//     });
+//   }
+// });
+
 // Twitter OAuth routes
 router.get("/twitter/direct-auth", authenticateToken, (req: any, res) => {
   try {
@@ -284,7 +366,7 @@ router.get("/twitter/callback", async (req: any, res) => {
     }
 
     // Check for authorization code
-    const { code, state, user_data } = req.query;
+    const { code, state } = req.query;
     if (!code) {
       console.error("No authorization code in callback");
       return res.redirect(
@@ -296,25 +378,31 @@ router.get("/twitter/callback", async (req: any, res) => {
       );
     }
 
-    // Get code verifier from session or user_data
+    // Get code verifier and user data from state parameter
     let codeVerifier = req.session?.codeVerifier;
     let userId = req.session?.user?.uid;
     let organizationId = req.session?.user?.organizationId;
+    let teamIds = req.session?.user?.teamIds;
     let currentTeamId = req.session?.user?.currentTeamId;
     let skipWelcome = req.session?.skipWelcome;
 
-    // If no session data, try to get from user_data parameter
-    if ((!codeVerifier || !userId) && user_data) {
+    // If no session data, try to get from state parameter
+    if ((!codeVerifier || !userId) && state) {
       try {
-        const userData = JSON.parse(
-          Buffer.from(user_data as string, "base64").toString()
+        // Decrypt the state parameter
+        const stateData = JSON.parse(
+          Buffer.from(state as string, "base64").toString()
         );
-        console.log("Parsed user data:", userData);
+        console.log("Parsed state data:", {
+          uid: stateData.uid,
+          hasCodeVerifier: !!stateData.codeVerifier,
+          timestamp: stateData.timestamp,
+        });
 
         // Check for timestamp expiration (10 minute window)
         if (
-          userData.timestamp &&
-          Date.now() - userData.timestamp > 10 * 60 * 1000
+          stateData.timestamp &&
+          Date.now() - stateData.timestamp > 10 * 60 * 1000
         ) {
           return res.redirect(
             `${
@@ -325,18 +413,21 @@ router.get("/twitter/callback", async (req: any, res) => {
           );
         }
 
-        codeVerifier = userData.codeVerifier;
-        userId = userData.uid;
-        organizationId = userData.organizationId;
-        currentTeamId = userData.currentTeamId;
-        skipWelcome = userData.skipWelcome;
+        // Extract data from state
+        codeVerifier = stateData.codeVerifier;
+        userId = stateData.uid;
+        organizationId = stateData.organizationId;
+        teamIds = stateData.teamIds;
+        currentTeamId = stateData.currentTeamId;
+        skipWelcome = stateData.skipWelcome;
 
         // Restore session if possible
         if (userId && !req.session.user) {
           req.session.user = {
             uid: userId,
-            email: userData.email,
+            email: stateData.email,
             organizationId,
+            teamIds,
             currentTeamId,
           };
           req.session.skipWelcome = skipWelcome;
@@ -355,31 +446,8 @@ router.get("/twitter/callback", async (req: any, res) => {
           });
         }
       } catch (error) {
-        console.error("Error parsing user_data:", error);
+        console.error("Error parsing state parameter:", error);
       }
-    }
-
-    // Verify we have the necessary data
-    if (!codeVerifier) {
-      console.error("No code verifier found in session or user_data");
-      return res.redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/settings?error=true&message=${encodeURIComponent(
-          "Authentication failed: No code verifier found"
-        )}`
-      );
-    }
-
-    if (!userId) {
-      console.error("No user ID found in session or user_data");
-      return res.redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/settings?error=true&message=${encodeURIComponent(
-          "Authentication failed: User not found"
-        )}`
-      );
     }
 
     console.log("Proceeding with token exchange:", {
@@ -478,11 +546,11 @@ router.get("/twitter/callback", async (req: any, res) => {
     try {
       // We need to use the controller's instance since it's already initialized
       const twitterService = controller.getTwitterService();
-      
+
       if (!twitterService) {
         throw new Error("Failed to get TwitterService instance");
       }
-      
+
       const account = await twitterService.createSocialAccount(
         userId,
         profileData.data,
@@ -506,7 +574,7 @@ router.get("/twitter/callback", async (req: any, res) => {
           if (!socialAccountService) {
             throw new Error("Failed to get SocialAccountService instance");
           }
-          
+
           // Mark that we've sent the welcome tweet
           await socialAccountService.update(account.id, {
             welcomeTweetSent: true,
@@ -613,26 +681,22 @@ router.get("/facebook/direct-auth", authenticateToken, (req: any, res) => {
 });
 
 // Disconnect social account by ID (not platform)
-// router.post("/disconnect/:accountId", authenticateToken, async (req, res) => {
-//   try {
-//     if (!req.user?.uid) {
-//       return res.status(401).json({ error: "Unauthorized" });
-//     }
-//     const { accountId } = req.params;
-//     if (!accountId) {
-//       return res.status(400).json({ error: "Account ID is required" });
-//     }
-//     // Call the updated disconnectAccount method with account ID
-//     const result = await controller.disconnectSocialAccount(req.user.uid, accountId);
-//     res.json(result);
-//   } catch (error: any) {
-//     console.error("Error disconnecting account:", error);
-//     res.status(500).json({
-//       error: "Failed to disconnect account",
-//       message: error.message || "Unknown error occurred",
-//     });
-//   }
-// });
+router.post("/disconnect/:accountId", authenticateToken, async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Pass the entire request and response objects to the controller
+    await controller.disconnectSocialAccount(req, res);
+  } catch (error: any) {
+    console.error("Error disconnecting account:", error);
+    res.status(500).json({
+      error: "Failed to disconnect account",
+      message: error.message || "Unknown error occurred",
+    });
+  }
+});
 
 // Legacy endpoint - maintain for backward compatibility but updated to use account ID
 router.post("/:platform/disconnect", authenticateToken, async (req, res) => {
@@ -682,12 +746,6 @@ router.get(
   authenticateToken,
   belongsToTeam(),
   controller.getTeamSocialAccounts.bind(controller)
-);
-
-router.delete(
-  "/:accountId",
-  authenticateToken,
-  controller.disconnectSocialAccount.bind(controller)
 );
 
 // Tweet management routes - add validateSocialAccountOperation middleware once created
