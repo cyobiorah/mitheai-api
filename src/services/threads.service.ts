@@ -22,8 +22,19 @@ export class ThreadsService {
   async getUserProfile(accessToken: string) {
     try {
       // Exchange short-lived token for a long-lived token
-      const longLivedTokenResponse = await axios.get(
-        `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_id=${process.env.THREADS_APP_ID}&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${accessToken}`
+      const longLivedTokenResponse = await axios.post(
+        "https://graph.threads.net/oauth/access_token",
+        new URLSearchParams({
+          grant_type: "fb_exchange_token",
+          client_id: process.env.THREADS_APP_ID ?? "",
+          client_secret: process.env.THREADS_APP_SECRET ?? "",
+          fb_exchange_token: accessToken,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
       );
 
       if (!longLivedTokenResponse.data?.access_token) {
@@ -385,8 +396,19 @@ export class ThreadsService {
 
       // Refresh the token
       try {
-        const response = await axios.get(
-          `https://graph.threads.net/oauth/access_token/refresh?grant_type=refresh_token&client_id=${process.env.THREADS_APP_ID}&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${socialAccount.accessToken}`
+        const response = await axios.post(
+          "https://graph.threads.net/oauth/access_token",
+          new URLSearchParams({
+            grant_type: "fb_exchange_token",
+            client_id: process.env.THREADS_APP_ID ?? "",
+            client_secret: process.env.THREADS_APP_SECRET ?? "",
+            fb_exchange_token: socialAccount.accessToken,
+          }),
+          {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          }
         );
 
         if (!response.data?.access_token) {
