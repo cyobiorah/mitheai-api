@@ -24,7 +24,7 @@ export class ThreadsService {
       // Use the access token directly to fetch user profile information
       // For Threads API, we need to use the Threads Graph API
       const response = await axios.get(
-        `https://graph.threads.net/me?fields=id,username,account_type&access_token=${accessToken}`
+        `https://graph.threads.net/me?fields=id,username&access_token=${accessToken}`
       );
 
       if (!response.data?.id) {
