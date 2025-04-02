@@ -92,37 +92,37 @@ router.get(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Store user data in session for the callback
-      req.session.user = {
+      // Generate a unique state ID for CSRF protection
+      const stateId = crypto.randomBytes(16).toString("hex");
+
+      // Store user data in Redis with the state ID as key
+      const stateData = {
         uid: req.user.uid,
         email: req.user.email,
         organizationId: req.user.organizationId,
         teamIds: req.user.teamIds,
         currentTeamId: req.user.currentTeamId,
         role: req.user.role,
+        timestamp: Date.now(),
       };
+
+      // Save to Redis with 10-minute expiration (600 seconds)
+      await redisService.set(`linkedin:${stateId}`, stateData, 600);
 
       // Get LinkedIn service from controller
       const linkedInService = controller.getLinkedInService();
 
-      // Generate authorization URL
+      // Generate authorization URL with our state ID
       const authUrl = await linkedInService.getAuthorizationUrl(
         req.user.uid,
         req.user.currentTeamId,
-        req.user.organizationId
+        req.user.organizationId,
+        stateId
       );
 
-      // Save the session before returning the URL
-      req.session.save((err: any) => {
-        if (err) {
-          console.error("Error saving session:", err);
-          return res.status(500).json({ error: "Failed to save session" });
-        }
-
-        // Return the LinkedIn authorization URL instead of redirecting
-        console.log("Returning LinkedIn auth URL:", authUrl);
-        res.send(authUrl);
-      });
+      // Return the LinkedIn authorization URL instead of redirecting
+      console.log("Returning LinkedIn auth URL:", authUrl);
+      res.send(authUrl);
     } catch (error: any) {
       console.error("LinkedIn direct auth error:", error);
       res.status(500).json({
@@ -155,34 +155,51 @@ router.get("/linkedin/callback", async (req: any, res) => {
       );
     }
 
-    // Get code from query parameters
+    // Get code and state from query parameters
     const code = req.query.code;
+    const state = req.query.state;
+    
     if (!code) {
       console.error("No authorization code in callback");
       return res.redirect(`${process.env.FRONTEND_URL}/settings?error=no_code`);
     }
-
-    // Restore user from session
-    if (!req?.session.user) {
-      console.error("No session or user data found in session");
+    
+    if (!state) {
+      console.error("No state parameter in LinkedIn callback");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/settings?error=no_session`
+        `${process.env.FRONTEND_URL}/settings?error=no_state`
       );
     }
 
+    // Retrieve state data from Redis
+    const stateData = await redisService.get(`linkedin:${state}`);
+    
+    if (!stateData) {
+      console.error(`No state data found in Redis for state: ${state}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/settings?error=invalid_state`
+      );
+    }
+
+    // Delete the state data from Redis as it's no longer needed
+    await redisService.delete(`linkedin:${state}`);
+
     // Attach user data to request for the controller
-    req.user = req.session.user;
+    req.user = {
+      uid: stateData.uid,
+      email: stateData.email,
+      organizationId: stateData.organizationId,
+      teamIds: stateData.teamIds,
+      currentTeamId: stateData.currentTeamId,
+      role: stateData.role,
+    };
 
     // Handle the callback with the controller
     return controller.handleLinkedInCallback(req, res);
   } catch (error: any) {
     console.error("LinkedIn callback error:", error);
     return res.redirect(
-      `${
-        process.env.FRONTEND_URL
-      }/settings?error=callback_error&message=${encodeURIComponent(
-        error.message || "Unknown error"
-      )}`
+      `${process.env.FRONTEND_URL}/settings?error=${error.message || "unknown_error"}`
     );
   }
 });

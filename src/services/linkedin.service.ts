@@ -62,10 +62,13 @@ export class LinkedInService {
   async getAuthorizationUrl(
     userId: string,
     teamId?: string,
-    organizationId?: string
+    organizationId?: string,
+    state?: string
   ): Promise<string> {
-    // Generate a random state value for CSRF protection
-    const state = crypto.randomBytes(16).toString("hex");
+    // Generate a random state value for CSRF protection if not provided
+    if (!state) {
+      state = crypto.randomBytes(16).toString("hex");
+    }
 
     // Store the state with user info in Redis or session
     // This would be implemented based on your session management approach
