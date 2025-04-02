@@ -55,7 +55,7 @@ export const createInvitation = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Organization not found" });
     }
     const organization = orgDoc.data() as Organization;
-    console.log("Found organization:", organization);
+    // console.log("Found organization:", organization);
 
     // Create invitation token
     const token = uuidv4();
@@ -190,7 +190,7 @@ export const acceptInvitation = async (req: Request, res: Response) => {
       .where("status", "==", "pending")
       .get();
 
-    console.log("Found pending users:", pendingUsersSnapshot.size);
+    // console.log("Found pending users:", pendingUsersSnapshot.size);
     if (pendingUsersSnapshot.empty) {
       return res.status(404).json({ error: "Invalid or expired invitation" });
     }

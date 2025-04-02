@@ -68,14 +68,14 @@ export const inviteUser = async (req: Request, res: Response) => {
     }
 
     // Get organization for email
-    console.log("Fetching organization:", organizationId);
+    // console.log("Fetching organization:", organizationId);
     const organization = await organizationService.findById(organizationId);
 
     if (!organization) {
       console.error("Organization not found:", organizationId);
       return res.status(404).json({ error: "Organization not found" });
     }
-    console.log("Found organization:", organization);
+    // console.log("Found organization:", organization);
 
     // Check if user already exists
     const existingUser = await userService.findByEmail(email);

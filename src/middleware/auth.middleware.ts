@@ -75,7 +75,7 @@ export const authenticate = async (
       // If not found by id, try by email
       if (!user && decoded.email) {
         user = await userRepository.findOne({ email: decoded.email });
-        console.log("User lookup by email:", user ? "Found" : "Not found");
+        // console.log("User lookup by email:", user ? "Found" : "Not found");
       }
 
       // Last resort, try by uid
@@ -126,17 +126,17 @@ export const logRequests = (
   res: Response,
   next: NextFunction
 ) => {
-  console.log(
-    `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
-    {
-      headers: {
-        authorization: req.headers.authorization ? "Present" : "Missing",
-        cookie: req.headers.cookie ? "Present" : "Missing",
-      },
-      sessionID: req.sessionID,
-      hasSession: !!req.session,
-    }
-  );
+  // console.log(
+  //   `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
+  //   {
+  //     headers: {
+  //       authorization: req.headers.authorization ? "Present" : "Missing",
+  //       cookie: req.headers.cookie ? "Present" : "Missing",
+  //     },
+  //     sessionID: req.sessionID,
+  //     hasSession: !!req.session,
+  //   }
+  // );
   next();
 };
 

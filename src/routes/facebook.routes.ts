@@ -134,16 +134,16 @@ router.get("/facebook", async (req, res, next) => {
 router.get(
   "/facebook/callback",
   async (req, res, next) => {
-    console.log("Facebook callback received:", {
-      query: req.query,
-      headers: {
-        authorization: req.headers.authorization ? "Present" : "Missing",
-        cookie: req.headers.cookie ? "Present" : "Missing",
-      },
-      sessionID: req.sessionID,
-      hasSession: !!req.session,
-      stateParam: req.query.state || "Missing",
-    });
+    // console.log("Facebook callback received:", {
+    //   query: req.query,
+    //   headers: {
+    //     authorization: req.headers.authorization ? "Present" : "Missing",
+    //     cookie: req.headers.cookie ? "Present" : "Missing",
+    //   },
+    //   sessionID: req.sessionID,
+    //   hasSession: !!req.session,
+    //   stateParam: req.query.state || "Missing",
+    // });
 
     // Check for error in the callback
     if (req.query.error) {

@@ -53,15 +53,15 @@ router.get("/threads/direct-auth", authenticateToken, async (req: any, res) => {
  * https://developers.facebook.com/docs/threads/get-started
  */
 router.get("/threads/connect", async (req, res) => {
-  console.log("Threads connect request:", {
-    query: req.query,
-    headers: {
-      authorization: req.headers.authorization ? "Present" : "Missing",
-      cookie: req.headers.cookie ? "Present" : "Missing",
-    },
-    sessionID: req.sessionID,
-    hasSession: !!req.session,
-  });
+  // console.log("Threads connect request:", {
+  //   query: req.query,
+  //   headers: {
+  //     authorization: req.headers.authorization ? "Present" : "Missing",
+  //     cookie: req.headers.cookie ? "Present" : "Missing",
+  //   },
+  //   sessionID: req.sessionID,
+  //   hasSession: !!req.session,
+  // });
 
   // Check for state parameter
   const { state } = req.query;
@@ -140,16 +140,16 @@ router.get("/threads/callback", async (req, res) => {
   try {
     const { code, state, error, error_description } = req.query;
 
-    console.log("Threads callback received:", {
-      query: req.query,
-      headers: {
-        authorization: req.headers.authorization ? "Present" : "Missing",
-        cookie: req.headers.cookie ? "Present" : "Missing",
-      },
-      sessionID: req.sessionID,
-      hasSession: !!req.session,
-      stateParam: state || "Missing",
-    });
+    // console.log("Threads callback received:", {
+    //   query: req.query,
+    //   headers: {
+    //     authorization: req.headers.authorization ? "Present" : "Missing",
+    //     cookie: req.headers.cookie ? "Present" : "Missing",
+    //   },
+    //   sessionID: req.sessionID,
+    //   hasSession: !!req.session,
+    //   stateParam: state || "Missing",
+    // });
 
     // Handle errors from Threads
     if (error) {

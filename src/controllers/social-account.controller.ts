@@ -1,15 +1,17 @@
 import { Request, Response } from "express";
 import { TwitterService } from "../services/twitter.service";
 import { SocialAccountService } from "../services/social-account.service";
-import { Client, auth } from "twitter-api-sdk";
+import { LinkedInService } from "../services/linkedin.service";
 
 export class SocialAccountController {
   private readonly twitterService: TwitterService;
   private readonly socialAccountService: SocialAccountService;
+  private readonly linkedInService: LinkedInService;
 
   constructor() {
     this.twitterService = new TwitterService();
     this.socialAccountService = new SocialAccountService();
+    this.linkedInService = new LinkedInService();
   }
 
   async handleTwitterCallback(req: Request, res: Response) {
@@ -17,7 +19,7 @@ export class SocialAccountController {
       if (req.query.error) {
         console.error("OAuth error:", req.query);
         return res.redirect(
-          `${process.env.FRONTEND_URL}/settings?error=${req.query.error}`
+          `${process.env.FRONTEND_URL}/settings?error=${req.query.error as any}`
         );
       }
 
@@ -30,7 +32,7 @@ export class SocialAccountController {
         });
       }
 
-      const { account } = req.user as any;
+      const { account } = req.user;
 
       if (!account) {
         console.error("No account data in callback");
@@ -107,6 +109,7 @@ export class SocialAccountController {
     }
   }
 
+  // eslint-disable-next-line
   async postTweet(req: Request, res: Response) {
     try {
       const { accountId, message } = req.body;
@@ -218,7 +221,7 @@ export class SocialAccountController {
       }
 
       const accounts = await this.socialAccountService.findByUser(userId);
-      
+
       // Filter out sensitive information
       const safeAccounts = accounts.map((account) => {
         const { accessToken, refreshToken, ...safeAccount } = account;
@@ -253,8 +256,10 @@ export class SocialAccountController {
         });
       }
 
-      const accounts = await this.socialAccountService.findByOrganization(organizationId);
-      
+      const accounts = await this.socialAccountService.findByOrganization(
+        organizationId
+      );
+
       // Filter out sensitive information
       const safeAccounts = accounts.map((account) => {
         const { accessToken, refreshToken, ...safeAccount } = account;
@@ -290,7 +295,7 @@ export class SocialAccountController {
       }
 
       const accounts = await this.socialAccountService.findByTeam(teamId);
-      
+
       // Filter out sensitive information
       const safeAccounts = accounts.map((account) => {
         const { accessToken, refreshToken, ...safeAccount } = account;
@@ -359,9 +364,9 @@ export class SocialAccountController {
   async scheduleTweet(req: Request, res: Response) {
     try {
       // Placeholder implementation
-      res.status(501).json({ 
+      res.status(501).json({
         message: "This method is not implemented in the MongoDB version yet",
-        info: "Tweet scheduling will be implemented in a future update"
+        info: "Tweet scheduling will be implemented in a future update",
       });
     } catch (error) {
       console.error("Error in scheduleTweet:", error);
@@ -375,9 +380,9 @@ export class SocialAccountController {
   async debugTwitterConnection(req: Request, res: Response) {
     try {
       // Placeholder implementation
-      res.status(501).json({ 
+      res.status(501).json({
         message: "This method is not implemented in the MongoDB version yet",
-        info: "Twitter connection debugging will be implemented in a future update"
+        info: "Twitter connection debugging will be implemented in a future update",
       });
     } catch (error) {
       console.error("Error in debugTwitterConnection:", error);
@@ -391,9 +396,9 @@ export class SocialAccountController {
   async debugTwitterAccount(req: Request, res: Response) {
     try {
       // Placeholder implementation
-      res.status(501).json({ 
+      res.status(501).json({
         message: "This method is not implemented in the MongoDB version yet",
-        info: "Twitter account debugging will be implemented in a future update"
+        info: "Twitter account debugging will be implemented in a future update",
       });
     } catch (error) {
       console.error("Error in debugTwitterAccount:", error);
@@ -410,23 +415,23 @@ export class SocialAccountController {
       const { teamId } = req.body;
 
       if (!accountId || !teamId) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: "Missing required parameters",
-          message: "Both accountId and teamId are required"
+          message: "Both accountId and teamId are required",
         });
       }
 
       // Get the account to check if it exists
       const account = await this.socialAccountService.findById(accountId);
-      
+
       if (!account) {
         return res.status(404).json({ error: "Social account not found" });
       }
 
       // Update the account with the new team ID
-      await this.socialAccountService.update(accountId, { 
+      await this.socialAccountService.update(accountId, {
         teamId,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
 
       res.json({ message: "Team assigned successfully" });
@@ -439,6 +444,97 @@ export class SocialAccountController {
     }
   }
 
+  async handleLinkedInCallback(req: Request, res: Response) {
+    try {
+      if (req.query.error) {
+        console.error("LinkedIn OAuth error:", req.query);
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=${req.query.error as any}`
+        );
+      }
+
+      const code = req.query.code as string;
+
+      if (!code) {
+        console.error("No authorization code in LinkedIn callback");
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=no_code`
+        );
+      }
+
+      if (!req.user) {
+        console.error("No authenticated user in request");
+        return res.status(401).json({
+          error: "Authentication required",
+          message: "No authenticated user in request",
+        });
+      }
+
+      // Exchange the code for tokens
+      const tokenData = await this.linkedInService.exchangeCodeForToken(code);
+
+      // Get the user profile from LinkedIn
+      const profile = await this.linkedInService.getUserProfile(
+        tokenData.access_token
+      );
+
+      try {
+        // Create the social account
+        await this.linkedInService.createSocialAccount(
+          req.user.uid,
+          profile,
+          tokenData.access_token,
+          tokenData.refresh_token || null,
+          req.user.organizationId,
+          req.user.currentTeamId
+        );
+
+        // Redirect to the frontend settings page with success
+        res.redirect(`${process.env.FRONTEND_URL}/settings?success=true`);
+      } catch (error: any) {
+        // Handle the case where the account is already connected
+        if (error.code === "ACCOUNT_ALREADY_LINKED") {
+          console.warn(
+            "Attempted to connect already connected account:",
+            error.metadata
+          );
+
+          // Encode error details for the frontend
+          const errorDetails = encodeURIComponent(
+            JSON.stringify({
+              code: error.code,
+              message: error.message,
+              details: error.metadata,
+            })
+          );
+
+          return res.redirect(
+            `${process.env.FRONTEND_URL}/settings?error=account_already_connected&details=${errorDetails}`
+          );
+        }
+
+        // Handle other errors
+        console.error("Failed to create LinkedIn social account:", error);
+        return res.redirect(
+          `${
+            process.env.FRONTEND_URL
+          }/settings?error=account_creation_failed&message=${encodeURIComponent(
+            error.message || "Unknown error"
+          )}`
+        );
+      }
+    } catch (error: any) {
+      console.error("Failed to handle LinkedIn callback:", error);
+      res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/settings?error=callback_failed&message=${encodeURIComponent(
+          error.message || "Unknown error"
+        )}`
+      );
+    }
+  }
+
   // Getter methods to expose services
   getTwitterService(): TwitterService {
     return this.twitterService;
@@ -446,5 +542,9 @@ export class SocialAccountController {
 
   getSocialAccountService(): SocialAccountService {
     return this.socialAccountService;
+  }
+
+  getLinkedInService(): LinkedInService {
+    return this.linkedInService;
   }
 }

@@ -69,7 +69,7 @@ export const getTeams = async (req: Request, res: Response) => {
         return res.json([]);
       }
       
-      console.log(`Found ${teams.length} teams for organization ${organizationId}`);
+      // console.log(`Found ${teams.length} teams for organization ${organizationId}`);
       return res.json(teams);
     } catch (teamError) {
       console.error("Error retrieving teams:", teamError);
