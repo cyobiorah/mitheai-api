@@ -1,15 +1,14 @@
 import { Request, Response } from "express";
-import { db } from "../config/firebase";
 import { ContentItem, User } from "../types";
 import {
-  AIAssistantRequest,
   SocialPlatform,
   ContentTone,
   ContentPurpose,
 } from "../services/ai/types";
 import { aiService } from "../config/ai.config";
-import { Timestamp } from "firebase-admin/firestore";
 import { ContentAnalysisService } from "../services/content-analysis.service";
+import { getDb, getCollections } from "../config/mongodb";
+import { ObjectId } from "mongodb";
 
 const contentAnalysisService = new ContentAnalysisService();
 
@@ -394,12 +393,14 @@ export const createContent = async (req: Request, res: Response) => {
           }
         : baseContentItem;
 
-    const docRef = await db.collection("content").add(contentItem);
-    const doc = await docRef.get();
+    // Use MongoDB instead of Firebase
+    const db = await getDb();
+    const result = await db.collection("content").insertOne(contentItem);
 
+    // Return the created content with its ID
     res.status(201).json({
-      ...doc.data(),
-      id: doc.id,
+      ...contentItem,
+      id: result.insertedId.toString(),
     });
   } catch (error: unknown) {
     console.error("Error creating content:", error);
@@ -420,13 +421,15 @@ export const getContent = async (req: Request, res: Response) => {
     const { contentId } = req.params;
     const user = req.user as User;
 
-    const doc = await db.collection("content").doc(contentId).get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
+    const content = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
+    });
 
-    if (!doc.exists) {
+    if (!content) {
       return res.status(404).json({ error: "Content not found" });
     }
-
-    const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
     if (
@@ -452,7 +455,7 @@ export const getContent = async (req: Request, res: Response) => {
 
     res.json({
       ...content,
-      id: doc.id,
+      id: content._id.toString(),
     });
   } catch (error: unknown) {
     console.error("Error getting content:", error);
@@ -474,13 +477,15 @@ export const updateContent = async (req: Request, res: Response) => {
     const updates = req.body;
     const user = req.user as User;
 
-    const doc = await db.collection("content").doc(contentId).get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
+    const content = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
+    });
 
-    if (!doc.exists) {
+    if (!content) {
       return res.status(404).json({ error: "Content not found" });
     }
-
-    const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
     if (
@@ -511,16 +516,22 @@ export const updateContent = async (req: Request, res: Response) => {
     delete updates.organizationId;
     delete updates.teamId;
 
-    await doc.ref.update({
-      ...updates,
-      updatedAt: new Date().toISOString(),
+    await contentCollection.updateOne(
+      { _id: new ObjectId(contentId) },
+      { $set: updates }
+    );
+
+    const updatedContent = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
     });
 
-    const updatedDoc = await doc.ref.get();
+    if (!updatedContent) {
+      return res.status(404).json({ error: "Content not found after update" });
+    }
 
     res.json({
-      ...updatedDoc.data(),
-      id: updatedDoc.id,
+      ...updatedContent,
+      id: updatedContent._id.toString(),
     });
   } catch (error: unknown) {
     console.error("Error updating content:", error);
@@ -541,13 +552,15 @@ export const deleteContent = async (req: Request, res: Response) => {
     const { contentId } = req.params;
     const user = req.user as User;
 
-    const doc = await db.collection("content").doc(contentId).get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
+    const content = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
+    });
 
-    if (!doc.exists) {
+    if (!content) {
       return res.status(404).json({ error: "Content not found" });
     }
-
-    const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
     if (
@@ -571,7 +584,7 @@ export const deleteContent = async (req: Request, res: Response) => {
       });
     }
 
-    await doc.ref.delete();
+    await contentCollection.deleteOne({ _id: new ObjectId(contentId) });
 
     res.json({ message: "Content deleted successfully" });
   } catch (error: unknown) {
@@ -594,13 +607,15 @@ export const analyzeContent = async (req: Request, res: Response) => {
     const { templateId } = req.body;
     const user = req.user as User;
 
-    const doc = await db.collection("content").doc(contentId).get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
+    const content = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
+    });
 
-    if (!doc.exists) {
+    if (!content) {
       return res.status(404).json({ error: "Content not found" });
     }
-
-    const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
     if (
@@ -627,17 +642,28 @@ export const analyzeContent = async (req: Request, res: Response) => {
     // TODO: Implement actual analysis logic here
     // This would typically involve calling an external API or service
 
-    await doc.ref.update({
-      status: "analyzed",
-      analyzedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    await contentCollection.updateOne(
+      { _id: new ObjectId(contentId) },
+      {
+        $set: {
+          status: "analyzed",
+          analyzedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }
+    );
+
+    const updatedContent = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
     });
 
-    const updatedDoc = await doc.ref.get();
+    if (!updatedContent) {
+      return res.status(404).json({ error: "Content not found after update" });
+    }
 
     res.json({
-      ...updatedDoc.data(),
-      id: updatedDoc.id,
+      ...updatedContent,
+      id: updatedContent._id.toString(),
     });
   } catch (error: unknown) {
     console.error("Error analyzing content:", error);
@@ -658,13 +684,15 @@ export const archiveContent = async (req: Request, res: Response) => {
     const { contentId } = req.params;
     const user = req.user as User;
 
-    const doc = await db.collection("content").doc(contentId).get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
+    const content = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
+    });
 
-    if (!doc.exists) {
+    if (!content) {
       return res.status(404).json({ error: "Content not found" });
     }
-
-    const content = doc.data() as ContentItem;
 
     // Verify user has access to this content
     if (
@@ -688,16 +716,22 @@ export const archiveContent = async (req: Request, res: Response) => {
       });
     }
 
-    await doc.ref.update({
-      status: "archived",
-      updatedAt: new Date().toISOString(),
+    await contentCollection.updateOne(
+      { _id: new ObjectId(contentId) },
+      { $set: { status: "archived", updatedAt: new Date().toISOString() } }
+    );
+
+    const updatedContent = await contentCollection.findOne({
+      _id: new ObjectId(contentId),
     });
 
-    const updatedDoc = await doc.ref.get();
+    if (!updatedContent) {
+      return res.status(404).json({ error: "Content not found after update" });
+    }
 
     res.json({
-      ...updatedDoc.data(),
-      id: updatedDoc.id,
+      ...updatedContent,
+      id: updatedContent._id.toString(),
     });
   } catch (error: unknown) {
     console.error("Error archiving content:", error);
@@ -718,6 +752,8 @@ export const listTeamContent = async (req: Request, res: Response) => {
     const { teamId } = req.params;
     const user = req.user as User;
 
+    console.log(`[DEBUG] Listing team content for teamId: ${teamId}`);
+
     if (!user) {
       return res.status(401).json({
         error: "Authentication required",
@@ -731,16 +767,32 @@ export const listTeamContent = async (req: Request, res: Response) => {
       });
     }
 
-    const snapshot = await db
-      .collection("content")
-      .where("teamId", "==", teamId)
-      .orderBy("createdAt", "desc")
-      .get();
+    const db = await getDb();
+    const contentCollection = db.collection("content");
 
-    const content = snapshot.docs.map((doc) => ({
-      ...doc.data(),
-      id: doc.id,
-    }));
+    console.log(
+      `[DEBUG] Executing MongoDB query: find({ teamId: "${teamId}" })`
+    );
+
+    const snapshot = await contentCollection
+      .find({ teamId: teamId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log(`[DEBUG] Query returned ${snapshot.length} documents`);
+
+    // Map the documents and use _id instead of uid
+    const content = snapshot.map((doc: any) => {
+      // Check if _id exists and is valid
+      if (!doc._id) {
+        console.log(`[WARNING] Document without _id found:`, doc);
+      }
+
+      return {
+        ...doc,
+        id: doc._id ? doc._id.toString() : null,
+      };
+    });
 
     res.json(content);
   } catch (error: unknown) {
@@ -763,31 +815,32 @@ export const getPersonalContent = async (req: Request, res: Response) => {
 
     // Different query based on user type
     let snapshot;
-    
+
     // Determine if user is part of an organization based on organizationId
     const isOrganizationUser = !!user.organizationId;
-    
+
     if (!isOrganizationUser) {
       // For individual users, get their personal content
-      snapshot = await db
-        .collection("content")
-        .where("createdBy", "==", user.uid)
-        .where("teamId", "==", null)
-        .orderBy("createdAt", "desc")
-        .get();
+      const db = await getDb();
+      const contentCollection = db.collection("content");
+      snapshot = await contentCollection
+        .find({ createdBy: user.uid, teamId: null })
+        .sort({ createdAt: -1 })
+        .toArray();
     } else {
       // For organization users, get content associated with their organization
-      snapshot = await db
-        .collection("content")
-        .where("organizationId", "==", user.organizationId)
-        .orderBy("createdAt", "desc")
-        .limit(10) // Limit to recent items for organization overview
-        .get();
+      const db = await getDb();
+      const contentCollection = db.collection("content");
+      snapshot = await contentCollection
+        .find({ organizationId: user.organizationId })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
     }
 
-    const content = snapshot.docs.map((doc) => ({
-      ...doc.data(),
-      id: doc.id,
+    const content = snapshot.map((doc: any) => ({
+      ...doc,
+      id: doc._id.toString(),
     }));
 
     res.json(content);

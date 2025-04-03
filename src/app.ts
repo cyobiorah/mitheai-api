@@ -13,7 +13,7 @@ import passport from "./config/passport.config";
 import authRoutes from "./routes/auth.routes";
 import usersRouter from "./routes/users.routes";
 import teamsRouter from "./routes/teams.routes";
-import invitationsRouter from "./routes/invitations.routes";
+// import invitationsRouter from "./routes/invitations.routes";
 import contentRouter from "./routes/content.routes";
 import collectionsRouter from "./routes/collections.routes";
 import analysisRouter from "./routes/analysis.routes";
@@ -158,7 +158,7 @@ app.get("/test-cors", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authenticateToken, usersRouter);
 app.use("/api/teams", authenticateToken, teamsRouter);
-app.use("/api/invitations", authenticateToken, invitationsRouter);
+// app.use("/api/invitations", authenticateToken, invitationsRouter);
 app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/collections", authenticateToken, collectionsRouter);
 app.use("/api/analysis", authenticateToken, analysisRouter);

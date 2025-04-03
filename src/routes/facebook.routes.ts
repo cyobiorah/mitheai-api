@@ -2,7 +2,6 @@ import express from "express";
 import passport from "../config/passport.config";
 import { FacebookService } from "../services/facebook.service";
 import { authenticateToken } from "../middleware/auth.middleware";
-import { validateOwnership } from "../middleware/social-account.middleware";
 import * as crypto from "crypto";
 import redisService from "../services/redis.service";
 
@@ -36,7 +35,6 @@ router.get(
 
       // Return the full URL with state parameter
       const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-      // const callbackUrl = `${baseUrl}/api/social-accounts/facebook/callback`;
 
       // Construct the Facebook auth URL with state parameter
       const authUrl = `${baseUrl}/api/social-accounts/facebook?state=${stateId}`;
@@ -72,7 +70,7 @@ router.get("/facebook", async (req, res, next) => {
     const stateData = await redisService.get(`facebook:${state as string}`);
 
     console.log(
-      `Facebook auth: Retrieved state data for state ${state}:`,
+      `Facebook auth: Retrieved state data for state ${state as string}:`,
       stateData
     );
 
@@ -103,7 +101,7 @@ router.get("/facebook", async (req, res, next) => {
       req.session.save((err: any) => {
         if (err) {
           console.error("Session save error:", err);
-          reject(err);
+          reject(err as Error);
         } else {
           console.log("Session saved successfully with user data and state ID");
           resolve();
@@ -134,17 +132,6 @@ router.get("/facebook", async (req, res, next) => {
 router.get(
   "/facebook/callback",
   async (req, res, next) => {
-    // console.log("Facebook callback received:", {
-    //   query: req.query,
-    //   headers: {
-    //     authorization: req.headers.authorization ? "Present" : "Missing",
-    //     cookie: req.headers.cookie ? "Present" : "Missing",
-    //   },
-    //   sessionID: req.sessionID,
-    //   hasSession: !!req.session,
-    //   stateParam: req.query.state || "Missing",
-    // });
-
     // Check for error in the callback
     if (req.query.error) {
       console.error("Facebook OAuth error:", req.query);
@@ -156,7 +143,7 @@ router.get(
     }
 
     // Check for state parameter
-    const { state, code } = req.query;
+    const { state } = req.query;
 
     if (!state) {
       console.error("No state parameter in Facebook callback");
@@ -172,7 +159,9 @@ router.get(
       const stateData = await redisService.get(`facebook:${state as string}`);
 
       if (!stateData) {
-        console.error(`No state data found in Redis for state: ${state}`);
+        console.error(
+          `No state data found in Redis for state: ${state as string}`
+        );
         return res.redirect(
           `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
             "Invalid or expired authentication link"
@@ -181,7 +170,7 @@ router.get(
       }
 
       console.log(
-        `Facebook callback: Found state data for state ${state}:`,
+        `Facebook callback: Found state data for state ${state as string}:`,
         stateData
       );
 
@@ -201,7 +190,7 @@ router.get(
         req.session.save((err: any) => {
           if (err) {
             console.error("Session save error in callback:", err);
-            reject(err);
+            reject(err as Error);
           } else {
             console.log("Session saved successfully in callback");
             resolve();
@@ -220,10 +209,42 @@ router.get(
       );
     }
   },
-  passport.authenticate("facebook", {
-    failureRedirect: `${process.env.FRONTEND_URL}/settings?error=Authentication%20failed`,
-    session: false,
-  }),
+  (req, res, next) => {
+    // Custom error handler for passport authentication
+    passport.authenticate("facebook", (err: any, user: any) => {
+      if (err) {
+        console.error("Facebook authentication error:", err);
+
+        // Handle specific error for already linked account
+        if (err.code === "ACCOUNT_ALREADY_LINKED") {
+          return res.redirect(
+            `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+              "This Facebook account is already connected to another user"
+            )}`
+          );
+        }
+
+        // Handle other errors
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+            err.message || "Authentication failed"
+          )}`
+        );
+      }
+
+      if (!user) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/settings?error=${encodeURIComponent(
+            "Authentication failed"
+          )}`
+        );
+      }
+
+      // Authentication successful
+      req.user = user;
+      next();
+    })(req, res, next);
+  },
   (req: any, res) => {
     // Successful authentication
     try {
@@ -253,7 +274,7 @@ router.get(
 router.post(
   "/facebook/post",
   authenticateToken,
-  validateOwnership("social_account"),
+  // validateOwnership("social_account"),
   async (req, res) => {
     const { accountId, message } = req.body;
     try {

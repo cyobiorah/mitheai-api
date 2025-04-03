@@ -6,7 +6,7 @@ import {
   requireOrgAccess,
 } from "../middleware/auth.middleware";
 import passport from "../config/passport.config";
-import { validateSocialAccountOperation } from "../middleware/social-account.middleware";
+// import { validateSocialAccountOperation } from "../middleware/social-account.middleware";
 import facebookRoutes from "./facebook.routes";
 import threadsRoutes from "./threads.routes";
 import * as crypto from "crypto";
@@ -158,12 +158,12 @@ router.get("/linkedin/callback", async (req: any, res) => {
     // Get code and state from query parameters
     const code = req.query.code;
     const state = req.query.state;
-    
+
     if (!code) {
       console.error("No authorization code in callback");
       return res.redirect(`${process.env.FRONTEND_URL}/settings?error=no_code`);
     }
-    
+
     if (!state) {
       console.error("No state parameter in LinkedIn callback");
       return res.redirect(
@@ -173,7 +173,7 @@ router.get("/linkedin/callback", async (req: any, res) => {
 
     // Retrieve state data from Redis
     const stateData = await redisService.get(`linkedin:${state}`);
-    
+
     if (!stateData) {
       console.error(`No state data found in Redis for state: ${state}`);
       return res.redirect(
@@ -199,7 +199,9 @@ router.get("/linkedin/callback", async (req: any, res) => {
   } catch (error: any) {
     console.error("LinkedIn callback error:", error);
     return res.redirect(
-      `${process.env.FRONTEND_URL}/settings?error=${error.message || "unknown_error"}`
+      `${process.env.FRONTEND_URL}/settings?error=${
+        error.message || "unknown_error"
+      }`
     );
   }
 });
@@ -874,13 +876,13 @@ router.get(
 router.post(
   "/twitter/tweet",
   authenticateToken,
-  validateSocialAccountOperation,
+  // validateSocialAccountOperation,
   controller.postTweet.bind(controller)
 );
 router.post(
   "/twitter/schedule",
   authenticateToken,
-  validateSocialAccountOperation,
+  // validateSocialAccountOperation,
   controller.scheduleTweet.bind(controller)
 );
 
@@ -888,14 +890,14 @@ router.post(
 router.post(
   "/twitter/debug-connection",
   authenticateToken,
-  validateSocialAccountOperation,
+  // validateSocialAccountOperation,
   controller.debugTwitterConnection.bind(controller)
 );
 
 router.get(
   "/twitter/debug/:accountId",
   authenticateToken,
-  validateSocialAccountOperation,
+  // validateSocialAccountOperation,
   controller.debugTwitterAccount.bind(controller)
 );
 

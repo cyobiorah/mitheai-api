@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { db } from "../config/firebase";
 import { AnalysisTemplate, User, ContentItem } from "../types";
-import { Timestamp } from "firebase-admin/firestore";
+
+const db: any = {};
 
 export const createTemplate = async (req: Request, res: Response) => {
   try {
@@ -213,7 +213,7 @@ export const listTeamTemplates = async (req: Request, res: Response) => {
         .orderBy("createdAt", "desc")
         .get();
 
-      const templates = snapshot.docs.map((doc) => ({
+      const templates = snapshot.docs.map((doc: any) => ({
         ...doc.data(),
         id: doc.id,
       }));
@@ -228,7 +228,7 @@ export const listTeamTemplates = async (req: Request, res: Response) => {
         .where("teamId", "==", null)
         .get();
 
-      const templates = snapshot.docs.map((doc) => ({
+      const templates = snapshot.docs.map((doc: any) => ({
         ...doc.data(),
         id: doc.id,
       }));
@@ -267,7 +267,7 @@ export const getPersonalTemplates = async (req: Request, res: Response) => {
       .orderBy("createdAt", "desc")
       .get();
 
-    const templates = snapshot.docs.map((doc) => ({
+    const templates = snapshot.docs.map((doc: any) => ({
       ...doc.data(),
       id: doc.id,
     }));

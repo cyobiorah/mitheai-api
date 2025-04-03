@@ -14,7 +14,7 @@ import {
   authenticateToken,
   belongsToTeam,
 } from "../middleware/auth.middleware";
-import { firestore } from "firebase-admin";
+// import { firestore } from "firebase-admin";
 
 // Create router instance
 const router = express.Router();
@@ -61,7 +61,7 @@ router.post("/generate", authenticateToken, (req, res) => {
 router.get(
   "/team/:teamId",
   authenticateToken,
-  belongsToTeam,
+  // belongsToTeam,
   (req: any, res: any) => {
     // console.log("[DEBUG] Team content route hit");
     // console.log("[DEBUG] Team ID:", req.params.teamId);
@@ -122,41 +122,41 @@ router.patch("/:contentId/post-status", authenticateToken, (req, res) => {
   }
 
   // Update content in database
-  try {
-    const db = firestore();
+  // try {
+  //   const db = firestore();
 
-    // Update the content document
-    db.collection("content")
-      .doc(contentId)
-      .update({
-        "metadata.socialPost.status": status,
-        "metadata.socialPost.postId": postId || null,
-        "metadata.socialPost.postedAt": postedAt
-          ? new Date(postedAt)
-          : new Date(),
-        updatedAt: new Date(),
-      })
-      .then(() => {
-        // Return success response
-        return res.status(200).json({
-          success: true,
-          message: "Post status updated successfully",
-        });
-      })
-      .catch((error) => {
-        console.error("Error updating post status:", error);
-        return res.status(500).json({
-          error: "Internal Server Error",
-          message: "Failed to update post status",
-        });
-      });
-  } catch (error) {
-    console.error("Error in post-status endpoint:", error);
-    return res.status(500).json({
-      error: "Internal Server Error",
-      message: "An unexpected error occurred",
-    });
-  }
+  //   // Update the content document
+  //   db.collection("content")
+  //     .doc(contentId)
+  //     .update({
+  //       "metadata.socialPost.status": status,
+  //       "metadata.socialPost.postId": postId || null,
+  //       "metadata.socialPost.postedAt": postedAt
+  //         ? new Date(postedAt)
+  //         : new Date(),
+  //       updatedAt: new Date(),
+  //     })
+  //     .then(() => {
+  //       // Return success response
+  //       return res.status(200).json({
+  //         success: true,
+  //         message: "Post status updated successfully",
+  //       });
+  //     })
+  //     .catch((error) => {
+  //       console.error("Error updating post status:", error);
+  //       return res.status(500).json({
+  //         error: "Internal Server Error",
+  //         message: "Failed to update post status",
+  //       });
+  //     });
+  // } catch (error) {
+  //   console.error("Error in post-status endpoint:", error);
+  //   return res.status(500).json({
+  //     error: "Internal Server Error",
+  //     message: "An unexpected error occurred",
+  //   });
+  // }
 });
 
 // Log all registered routes

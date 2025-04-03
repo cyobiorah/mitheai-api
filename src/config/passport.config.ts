@@ -2,7 +2,6 @@ import passport from "passport";
 const verifierMap = new Map<string, string>();
 import { Strategy as OAuth2Strategy } from "passport-oauth2";
 import { TwitterService } from "../services/twitter.service";
-import { firestore } from "firebase-admin";
 import crypto from "crypto";
 import "./facebook.config";
 import threadsStrategy from "./threads.config";
@@ -158,10 +157,10 @@ const strategy = new OAuth2Strategy(
             );
 
             // Mark that we've sent the welcome tweet
-            const db = firestore();
-            await db.collection("social_accounts").doc(account.id).update({
-              welcomeTweetSent: true,
-            });
+            // const db = firestore();
+            // await db.collection("social_accounts").doc(account.id).update({
+            //   welcomeTweetSent: true,
+            // });
 
             console.log("Welcome tweet posted successfully");
           } catch (tweetError: any) {
@@ -176,20 +175,20 @@ const strategy = new OAuth2Strategy(
               console.log("Welcome tweet already posted (duplicate content)");
 
               // Still mark the account as having sent a welcome tweet
-              const db = firestore();
-              await db.collection("social_accounts").doc(account.id).update({
-                welcomeTweetSent: true,
-              });
+              // const db = firestore();
+              // await db.collection("social_accounts").doc(account.id).update({
+              //   welcomeTweetSent: true,
+              // });
             } else {
               // For other errors, delete the account and report the error
               console.error("Failed to post welcome tweet:", tweetError);
 
               try {
                 // Get a Firestore reference
-                const db = firestore();
+                // const db = firestore();
 
                 // Delete the social account that was just created
-                await db.collection("social_accounts").doc(account.id).delete();
+                // await db.collection("social_accounts").doc(account.id).delete();
 
                 console.log(
                   `Deleted social account ${account.id} due to welcome tweet failure`
