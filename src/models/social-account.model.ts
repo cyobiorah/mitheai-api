@@ -22,6 +22,9 @@ export interface SocialAccount {
     lastChecked?: Date;
     tokenExpiresAt?: Date;
     profile?: any;
+    lastError?: string;
+    lastErrorTime?: Date;
+    requiresReauth?: boolean;
   };
   permissions: {
     canPost?: boolean;

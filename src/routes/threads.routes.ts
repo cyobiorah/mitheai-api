@@ -5,6 +5,7 @@ import { RepositoryFactory } from "../repositories/repository.factory";
 import { isOrganizationUser } from "../app-types";
 import * as crypto from "crypto";
 import redisService from "../services/redis.service";
+import { SocialPost } from "../models/social-post.model";
 
 const router = express.Router();
 const threadsService = new ThreadsService();
@@ -288,140 +289,196 @@ router.get("/threads/callback", async (req, res) => {
  * Uses the Threads Graph API to create a post on Threads
  * https://developers.facebook.com/docs/threads/create-posts
  */
-router.post("/threads/:accountId/post", authenticateToken, async (req: any, res) => {
-  try {
-    const { accountId } = req.params;
-    const { content, mediaUrls, mediaType = "TEXT" } = req.body;
-
-    // Validate request
-    if (!accountId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Account ID is required",
-      });
-    }
-
-    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Content or media is required",
-      });
-    }
-
-    // Validate mediaType
-    if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid media type. Must be one of: TEXT, IMAGE, VIDEO, CAROUSEL",
-      });
-    }
-
-    // Validate media configuration
-    if (mediaType === "IMAGE" || mediaType === "VIDEO") {
-      if (!mediaUrls || mediaUrls.length !== 1) {
-        return res.status(400).json({
-          status: "error",
-          message: `${mediaType} posts require exactly one media URL`,
-        });
-      }
-    } else if (mediaType === "CAROUSEL") {
-      if (!mediaUrls || mediaUrls.length < 2 || mediaUrls.length > 20) {
-        return res.status(400).json({
-          status: "error",
-          message: "CAROUSEL posts require between 2 and 20 media URLs",
-        });
-      }
-    }
-
-    // Get user ID from the authenticated request
-    const userId = req.user?.uid;
-    if (!userId) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required",
-      });
-    }
-
+router.post(
+  "/threads/:accountId/post",
+  authenticateToken,
+  async (req: any, res) => {
     try {
-      // Get the social account using the repository
-      const account = await threadsService.getAccountWithValidToken(accountId);
+      const { accountId } = req.params;
+      const { content, mediaUrls, mediaType = "TEXT" } = req.body;
 
-      if (!account) {
-        return res.status(404).json({
-          status: "error",
-          message: "Social account not found",
-        });
-      }
-
-      // Security check: Verify the account belongs to the authenticated user
-      // Unless the user is an admin or belongs to the organization/team
-      if (account.userId !== userId) {
-        // The user object is already available from the authenticateToken middleware
-        const user = req.user;
-
-        if (!user) {
-          return res.status(401).json({
-            status: "error",
-            message: "Authentication failed",
-          });
-        }
-
-        const hasAccess =
-          (account.organizationId &&
-            isOrganizationUser(user) &&
-            account.organizationId === user.organizationId) ||
-          (account.teamId &&
-            isOrganizationUser(user) &&
-            user.teamIds?.includes(account.teamId)) ||
-          user.role === "super_admin";
-
-        if (!hasAccess) {
-          return res.status(403).json({
-            status: "error",
-            message: "You do not have permission to post with this account",
-          });
-        }
-      }
-
-      // Post to Threads using the account
-      const post = await threadsService.postContent(
-        accountId,
-        content,
-        mediaUrls,
-        mediaType as "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL"
-      );
-
-      // Return the post details
-      return res.status(200).json({
-        status: "success",
-        data: post,
-      });
-    } catch (error: any) {
-      console.error("Error posting to Threads:", error);
-
-      // Handle specific error types
-      if (error.message?.includes("Media uploads")) {
+      // Validate request
+      if (!accountId) {
         return res.status(400).json({
           status: "error",
-          message: error.message,
-          code: "MEDIA_NOT_SUPPORTED",
+          message: "Account ID is required",
         });
       }
 
-      // Return appropriate error response
-      return res.status(error.response?.status || 500).json({
+      if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Content or media is required",
+        });
+      }
+
+      // Validate mediaType
+      if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Invalid media type. Must be one of: TEXT, IMAGE, VIDEO, CAROUSEL",
+        });
+      }
+
+      // Validate media configuration
+      if (mediaType === "IMAGE" || mediaType === "VIDEO") {
+        if (!mediaUrls || mediaUrls.length !== 1) {
+          return res.status(400).json({
+            status: "error",
+            message: `${mediaType} posts require exactly one media URL`,
+          });
+        }
+      } else if (mediaType === "CAROUSEL") {
+        if (!mediaUrls || mediaUrls.length < 2 || mediaUrls.length > 20) {
+          return res.status(400).json({
+            status: "error",
+            message: "CAROUSEL posts require between 2 and 20 media URLs",
+          });
+        }
+      }
+
+      // Get user ID from the authenticated request
+      const userId = req.user?.uid;
+      if (!userId) {
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication required",
+        });
+      }
+
+      try {
+        // Get the social account using the repository
+        const account = await threadsService.getAccountWithValidToken(
+          accountId
+        );
+
+        if (!account) {
+          return res.status(404).json({
+            status: "error",
+            message: "Social account not found",
+          });
+        }
+
+        // Security check: Verify the account belongs to the authenticated user
+        // Unless the user is an admin or belongs to the organization/team
+        if (account.userId !== userId) {
+          // The user object is already available from the authenticateToken middleware
+          const user = req.user;
+
+          if (!user) {
+            return res.status(401).json({
+              status: "error",
+              message: "Authentication failed",
+            });
+          }
+
+          const hasAccess =
+            (account.organizationId &&
+              isOrganizationUser(user) &&
+              account.organizationId === user.organizationId) ||
+            (account.teamId &&
+              isOrganizationUser(user) &&
+              user.teamIds?.includes(account.teamId)) ||
+            user.role === "super_admin";
+
+          if (!hasAccess) {
+            return res.status(403).json({
+              status: "error",
+              message: "You do not have permission to post with this account",
+            });
+          }
+        }
+
+        // Post to Threads using the account
+        const postResult = await threadsService.postContent(
+          accountId,
+          content,
+          mediaType as "TEXT" | "IMAGE" | "VIDEO",
+          mediaUrls?.[0]
+        );
+
+        // Check if posting was successful
+        if (!postResult.success) {
+          // Handle specific error cases
+          if (postResult.error?.includes("token has expired")) {
+            return res.status(401).json({
+              status: "error",
+              code: "TOKEN_EXPIRED",
+              message: postResult.error,
+              accountId,
+              platform: "threads",
+              requiresReconnect: true,
+            });
+          }
+          
+          return res.status(400).json({
+            status: "error",
+            message: postResult.error || "Failed to post to Threads",
+          });
+        }
+
+        // Save the post to the database for analytics and tracking
+        try {
+          const socialPostRepository =
+            await RepositoryFactory.createSocialPostRepository();
+
+          const socialPost: SocialPost = {
+            userId: account.userId,
+            teamId: account.teamId,
+            organizationId: account.organizationId,
+            socialAccountId: accountId,
+            platform: "threads",
+            content: content,
+            mediaType: mediaType || "TEXT",
+            mediaUrls: mediaUrls,
+            postId: postResult.postId,
+            status: "published",
+            publishedDate: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          await socialPostRepository.createPost(socialPost);
+          console.log(`Saved Threads post to database for analytics tracking`);
+        } catch (saveError) {
+          // Don't fail the post if saving to the database fails
+          console.error("Error saving Threads post to database:", saveError);
+        }
+
+        // Return the post details
+        return res.status(200).json({
+          status: "success",
+          data: postResult.postId,
+        });
+      } catch (error: any) {
+        console.error("Error posting to Threads:", error);
+
+        // Handle specific error types
+        if (error.message?.includes("Media uploads")) {
+          return res.status(400).json({
+            status: "error",
+            message: error.message,
+            code: "MEDIA_NOT_SUPPORTED",
+          });
+        }
+
+        // Return appropriate error response
+        return res.status(error.response?.status || 500).json({
+          status: "error",
+          message:
+            error.message || "An error occurred while posting to Threads",
+          details: error.response?.data || null,
+        });
+      }
+    } catch (error: any) {
+      console.error("Unexpected error in Threads post:", error);
+      return res.status(500).json({
         status: "error",
-        message: error.message || "An error occurred while posting to Threads",
-        details: error.response?.data || null,
+        message: "An unexpected error occurred",
       });
     }
-  } catch (error: any) {
-    console.error("Unexpected error in Threads post:", error);
-    return res.status(500).json({
-      status: "error",
-      message: "An unexpected error occurred",
-    });
   }
-});
+);
 
 export default router;

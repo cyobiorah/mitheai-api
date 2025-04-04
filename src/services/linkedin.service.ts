@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import axios from "axios";
 import * as crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { SocialPost } from "../models/social-post.model";
+import { SocialPostRepository } from "../repositories/social-post.repository";
 
 export class LinkedInError extends Error {
   constructor(
@@ -416,6 +418,32 @@ export class LinkedInService {
       // LinkedIn returns a 201 Created status with the post ID in the x-restli-id header
       const postId = response.headers["x-restli-id"];
       console.log(`Successfully posted to LinkedIn, post ID: ${postId}`);
+
+      // Save the post to the database for analytics and tracking
+      try {
+        const socialPostRepository = await RepositoryFactory.createSocialPostRepository();
+        
+        const socialPost: SocialPost = {
+          userId: account.userId,
+          teamId: account.teamId,
+          organizationId: account.organizationId,
+          socialAccountId: accountId,
+          platform: "linkedin",
+          content: message,
+          mediaType: "TEXT",
+          postId: postId,
+          status: "published",
+          publishedDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        await socialPostRepository.createPost(socialPost);
+        console.log(`Saved LinkedIn post to database for analytics tracking`);
+      } catch (saveError) {
+        // Don't fail the post if saving to the database fails
+        console.error("Error saving LinkedIn post to database:", saveError);
+      }
 
       return {
         success: true,

@@ -16,6 +16,7 @@ import teamsRouter from "./routes/teams.routes";
 import invitationsRouter from "./routes/invitations.routes";
 import contentRouter from "./routes/content.routes";
 import socialAccountRouter from "./routes/social-account.routes";
+import socialPostRouter from "./routes/social-post.routes";
 
 config();
 
@@ -156,6 +157,7 @@ app.use("/api/teams", authenticateToken, teamsRouter);
 app.use("/api/invitations", invitationsRouter);
 app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/social-accounts", socialAccountRouter);
+app.use("/api/social-posts", socialPostRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");

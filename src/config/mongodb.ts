@@ -15,7 +15,7 @@ export class MongoDBConnection {
     if (!uri) {
       throw new Error("MongoDB URI is not defined in environment variables");
     }
-    
+
     // Create MongoDB client with improved options
     this.client = new MongoClient(uri, {
       serverApi: {
@@ -81,7 +81,6 @@ export async function getDb(): Promise<Db> {
   return connection.connect();
 }
 
-// Collection references (similar to Firebase structure)
 export async function getCollections() {
   const db = await getDb();
   return {
@@ -90,6 +89,6 @@ export async function getCollections() {
     teams: db.collection("teams"),
     invitations: db.collection("invitations"),
     socialAccounts: db.collection("socialAccounts"),
-    // Add other collections as needed
+    socialPosts: db.collection("socialPosts"),
   };
 }
