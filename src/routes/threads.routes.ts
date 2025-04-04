@@ -288,10 +288,10 @@ router.get("/threads/callback", async (req, res) => {
  * Uses the Threads Graph API to create a post on Threads
  * https://developers.facebook.com/docs/threads/create-posts
  */
-router.post("/threads/:accountId/post", async (req, res) => {
+router.post("/threads/:accountId/post", authenticateToken, async (req: any, res) => {
   try {
     const { accountId } = req.params;
-    const { content, mediaUrls } = req.body;
+    const { content, mediaUrls, mediaType = "TEXT" } = req.body;
 
     // Validate request
     if (!accountId) {
@@ -308,8 +308,33 @@ router.post("/threads/:accountId/post", async (req, res) => {
       });
     }
 
-    // Authenticate user
-    const userId = req.session?.user?.uid;
+    // Validate mediaType
+    if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid media type. Must be one of: TEXT, IMAGE, VIDEO, CAROUSEL",
+      });
+    }
+
+    // Validate media configuration
+    if (mediaType === "IMAGE" || mediaType === "VIDEO") {
+      if (!mediaUrls || mediaUrls.length !== 1) {
+        return res.status(400).json({
+          status: "error",
+          message: `${mediaType} posts require exactly one media URL`,
+        });
+      }
+    } else if (mediaType === "CAROUSEL") {
+      if (!mediaUrls || mediaUrls.length < 2 || mediaUrls.length > 20) {
+        return res.status(400).json({
+          status: "error",
+          message: "CAROUSEL posts require between 2 and 20 media URLs",
+        });
+      }
+    }
+
+    // Get user ID from the authenticated request
+    const userId = req.user?.uid;
     if (!userId) {
       return res.status(401).json({
         status: "error",
@@ -331,9 +356,8 @@ router.post("/threads/:accountId/post", async (req, res) => {
       // Security check: Verify the account belongs to the authenticated user
       // Unless the user is an admin or belongs to the organization/team
       if (account.userId !== userId) {
-        // Get user from repository
-        const userRepository = await RepositoryFactory.createUserRepository();
-        const user = await userRepository.findById(userId);
+        // The user object is already available from the authenticateToken middleware
+        const user = req.user;
 
         if (!user) {
           return res.status(401).json({
@@ -354,7 +378,7 @@ router.post("/threads/:accountId/post", async (req, res) => {
         if (!hasAccess) {
           return res.status(403).json({
             status: "error",
-            message: "You don't have access to this account",
+            message: "You do not have permission to post with this account",
           });
         }
       }
@@ -363,7 +387,8 @@ router.post("/threads/:accountId/post", async (req, res) => {
       const post = await threadsService.postContent(
         accountId,
         content,
-        mediaUrls
+        mediaUrls,
+        mediaType as "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL"
       );
 
       // Return the post details

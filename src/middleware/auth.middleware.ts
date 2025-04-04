@@ -25,21 +25,12 @@ export const authenticate = async (
     }
 
     const token = authHeader.split(" ")[1];
-    // console.log("Authenticating with token:", token.substring(0, 15) + "...");
 
     // Verify token
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production"
     ) as JwtPayload;
-
-    // console.log("Decoded token:", {
-    //   uid: decoded.uid,
-    //   email: decoded.email,
-    //   userType: decoded.userType,
-    //   organizationId: decoded.organizationId,
-    //   teamIds: decoded.teamIds
-    // });
 
     // Get user from database
     const userRepository = await RepositoryFactory.createUserRepository();
@@ -53,16 +44,11 @@ export const authenticate = async (
         try {
           // Try to find by id directly first
           user = await userRepository.findOne({ uid: decoded.uid });
-          // console.log("User lookup by uid:", user ? "Found" : "Not found");
 
           // If not found and it looks like a MongoDB ObjectId, try findById
           if (!user && /^[0-9a-fA-F]{24}$/.test(decoded.uid)) {
             try {
               user = await userRepository.findById(decoded.uid);
-              // console.log(
-              //   "User lookup by ObjectId:",
-              //   user ? "Found" : "Not found"
-              // );
             } catch (error) {
               console.error("Error finding user by ObjectId:", error);
             }
@@ -75,16 +61,11 @@ export const authenticate = async (
       // If not found by id, try by email
       if (!user && decoded.email) {
         user = await userRepository.findOne({ email: decoded.email });
-        // console.log("User lookup by email:", user ? "Found" : "Not found");
       }
 
       // Last resort, try by uid
       if (!user && decoded.uid) {
         user = await userRepository.findOne({ uid: decoded.uid });
-        // console.log(
-        //   "User lookup by uid (last resort):",
-        //   user ? "Found" : "Not found"
-        // );
       }
     } catch (error) {
       console.error("Error finding user:", error);
@@ -119,26 +100,6 @@ export const authenticate = async (
 
 // For backward compatibility with existing routes
 export const authenticateToken = authenticate;
-
-// Add a simple middleware to log all requests
-export const logRequests = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  // console.log(
-  //   `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
-  //   {
-  //     headers: {
-  //       authorization: req.headers.authorization ? "Present" : "Missing",
-  //       cookie: req.headers.cookie ? "Present" : "Missing",
-  //     },
-  //     sessionID: req.sessionID,
-  //     hasSession: !!req.session,
-  //   }
-  // );
-  next();
-};
 
 // Middleware to check if user has required role
 export const authorize = (roles: string[]) => {

@@ -91,14 +91,32 @@ export class MongoDBRepository<T> implements Repository<T> {
     delete updateData.id;
     delete updateData._id;
     
-    // Try to update using the query builder that handles both id types
-    const result = await this.collection.findOneAndUpdate(
-      this.prepareIdQuery(id),
-      { $set: updateData },
-      { returnDocument: "after" }
-    );
-    
-    return result && result.value ? this.formatDocument(result.value) : null;
+    try {
+      console.log(`Updating document with id: ${id}`);
+      
+      // Try to update using the query builder that handles both id types
+      const query = this.prepareIdQuery(id);
+      
+      const result = await this.collection.findOneAndUpdate(
+        query,
+        { $set: updateData },
+        { returnDocument: "after" }
+      );
+      
+      if (!result) {
+        console.log(`Update result is null for id: ${id}`);
+        return null;
+      }
+      
+      // Handle different MongoDB driver versions
+      // Some versions return { value: document }, others return the document directly
+      const updatedDoc = result.value || result;
+      
+      return this.formatDocument(updatedDoc);
+    } catch (error) {
+      console.error(`Error updating document with id: ${id}`, error);
+      return null;
+    }
   }
 
   async delete(id: string): Promise<boolean> {

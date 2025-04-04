@@ -1,6 +1,7 @@
 import { Invitation, User } from "../types";
 import { RepositoryFactory } from "../repositories/repository.factory";
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 
 export class InvitationService {
   private invitationRepository: any;
@@ -89,6 +90,8 @@ export class InvitationService {
     if (!invitation) {
       throw new Error("Invalid invitation token");
     }
+    
+    console.log("Found invitation:", invitation.id, "for email:", invitation.email);
 
     // Check if invitation is still valid
     if (invitation.status !== "pending") {
@@ -100,27 +103,72 @@ export class InvitationService {
       throw new Error("Invitation has expired");
     }
 
-    // Create user from invitation
-    const user = await this.userRepository.create({
-      uid: this.generateUserId(),
+    // Hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(userData.password, salt);
+
+    // Find ALL users with this email to handle potential duplicates
+    const existingUsers = await this.userRepository.find({
       email: invitation.email,
-      firstName: invitation.firstName,
-      lastName: invitation.lastName,
-      role: invitation.role,
-      organizationId: invitation.organizationId,
-      teamIds: invitation.teamIds,
-      userType: "organization",
-      status: "active",
-      settings: {
-        permissions: [],
-        theme: "light",
-        notifications: [],
-      },
-      password: userData.password, // Note: This should be hashed in the UserRepository
-    } as any);
+    });
+    
+    console.log("Found existing users:", existingUsers.length);
+    
+    let user;
+
+    if (existingUsers && existingUsers.length > 0) {
+      // If we have multiple users with the same email, find the one with status "pending"
+      // or take the first one if none have "pending" status
+      const pendingUser =
+        existingUsers.find((u: any) => u.status === "pending") ||
+        existingUsers[0];
+      
+      console.log("Selected user to update:", pendingUser.id);
+
+      // Update the existing user instead of creating a new one
+      user = await this.userRepository.update(pendingUser.id, {
+        status: "active",
+        password: hashedPassword,
+        updatedAt: new Date(),
+      });
+      
+      console.log("After update, user is:", user ? "found" : "null");
+
+      // Delete any other duplicate users with the same email
+      for (const dupUser of existingUsers) {
+        if (dupUser.id !== pendingUser.id) {
+          console.log("Deleting duplicate user:", dupUser.id);
+          await this.userRepository.delete(dupUser.id);
+        }
+      }
+    } else {
+      // Create a new user if none exists
+      console.log("No existing users found, creating new user");
+      user = await this.userRepository.create({
+        uid: this.generateUserId(),
+        email: invitation.email,
+        firstName: invitation.firstName,
+        lastName: invitation.lastName,
+        role: invitation.role,
+        organizationId: invitation.organizationId,
+        teamIds: invitation.teamIds,
+        userType: "organization",
+        status: "active",
+        settings: {
+          permissions: [],
+          theme: "light",
+          notifications: [],
+        },
+        password: hashedPassword,
+      } as any);
+      
+      console.log("After create, user is:", user ? "created" : "null");
+    }
 
     // Mark invitation as accepted
     await this.invitationRepository.markAsAccepted(invitation.id);
+    
+    console.log("Final user object to return:", user ? "valid" : "null");
 
     return user;
   }

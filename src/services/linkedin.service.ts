@@ -344,22 +344,123 @@ export class LinkedInService {
   }
 
   /**
-   * Post content to LinkedIn
-   * Note: This is a placeholder - LinkedIn's API for posting content is more complex
-   * and would need to be implemented according to their Share API documentation
+   * Post content to LinkedIn using the new REST API
+   * Uses the LinkedIn Posts API to create a text-only post
+   * @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
    */
   async postToLinkedIn(accountId: string, message: string): Promise<any> {
-    const account = await this.getSocialAccount(accountId);
-    if (!account) {
-      throw new Error("Account not found");
-    }
+    try {
+      console.log(`Attempting to post to LinkedIn for account ${accountId}`);
 
-    // This is a placeholder - actual implementation would use LinkedIn's Share API
-    throw new LinkedInError(
-      "NOT_IMPLEMENTED",
-      "Posting to LinkedIn is not yet implemented",
-      { accountId, message }
-    );
+      // Get the social account with the access token
+      const account = await this.getSocialAccount(accountId);
+      if (!account) {
+        throw new LinkedInError(
+          "ACCOUNT_NOT_FOUND",
+          "LinkedIn account not found",
+          { accountId }
+        );
+      }
+
+      // Check if the token needs to be refreshed
+      if (account.tokenExpiry && new Date(account.tokenExpiry) < new Date()) {
+        console.log(
+          `Token expired for LinkedIn account ${accountId}, refreshing...`
+        );
+        // LinkedIn doesn't support refresh tokens in the same way as other platforms
+        // We would need to implement a solution for handling expired tokens
+        throw new LinkedInError(
+          "TOKEN_EXPIRED",
+          "LinkedIn access token has expired and needs to be reconnected",
+          { accountId }
+        );
+      }
+
+      // Determine if this is a personal or organization account
+      // The author URN format depends on the account type
+      const authorUrn =
+        account.accountType === "business"
+          ? `urn:li:organization:${account.platformAccountId}`
+          : `urn:li:person:${account.platformAccountId}`;
+
+      // Prepare the post payload according to LinkedIn's new Posts API
+      const postPayload = {
+        author: authorUrn,
+        commentary: message,
+        visibility: "PUBLIC",
+        distribution: {
+          feedDistribution: "MAIN_FEED",
+          targetEntities: [],
+          thirdPartyDistributionChannels: [],
+        },
+        lifecycleState: "PUBLISHED",
+        isReshareDisabledByAuthor: false,
+      };
+
+      console.log("LinkedIn post payload:", JSON.stringify(postPayload));
+
+      // Make the API request to create the post
+      const response = await axios.post(
+        "https://api.linkedin.com/rest/posts",
+        postPayload,
+        {
+          headers: {
+            Authorization: `Bearer ${account.accessToken}`,
+            "X-Restli-Protocol-Version": "2.0.0",
+            "LinkedIn-Version": "202405", // Using the version from your documentation link
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      // LinkedIn returns a 201 Created status with the post ID in the x-restli-id header
+      const postId = response.headers["x-restli-id"];
+      console.log(`Successfully posted to LinkedIn, post ID: ${postId}`);
+
+      return {
+        success: true,
+        postId,
+        platform: "linkedin",
+        message: "Post successfully created on LinkedIn",
+      };
+    } catch (error: any) {
+      console.error("Error posting to LinkedIn:", error);
+
+      // Handle API-specific errors
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+
+        if (status === 401) {
+          throw new LinkedInError(
+            "UNAUTHORIZED",
+            "LinkedIn authentication failed. The account may need to be reconnected.",
+            { accountId, error: data }
+          );
+        }
+
+        if (status === 403) {
+          throw new LinkedInError(
+            "FORBIDDEN",
+            "Not authorized to post to this LinkedIn account.",
+            { accountId, error: data }
+          );
+        }
+
+        throw new LinkedInError(
+          "API_ERROR",
+          `LinkedIn API error: ${data.message || JSON.stringify(data)}`,
+          { accountId, status, error: data }
+        );
+      }
+
+      // Handle other errors
+      throw new LinkedInError(
+        "UNKNOWN_ERROR",
+        error.message || "Unknown error posting to LinkedIn",
+        { accountId, error: error.toString() }
+      );
+    }
   }
 
   async getUserProfileFromAccessToken(accessToken: string): Promise<any> {

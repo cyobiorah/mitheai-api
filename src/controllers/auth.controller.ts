@@ -80,11 +80,10 @@ export const login = async (
       // Get all teams the user belongs to
       if (user.teamIds && user.teamIds.length > 0) {
         const teams = await Promise.all(
-          user.teamIds.map(teamId => teamService.findById(teamId))
+          user.teamIds.map((teamId) => teamService.findById(teamId))
         );
         // Filter out any null values (in case a team was deleted)
-        response.teams = teams.filter(team => team !== null);
-        // console.log(`Found ${response.teams.length} teams for user ${user.email}`);
+        response.teams = teams.filter((team) => team !== null);
       } else {
         response.teams = [];
       }
@@ -297,11 +296,10 @@ export const me = async (req: Request, res: Response) => {
       // Get all teams the user belongs to
       if (user.teamIds && user.teamIds.length > 0) {
         const teams = await Promise.all(
-          user.teamIds.map(teamId => teamService.findById(teamId))
+          user.teamIds.map((teamId) => teamService.findById(teamId))
         );
         // Filter out any null values (in case a team was deleted)
-        response.teams = teams.filter(team => team !== null);
-        // console.log(`Found ${response.teams.length} teams for user ${user.email}`);
+        response.teams = teams.filter((team) => team !== null);
       } else {
         response.teams = [];
         console.log(`No teams found for user ${user.email}`);

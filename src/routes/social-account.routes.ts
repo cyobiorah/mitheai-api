@@ -13,6 +13,7 @@ import * as crypto from "crypto";
 
 import redisService from "../services/redis.service";
 import { SocialAccount } from "../models/social-account.model";
+import { isOrganizationUser } from "../app-types";
 
 // Extend express-session types
 declare module "express-session" {
@@ -907,6 +908,127 @@ router.post(
   // validateSocialAccountOperation,
   requireOrgAccess,
   controller.assignTeam.bind(controller)
+);
+
+/**
+ * Post content to LinkedIn
+ * Uses the LinkedIn Posts API to create a text post
+ * @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
+ */
+router.post(
+  "/linkedin/:accountId/post",
+  authenticateToken,
+  async (req: any, res) => {
+    const linkedInService = controller.getLinkedInService();
+    try {
+      const { accountId } = req.params;
+      const { content } = req.body;
+
+      // Validate request
+      if (!accountId) {
+        return res.status(400).json({
+          status: "error",
+          message: "Account ID is required",
+        });
+      }
+
+      if (!content) {
+        return res.status(400).json({
+          status: "error",
+          message: "Content is required",
+        });
+      }
+
+      // Get user ID from the authenticated request
+      const userId = req.user?.uid;
+      if (!userId) {
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication required",
+        });
+      }
+
+      try {
+        // Get the social account
+        const account = await linkedInService.getSocialAccount(accountId);
+
+        if (!account) {
+          return res.status(404).json({
+            status: "error",
+            message: "Social account not found",
+          });
+        }
+
+        // Security check: Verify the account belongs to the authenticated user
+        // Unless the user is an admin or belongs to the organization/team
+        if (account.userId !== userId) {
+          // The user object is already available from the authenticateToken middleware
+          const user = req.user;
+
+          if (!user) {
+            return res.status(401).json({
+              status: "error",
+              message: "Authentication failed",
+            });
+          }
+
+          const hasAccess =
+            (account.organizationId &&
+              isOrganizationUser(user) &&
+              account.organizationId === user.organizationId) ||
+            (account.teamId &&
+              isOrganizationUser(user) &&
+              user.teamIds?.includes(account.teamId)) ||
+            user.role === "super_admin";
+
+          if (!hasAccess) {
+            return res.status(403).json({
+              status: "error",
+              message: "You do not have permission to post with this account",
+            });
+          }
+        }
+
+        // Post to LinkedIn
+        const result = await linkedInService.postToLinkedIn(accountId, content);
+
+        return res.status(200).json({
+          status: "success",
+          message: "Successfully posted to LinkedIn",
+          data: result,
+        });
+      } catch (error: any) {
+        console.error("Error posting to LinkedIn:", error);
+
+        // Handle specific error types
+        if (error.code === "TOKEN_EXPIRED") {
+          return res.status(401).json({
+            status: "error",
+            message:
+              "LinkedIn access token has expired. Please reconnect your account.",
+          });
+        }
+
+        if (error.code === "ACCOUNT_NOT_FOUND") {
+          return res.status(404).json({
+            status: "error",
+            message: "LinkedIn account not found",
+          });
+        }
+
+        return res.status(500).json({
+          status: "error",
+          message: error.message || "Failed to post to LinkedIn",
+        });
+      }
+    } catch (error: any) {
+      console.error("Unexpected error in LinkedIn post route:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "An unexpected error occurred",
+      });
+    }
+  }
 );
 
 export default router;

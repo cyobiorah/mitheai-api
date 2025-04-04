@@ -264,7 +264,12 @@ export class ThreadsService {
    * Post content to Threads via Threads API
    * https://developers.facebook.com/docs/threads/create-posts
    */
-  async postContent(accountId: string, content: string, mediaUrls?: string[]) {
+  async postContent(
+    accountId: string,
+    content: string,
+    mediaUrls?: string[],
+    mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" = "TEXT"
+  ) {
     try {
       const socialAccount = await this.socialAccountRepository.findById(
         accountId
@@ -295,42 +300,21 @@ export class ThreadsService {
         throw new Error("Threads ID not found for this account");
       }
 
-      // For Threads API, following Meta's documentation:
-      // https://developers.facebook.com/docs/threads/create-posts
-      // We need to use the /v18.0/{threads-id}/threads endpoint
-
-      // If there's media, we need to handle it differently
-      if (mediaUrls && mediaUrls.length > 0) {
-        // Not implementing media uploads in this version as it requires additional steps
-        throw new Error(
-          "Media uploads to Threads are not supported in this version"
-        );
-      } else {
+      // Handle different post types based on media
+      if (mediaType === "TEXT" || !mediaUrls || mediaUrls.length === 0) {
         // Text-only post
-        const response = await axios.post(
-          `https://graph.threads.net/v18.0/${threadsId}/threads`,
-          {
-            text: content,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${updatedAccount.accessToken}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        if (!response?.data?.id) {
-          throw new Error("Failed to create Threads post");
-        }
-
-        return {
-          id: response.data.id,
-          platform: "threads",
-          status: "published",
-          url: `https://threads.net/t/${response.data.id}`,
-          data: response.data,
-        };
+        return await this.createTextPost(threadsId, content, updatedAccount.accessToken);
+      } else if (mediaType === "IMAGE" && mediaUrls.length === 1) {
+        // Single image post
+        return await this.createImagePost(threadsId, content, mediaUrls[0], updatedAccount.accessToken);
+      } else if (mediaType === "VIDEO" && mediaUrls.length === 1) {
+        // Single video post
+        return await this.createVideoPost(threadsId, content, mediaUrls[0], updatedAccount.accessToken);
+      } else if (mediaType === "CAROUSEL" && mediaUrls.length > 1) {
+        // Carousel post (multiple images/videos)
+        return await this.createCarouselPost(threadsId, content, mediaUrls, updatedAccount.accessToken);
+      } else {
+        throw new Error("Invalid media configuration for Threads post");
       }
     } catch (error: any) {
       console.error(
@@ -339,6 +323,268 @@ export class ThreadsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Create a text-only post on Threads
+   */
+  private async createTextPost(threadsId: string, content: string, accessToken: string) {
+    // Create a media container for text post
+    const containerResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads`,
+      {
+        text: content,
+        media_type: "TEXT"
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!containerResponse?.data?.id) {
+      throw new Error("Failed to create Threads media container");
+    }
+
+    const containerId = containerResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await this.delay(30000); // 30 seconds delay
+
+    // Publish the container
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
+      {
+        creation_id: containerId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!publishResponse?.data?.id) {
+      throw new Error("Failed to publish Threads post");
+    }
+
+    return {
+      id: publishResponse.data.id,
+      platform: "threads",
+      status: "published",
+      url: `https://threads.net/t/${publishResponse.data.id}`,
+      data: publishResponse.data,
+    };
+  }
+
+  /**
+   * Create an image post on Threads
+   */
+  private async createImagePost(threadsId: string, content: string, imageUrl: string, accessToken: string) {
+    // Create a media container for image post
+    const containerResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads`,
+      {
+        text: content,
+        media_type: "IMAGE",
+        image_url: imageUrl
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!containerResponse?.data?.id) {
+      throw new Error("Failed to create Threads media container");
+    }
+
+    const containerId = containerResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await this.delay(30000); // 30 seconds delay
+
+    // Publish the container
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
+      {
+        creation_id: containerId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!publishResponse?.data?.id) {
+      throw new Error("Failed to publish Threads post");
+    }
+
+    return {
+      id: publishResponse.data.id,
+      platform: "threads",
+      status: "published",
+      url: `https://threads.net/t/${publishResponse.data.id}`,
+      data: publishResponse.data,
+    };
+  }
+
+  /**
+   * Create a video post on Threads
+   */
+  private async createVideoPost(threadsId: string, content: string, videoUrl: string, accessToken: string) {
+    // Create a media container for video post
+    const containerResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads`,
+      {
+        text: content,
+        media_type: "VIDEO",
+        video_url: videoUrl
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!containerResponse?.data?.id) {
+      throw new Error("Failed to create Threads media container");
+    }
+
+    const containerId = containerResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await this.delay(30000); // 30 seconds delay
+
+    // Publish the container
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
+      {
+        creation_id: containerId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!publishResponse?.data?.id) {
+      throw new Error("Failed to publish Threads post");
+    }
+
+    return {
+      id: publishResponse.data.id,
+      platform: "threads",
+      status: "published",
+      url: `https://threads.net/t/${publishResponse.data.id}`,
+      data: publishResponse.data,
+    };
+  }
+
+  /**
+   * Create a carousel post on Threads (multiple images/videos)
+   */
+  private async createCarouselPost(threadsId: string, content: string, mediaUrls: string[], accessToken: string) {
+    // Step 1: Create individual item containers for each media
+    const mediaContainerIds = [];
+    
+    for (const mediaUrl of mediaUrls) {
+      // Determine if it's an image or video based on file extension
+      const isVideo = /\.(mp4|mov|avi|wmv)$/i.test(mediaUrl);
+      
+      const itemResponse = await axios.post(
+        `https://graph.threads.net/v1.0/${threadsId}/threads`,
+        {
+          is_carousel_item: true,
+          media_type: isVideo ? "VIDEO" : "IMAGE",
+          ...(isVideo ? { video_url: mediaUrl } : { image_url: mediaUrl })
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (!itemResponse?.data?.id) {
+        throw new Error("Failed to create carousel item container");
+      }
+      
+      mediaContainerIds.push(itemResponse.data.id);
+      
+      // Brief delay between item creation requests
+      await this.delay(2000);
+    }
+    
+    // Step 2: Create a carousel container
+    const carouselResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads`,
+      {
+        media_type: "CAROUSEL",
+        children: mediaContainerIds.join(","),
+        text: content
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    
+    if (!carouselResponse?.data?.id) {
+      throw new Error("Failed to create carousel container");
+    }
+    
+    const carouselContainerId = carouselResponse.data.id;
+    
+    // Wait for the container to be processed (recommended by Meta)
+    await this.delay(30000); // 30 seconds delay
+    
+    // Step 3: Publish the carousel container
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
+      {
+        creation_id: carouselContainerId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    
+    if (!publishResponse?.data?.id) {
+      throw new Error("Failed to publish carousel post");
+    }
+    
+    return {
+      id: publishResponse.data.id,
+      platform: "threads",
+      status: "published",
+      url: `https://threads.net/t/${publishResponse.data.id}`,
+      data: publishResponse.data,
+    };
+  }
+
+  /**
+   * Helper method to add delay between API calls
+   */
+  private async delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

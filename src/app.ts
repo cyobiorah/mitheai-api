@@ -7,18 +7,15 @@ import session from "express-session";
 import connectMongoDBSession from "connect-mongodb-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
-import { authenticateToken, logRequests } from "./middleware/auth.middleware";
+import { authenticateToken } from "./middleware/auth.middleware";
 import passport from "./config/passport.config";
 
 import authRoutes from "./routes/auth.routes";
 import usersRouter from "./routes/users.routes";
 import teamsRouter from "./routes/teams.routes";
-// import invitationsRouter from "./routes/invitations.routes";
+import invitationsRouter from "./routes/invitations.routes";
 import contentRouter from "./routes/content.routes";
-import collectionsRouter from "./routes/collections.routes";
-import analysisRouter from "./routes/analysis.routes";
 import socialAccountRouter from "./routes/social-account.routes";
-import analyticsRouter from "./routes/analytics.routes";
 
 config();
 
@@ -34,7 +31,7 @@ const allowedOrigins = [
   "https://mitheai-api.vercel.app",
   // Add production domains if different
   "https://app.mitheai.com",
-  "https://api.mitheai.com"
+  "https://api.mitheai.com",
 ];
 
 // Middleware
@@ -53,7 +50,7 @@ app.use(
       }
 
       // For Vercel preview deployments which have dynamic URLs
-      if (origin.includes('vercel.app')) {
+      if (origin.includes("vercel.app")) {
         return callback(null, origin); // Allow all vercel.app domains and return the specific origin
       }
 
@@ -66,8 +63,6 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
-
-app.use(logRequests);
 
 app.use(compression());
 app.use(morgan("dev"));
@@ -158,12 +153,9 @@ app.get("/test-cors", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authenticateToken, usersRouter);
 app.use("/api/teams", authenticateToken, teamsRouter);
-// app.use("/api/invitations", authenticateToken, invitationsRouter);
+app.use("/api/invitations", invitationsRouter);
 app.use("/api/content", authenticateToken, contentRouter);
-app.use("/api/collections", authenticateToken, collectionsRouter);
-app.use("/api/analysis", authenticateToken, analysisRouter);
 app.use("/api/social-accounts", socialAccountRouter);
-app.use("/api/analytics", authenticateToken, analyticsRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");
