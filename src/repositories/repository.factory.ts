@@ -1,11 +1,11 @@
 import { Db } from "mongodb";
 import { getDb, getCollections } from "../config/mongodb";
-import { UserRepository } from "./user.repository";
-import { OrganizationRepository } from "./organization.repository";
-import { TeamRepository } from "./team.repository";
-import { SocialAccountRepository } from "./social-account.repository";
-import { InvitationRepository } from "./invitation.repository";
-import { SocialPostRepository } from "./social-post.repository";
+import { UserRepository } from "../users/users.repository";
+import { OrganizationRepository } from "../orgs/organization.repository";
+import { TeamRepository } from "../teams/teams.repository";
+import { SocialAccountRepository } from "../socialAccount/socialAccount.repository";
+import { InvitationRepository } from "../invite/invitations.repository";
+import { SocialPostRepository } from "../socialPost/socialPost.repository";
 
 export class RepositoryFactory {
   private static db: Db;

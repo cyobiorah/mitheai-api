@@ -1,5 +1,6 @@
 import { Collection, Db, ObjectId } from "mongodb";
 import { Repository } from "./base.repository";
+import { toObjectId } from "../shared/objectId";
 
 export class MongoDBRepository<T> implements Repository<T> {
   private readonly collection: Collection;
@@ -15,12 +16,12 @@ export class MongoDBRepository<T> implements Repository<T> {
    */
   private formatDocument(doc: any): T | null {
     if (!doc) return null;
-    
+
     // If the document has _id, add id property as string
     if (doc._id) {
       doc.id = doc._id.toString();
     }
-    
+
     return doc as T;
   }
 
@@ -28,32 +29,27 @@ export class MongoDBRepository<T> implements Repository<T> {
    * Format multiple documents
    */
   private formatDocuments(docs: any[]): T[] {
-    return docs.map(doc => this.formatDocument(doc)).filter(Boolean) as T[];
+    return docs.map((doc) => this.formatDocument(doc)).filter(Boolean) as T[];
   }
 
   /**
    * Prepare query to handle both id and _id lookups
    */
   private prepareIdQuery(id: string): any {
-    try {
-      // Try to convert to ObjectId for _id lookup
-      return { _id: new ObjectId(id) };
-    } catch (e) {
-      // If not a valid ObjectId, look up by string id
-      return { id: id };
-    }
+    const objectId = toObjectId(id);
+    return objectId ? { _id: objectId } : { id };
   }
 
   async findById(id: string): Promise<T | null> {
     try {
       // First try to find by _id as ObjectId
       let doc = await this.collection.findOne(this.prepareIdQuery(id));
-      
+
       // If not found and id is a valid ObjectId string, try by id field
       if (!doc && ObjectId.isValid(id)) {
         doc = await this.collection.findOne({ id: id });
       }
-      
+
       return this.formatDocument(doc);
     } catch (error) {
       console.error("Error in findById:", error);
@@ -75,13 +71,13 @@ export class MongoDBRepository<T> implements Repository<T> {
     // Remove any existing id field to avoid conflicts
     const dataToInsert = { ...data } as any;
     delete dataToInsert.id;
-    
+
     const result = await this.collection.insertOne(dataToInsert);
-    
+
     // Return document with both _id and id
     return this.formatDocument({
       _id: result.insertedId,
-      ...dataToInsert
+      ...dataToInsert,
     }) as T;
   }
 
@@ -90,28 +86,28 @@ export class MongoDBRepository<T> implements Repository<T> {
     const updateData = { ...data } as any;
     delete updateData.id;
     delete updateData._id;
-    
+
     try {
       console.log(`Updating document with id: ${id}`);
-      
+
       // Try to update using the query builder that handles both id types
       const query = this.prepareIdQuery(id);
-      
+
       const result = await this.collection.findOneAndUpdate(
         query,
         { $set: updateData },
         { returnDocument: "after" }
       );
-      
+
       if (!result) {
         console.log(`Update result is null for id: ${id}`);
         return null;
       }
-      
+
       // Handle different MongoDB driver versions
       // Some versions return { value: document }, others return the document directly
       const updatedDoc = result.value || result;
-      
+
       return this.formatDocument(updatedDoc);
     } catch (error) {
       console.error(`Error updating document with id: ${id}`, error);

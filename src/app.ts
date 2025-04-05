@@ -7,16 +7,16 @@ import session from "express-session";
 import connectMongoDBSession from "connect-mongodb-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
-import { authenticateToken } from "./middleware/auth.middleware";
-import passport from "./config/passport.config";
+import { authenticateToken } from "./auth/auth.middleware";
+import passport from "./platforms/twitter/twitter.config";
 
-import authRoutes from "./routes/auth.routes";
-import usersRouter from "./routes/users.routes";
-import teamsRouter from "./routes/teams.routes";
-import invitationsRouter from "./routes/invitations.routes";
-import contentRouter from "./routes/content.routes";
-import socialAccountRouter from "./routes/social-account.routes";
-import socialPostRouter from "./routes/social-post.routes";
+import authRoutes from "./auth/auth.routes";
+import usersRouter from "./users/users.routes";
+import teamsRouter from "./teams/teams.routes";
+import invitationsRouter from "./invite/invitations.routes";
+import contentRouter from "./content/content.routes";
+import socialAccountRouter from "./socialAccount/socialAccount.routes";
+import socialPostRouter from "./socialPost/socialPost.routes";
 
 config();
 
