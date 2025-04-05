@@ -29,4 +29,6 @@ export interface SocialPost {
   metadata?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
+
+  scheduledPostId?: string;
 }

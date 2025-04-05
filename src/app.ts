@@ -17,6 +17,8 @@ import invitationsRouter from "./invite/invitations.routes";
 import contentRouter from "./content/content.routes";
 import socialAccountRouter from "./socialAccount/socialAccount.routes";
 import socialPostRouter from "./socialPost/socialPost.routes";
+import scheduledPostRouter from "./scheduledPost/scheduledPost.routes";
+import { setupCronJobs } from "./cron";
 
 config();
 
@@ -158,6 +160,7 @@ app.use("/api/invitations", invitationsRouter);
 app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/social-accounts", socialAccountRouter);
 app.use("/api/social-posts", socialPostRouter);
+app.use("/api/scheduled-posts", authenticateToken, scheduledPostRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");
@@ -221,6 +224,8 @@ app.use(
     });
   }
 );
+
+// setupCronJobs();
 
 // Export the app for use in server.ts
 export default app;

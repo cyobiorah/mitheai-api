@@ -161,7 +161,9 @@ router.get("/linkedin/callback", async (req: any, res) => {
 
     if (!code) {
       console.error("No authorization code in callback");
-      return res.redirect(`${process.env.FRONTEND_URL}/account-setup?error=no_code`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/account-setup?error=no_code`
+      );
     }
 
     if (!state) {
@@ -689,7 +691,7 @@ router.get("/twitter/callback", async (req: any, res) => {
         try {
           console.log("Posting welcome tweet...");
           await twitterService.postWelcomeTweet(
-            account.id,
+            account._id,
             profileData.data.name
           );
 
@@ -700,7 +702,7 @@ router.get("/twitter/callback", async (req: any, res) => {
           }
 
           // Mark that we've sent the welcome tweet
-          await socialAccountService.update(account.id, {
+          await socialAccountService.update(account._id, {
             welcomeTweetSent: true,
           });
 
@@ -718,7 +720,7 @@ router.get("/twitter/callback", async (req: any, res) => {
             // Still mark the account as having sent a welcome tweet
             const socialAccountService = controller.getSocialAccountService();
             if (socialAccountService) {
-              await socialAccountService.update(account.id, {
+              await socialAccountService.update(account._id, {
                 welcomeTweetSent: true,
               });
             }

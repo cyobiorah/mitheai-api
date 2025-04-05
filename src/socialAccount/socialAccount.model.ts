@@ -1,5 +1,5 @@
 export interface SocialAccount {
-  id: string;
+  _id: string;
   platform: "twitter" | "linkedin" | "instagram" | "facebook" | "threads";
   platformAccountId: string; // Unique identifier from the platform (e.g., Twitter user ID)
   accountType: "personal" | "business";

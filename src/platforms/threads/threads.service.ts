@@ -194,7 +194,7 @@ export class ThreadsService {
           now.getTime() + 60 * 24 * 60 * 60 * 1000
         ); // 60 days
 
-        await this.socialAccountRepository.update(existingAccount.id, {
+        await this.socialAccountRepository.update(existingAccount._id, {
           accessToken,
           refreshToken: refreshToken ?? undefined,
           status: "active",
@@ -222,7 +222,6 @@ export class ThreadsService {
 
       const newAccount = await this.socialAccountRepository.create({
         userId,
-        id: userId ?? undefined,
         organizationId: organizationId ?? undefined,
         teamId: teamId ?? undefined,
         platform: "threads",
@@ -360,62 +359,6 @@ export class ThreadsService {
   /**
    * Create a text-only post on Threads
    */
-  // private async createTextPost(
-  //   threadsId: string,
-  //   content: string,
-  //   accessToken: string
-  // ) {
-  //   // Create a media container for text post
-  //   const containerResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads`,
-  //     {
-  //       text: content,
-  //       media_type: "TEXT",
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!containerResponse?.data?.id) {
-  //     throw new Error("Failed to create Threads media container");
-  //   }
-
-  //   const containerId = containerResponse.data.id;
-
-  //   // Wait for the container to be processed (recommended by Meta)
-  //   await this.delay(30000); // 30 seconds delay
-
-  //   // Publish the container
-  //   const publishResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
-  //     {
-  //       creation_id: containerId,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!publishResponse?.data?.id) {
-  //     throw new Error("Failed to publish Threads post");
-  //   }
-
-  //   return {
-  //     id: publishResponse.data.id,
-  //     platform: "threads",
-  //     status: "published",
-  //     url: `https://threads.net/t/${publishResponse.data.id}`,
-  //     data: publishResponse.data,
-  //   };
-  // }
-
   private async createTextPost(
     account: SocialAccount,
     content: string
@@ -479,64 +422,6 @@ export class ThreadsService {
   /**
    * Create an image post on Threads
    */
-  // private async createImagePost(
-  //   threadsId: string,
-  //   content: string,
-  //   imageUrl: string,
-  //   accessToken: string
-  // ) {
-  //   // Create a media container for image post
-  //   const containerResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads`,
-  //     {
-  //       text: content,
-  //       media_type: "IMAGE",
-  //       image_url: imageUrl,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!containerResponse?.data?.id) {
-  //     throw new Error("Failed to create Threads media container");
-  //   }
-
-  //   const containerId = containerResponse.data.id;
-
-  //   // Wait for the container to be processed (recommended by Meta)
-  //   await this.delay(30000); // 30 seconds delay
-
-  //   // Publish the container
-  //   const publishResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
-  //     {
-  //       creation_id: containerId,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!publishResponse?.data?.id) {
-  //     throw new Error("Failed to publish Threads post");
-  //   }
-
-  //   return {
-  //     id: publishResponse.data.id,
-  //     platform: "threads",
-  //     status: "published",
-  //     url: `https://threads.net/t/${publishResponse.data.id}`,
-  //     data: publishResponse.data,
-  //   };
-  // }
-
   private async createImagePost(
     account: SocialAccount,
     content: string,
@@ -602,64 +487,6 @@ export class ThreadsService {
   /**
    * Create a video post on Threads
    */
-  // private async createVideoPost(
-  //   threadsId: string,
-  //   content: string,
-  //   videoUrl: string,
-  //   accessToken: string
-  // ) {
-  //   // Create a media container for video post
-  //   const containerResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads`,
-  //     {
-  //       text: content,
-  //       media_type: "VIDEO",
-  //       video_url: videoUrl,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!containerResponse?.data?.id) {
-  //     throw new Error("Failed to create Threads media container");
-  //   }
-
-  //   const containerId = containerResponse.data.id;
-
-  //   // Wait for the container to be processed (recommended by Meta)
-  //   await this.delay(30000); // 30 seconds delay
-
-  //   // Publish the container
-  //   const publishResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
-  //     {
-  //       creation_id: containerId,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!publishResponse?.data?.id) {
-  //     throw new Error("Failed to publish Threads post");
-  //   }
-
-  //   return {
-  //     id: publishResponse.data.id,
-  //     platform: "threads",
-  //     status: "published",
-  //     url: `https://threads.net/t/${publishResponse.data.id}`,
-  //     data: publishResponse.data,
-  //   };
-  // }
-
   private async createVideoPost(
     account: SocialAccount,
     content: string,
@@ -725,95 +552,6 @@ export class ThreadsService {
   /**
    * Create a carousel post on Threads (multiple images/videos)
    */
-  // private async createCarouselPost(
-  //   threadsId: string,
-  //   content: string,
-  //   mediaUrls: string[],
-  //   accessToken: string
-  // ) {
-  //   // Step 1: Create individual item containers for each media
-  //   const mediaContainerIds = [];
-
-  //   for (const mediaUrl of mediaUrls) {
-  //     // Determine if it's an image or video based on file extension
-  //     const isVideo = /\.(mp4|mov|avi|wmv)$/i.test(mediaUrl);
-
-  //     const itemResponse = await axios.post(
-  //       `https://graph.threads.net/v1.0/${threadsId}/threads`,
-  //       {
-  //         is_carousel_item: true,
-  //         media_type: isVideo ? "VIDEO" : "IMAGE",
-  //         ...(isVideo ? { video_url: mediaUrl } : { image_url: mediaUrl }),
-  //       },
-  //       {
-  //         headers: {
-  //           Authorization: `Bearer ${accessToken}`,
-  //           "Content-Type": "application/json",
-  //         },
-  //       }
-  //     );
-
-  //     if (!itemResponse?.data?.id) {
-  //       throw new Error("Failed to create carousel item container");
-  //     }
-
-  //     mediaContainerIds.push(itemResponse.data.id);
-
-  //     // Brief delay between item creation requests
-  //     await this.delay(2000);
-  //   }
-
-  //   // Step 2: Create a carousel container
-  //   const carouselResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads`,
-  //     {
-  //       media_type: "CAROUSEL",
-  //       children: mediaContainerIds.join(","),
-  //       text: content,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!carouselResponse?.data?.id) {
-  //     throw new Error("Failed to create carousel container");
-  //   }
-
-  //   const carouselContainerId = carouselResponse.data.id;
-
-  //   // Wait for the container to be processed (recommended by Meta)
-  //   await this.delay(30000); // 30 seconds delay
-
-  //   // Step 3: Publish the carousel container
-  //   const publishResponse = await axios.post(
-  //     `https://graph.threads.net/v1.0/${threadsId}/threads_publish`,
-  //     {
-  //       creation_id: carouselContainerId,
-  //     },
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //         "Content-Type": "application/json",
-  //       },
-  //     }
-  //   );
-
-  //   if (!publishResponse?.data?.id) {
-  //     throw new Error("Failed to publish carousel post");
-  //   }
-
-  //   return {
-  //     id: publishResponse.data.id,
-  //     platform: "threads",
-  //     status: "published",
-  //     url: `https://threads.net/t/${publishResponse.data.id}`,
-  //     data: publishResponse.data,
-  //   };
-  // }
   private async createCarouselPost(
     account: SocialAccount,
     content: string,

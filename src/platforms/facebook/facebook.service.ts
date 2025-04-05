@@ -69,19 +69,19 @@ export class FacebookService {
 
       if (existingAccount) {
         console.log(
-          `Found existing Facebook account for this user: ${existingAccount.id}`
+          `Found existing Facebook account for this user: ${existingAccount._id}`
         );
 
         // Update the tokens in the existing account
-        await this.socialAccountRepository.update(existingAccount.id, {
+        await this.socialAccountRepository.update(existingAccount._id, {
           accessToken: accessToken,
-          refreshToken: refreshToken || "",
+          refreshToken: refreshToken ?? "",
           lastRefreshed: new Date(),
           updatedAt: new Date(),
         });
 
         console.log(
-          `Updated tokens for existing account ${existingAccount.id}`
+          `Updated tokens for existing account ${existingAccount._id}`
         );
         return existingAccount;
       }
@@ -102,8 +102,8 @@ export class FacebookService {
       }
 
       // Create new social account if no existing connection found
-      const socialAccount: Omit<SocialAccount, "_id"> = {
-        id: new mongoose.Types.ObjectId().toString(),
+      const socialAccount: SocialAccount = {
+        _id: new mongoose.Types.ObjectId().toString(),
         platform: "facebook",
         platformAccountId: profile.id,
         accountType: "personal",
@@ -146,7 +146,7 @@ export class FacebookService {
       const createdAccount = await this.socialAccountRepository.create(
         socialAccount
       );
-      console.log(`Created new Facebook account with ID ${createdAccount.id}`);
+      console.log(`Created new Facebook account with ID ${createdAccount._id}`);
 
       return createdAccount;
     } catch (error: any) {

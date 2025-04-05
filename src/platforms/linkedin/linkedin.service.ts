@@ -215,19 +215,19 @@ export class LinkedInService {
 
       if (existingAccount) {
         console.log(
-          `Found existing LinkedIn account for this user: ${existingAccount.id}`
+          `Found existing LinkedIn account for this user: ${existingAccount._id}`
         );
 
         // Update the tokens in the existing account
-        await this.socialAccountRepository.update(existingAccount.id, {
+        await this.socialAccountRepository.update(existingAccount._id, {
           accessToken: accessToken,
-          refreshToken: refreshToken || "",
+          refreshToken: refreshToken ?? "",
           lastRefreshed: new Date(),
           updatedAt: new Date(),
         });
 
         console.log(
-          `Updated tokens for existing account ${existingAccount.id}`
+          `Updated tokens for existing account ${existingAccount._id}`
         );
         return existingAccount;
       }
@@ -253,7 +253,6 @@ export class LinkedInService {
 
       // Create new social account if no existing connection found
       const socialAccount: Omit<SocialAccount, "_id"> = {
-        id: new mongoose.Types.ObjectId().toString(),
         platform: "linkedin",
         platformAccountId: profile.sub,
         accountType: "personal",
@@ -297,7 +296,7 @@ export class LinkedInService {
       const createdAccount = await this.socialAccountRepository.create(
         socialAccount
       );
-      console.log(`Created new LinkedIn account with ID ${createdAccount.id}`);
+      console.log(`Created new LinkedIn account with ID ${createdAccount._id}`);
 
       return createdAccount;
     } catch (error: any) {
@@ -421,8 +420,9 @@ export class LinkedInService {
 
       // Save the post to the database for analytics and tracking
       try {
-        const socialPostRepository = await RepositoryFactory.createSocialPostRepository();
-        
+        const socialPostRepository =
+          await RepositoryFactory.createSocialPostRepository();
+
         const socialPost: SocialPost = {
           userId: account.userId,
           teamId: account.teamId,

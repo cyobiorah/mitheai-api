@@ -247,10 +247,12 @@ router.get("/threads/callback", async (req, res) => {
       // Clean up Redis state
       await redisService.delete(`threads:${state as string}`);
 
-      console.log("Threads account connected successfully:", account.id);
+      console.log("Threads account connected successfully:", account._id);
 
       // Redirect to settings page with success
-      return res.redirect(`${process.env.FRONTEND_URL}/account-setup?success=true`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/account-setup?success=true`
+      );
     } catch (error: any) {
       console.error("Error in Threads callback:", error);
 
@@ -411,7 +413,7 @@ router.post(
               requiresReconnect: true,
             });
           }
-          
+
           return res.status(400).json({
             status: "error",
             message: postResult.error || "Failed to post to Threads",

@@ -78,7 +78,7 @@ export class TwitterService {
         );
         error.code = "account_already_connected_to_other_user";
         error.details = {
-          existingAccountId: anyExistingAccount.id,
+          existingAccountId: anyExistingAccount._id,
           connectedUserId: anyExistingAccount.userId,
           organizationId: anyExistingAccount.organizationId,
           teamId: anyExistingAccount.teamId,
@@ -98,7 +98,7 @@ export class TwitterService {
         const error: any = new Error("Account already connected by this user");
         error.code = "account_already_connected";
         error.details = {
-          existingAccountId: userExistingAccount.id,
+          existingAccountId: userExistingAccount._id,
           connectedUserId: userExistingAccount.userId,
           organizationId: userExistingAccount.organizationId,
           teamId: userExistingAccount.teamId,
@@ -118,7 +118,7 @@ export class TwitterService {
         const error: any = new Error("Account already connected by this user");
         error.code = "account_already_connected";
         error.details = {
-          existingAccountId: existingAccount.id,
+          existingAccountId: existingAccount._id,
           connectedUserId: existingAccount.userId,
           organizationId: existingAccount.organizationId,
           teamId: existingAccount.teamId,
@@ -128,8 +128,8 @@ export class TwitterService {
       }
 
       // Create new social account if no existing connection found
-      const socialAccount: Omit<SocialAccount, "_id"> = {
-        id: new mongoose.Types.ObjectId().toString(),
+      const socialAccount: SocialAccount = {
+        _id: new mongoose.Types.ObjectId().toString(),
         platform: "twitter",
         platformAccountId: profile.id,
         accountType: "personal",
@@ -646,36 +646,30 @@ export class TwitterService {
       try {
         // Make sure we have a string ID before passing to postTweet
         const tweetId = tweet._id?.toString();
-        
+
         if (!tweetId) {
           console.error("Invalid tweet ID, skipping:", tweet);
           continue;
         }
 
         await this.postTweet(tweet.socialAccountId, tweet.content);
-        await this.socialAccountRepository.updateScheduledTweet(
-          tweetId,
-          {
-            status: "sent",
-            updatedAt: now,
-          }
-        );
+        await this.socialAccountRepository.updateScheduledTweet(tweetId, {
+          status: "sent",
+          updatedAt: now,
+        });
       } catch (error: any) {
         const tweetId = tweet._id?.toString();
-        
+
         if (!tweetId) {
           console.error("Invalid tweet ID, cannot update error status:", tweet);
           continue;
         }
 
-        await this.socialAccountRepository.updateScheduledTweet(
-          tweetId,
-          {
-            status: "failed",
-            errorMessage: error.message,
-            updatedAt: now,
-          }
-        );
+        await this.socialAccountRepository.updateScheduledTweet(tweetId, {
+          status: "failed",
+          errorMessage: error.message,
+          updatedAt: now,
+        });
       }
     }
   }
@@ -940,7 +934,7 @@ export class TwitterService {
       throw new Error("No active Twitter account found for user");
     }
 
-    const accountId = account.id;
+    const accountId = account._id;
 
     try {
       // Reuse the postTweet method which already handles token refresh

@@ -33,6 +33,7 @@ export interface BaseUser {
   role: "super_admin" | "org_owner" | "team_manager" | "user";
   status: "pending" | "active" | "inactive";
   invitationToken?: string;
+  timezone?: string; // User's preferred timezone (e.g., "America/New_York")
   settings: {
     permissions: string[];
     theme: "light" | "dark" | "system";

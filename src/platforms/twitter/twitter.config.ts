@@ -138,7 +138,7 @@ const strategy = new OAuth2Strategy(
           try {
             console.log("Attempting to post welcome tweet...");
             await twitterService.postWelcomeTweet(
-              account.id,
+              account._id,
               userData.data.name
             );
 
@@ -177,7 +177,7 @@ const strategy = new OAuth2Strategy(
                 // await db.collection("social_accounts").doc(account.id).delete();
 
                 console.log(
-                  `Deleted social account ${account.id} due to welcome tweet failure`
+                  `Deleted social account ${account._id} due to welcome tweet failure`
                 );
 
                 // Return the error to halt the OAuth process
