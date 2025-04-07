@@ -208,11 +208,16 @@ export class ScheduledPostController {
       if (content) updateData.content = content;
       if (mediaUrls) updateData.mediaUrls = mediaUrls;
       if (platforms) updateData.platforms = platforms;
-      if (status) updateData.status = status;
+      updateData.status = "scheduled";
+      if (updateData.platforms && updateData.platforms.length > 0) {
+        updateData.platforms[0].status = "pending";
+      }
 
       if (scheduledFor) {
         updateData.scheduledFor = toUTC(new Date(scheduledFor));
       }
+
+      console.log({ updateData });
 
       const updatedPost = await scheduledPostRepository.update(
         postId,
@@ -228,6 +233,51 @@ export class ScheduledPostController {
       return res.status(500).json({
         status: "error",
         message: error.message || "Failed to update scheduled post",
+      });
+    }
+  }
+
+  // Get a scheduled post by ID
+  static async getScheduledPostById(req: Request, res: Response) {
+    try {
+      const { postId } = req.params;
+      const userId = (req as any).user.uid;
+
+      if (!userId) {
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication required",
+        });
+      }
+
+      const scheduledPostRepository =
+        await RepositoryFactory.createScheduledPostRepository();
+      const post = await scheduledPostRepository.findById(postId);
+
+      if (!post) {
+        return res.status(404).json({
+          status: "error",
+          message: "Scheduled post not found",
+        });
+      }
+
+      // Check if the user owns the post
+      if (post.createdBy !== userId) {
+        return res.status(403).json({
+          status: "error",
+          message: "You do not have permission to view this post",
+        });
+      }
+
+      return res.status(200).json({
+        status: "success",
+        data: post,
+      });
+    } catch (error: any) {
+      console.error("Error fetching scheduled post:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to fetch scheduled post",
       });
     }
   }

@@ -1,6 +1,5 @@
 import { RepositoryFactory } from "../repositories/repository.factory";
 import { TwitterService } from "../platforms/twitter/twitter.service";
-import { FacebookService } from "../platforms/facebook/facebook.service";
 import { LinkedInService } from "../platforms/linkedin/linkedin.service";
 import { ThreadsService } from "../platforms/threads/threads.service";
 import { ContentItem } from "../types";
@@ -16,7 +15,6 @@ export class ScheduledPostWorker {
       const socialAccountRepository =
         await RepositoryFactory.createSocialAccountRepository();
       const twitterService = new TwitterService();
-      const facebookService = new FacebookService();
       const linkedinService = new LinkedInService();
       const threadsService = new ThreadsService();
 
@@ -53,7 +51,7 @@ export class ScheduledPostWorker {
               let postResult;
 
               switch (account.platform) {
-                case "twitter":
+                case "twitter": {
                   // Create ContentItem for Twitter
                   const twitterContentItem: ContentItem = {
                     id: post._id!.toString(),
@@ -78,6 +76,7 @@ export class ScheduledPostWorker {
                   };
                   postResult = await twitterService.post(twitterContentItem);
                   break;
+                }
                 case "facebook":
                   // Call Facebook API
                   // postResult = await facebookService.post(account, post.content, post.mediaUrls);
@@ -123,8 +122,9 @@ export class ScheduledPostWorker {
                     postResult.error ?? `Failed to post to ${account.platform}`
                   );
                 }
-                postId = postResult.postId ?? `${account.platform}-${Date.now()}`;
-                
+                postId =
+                  postResult.postId ?? `${account.platform}-${Date.now()}`;
+
                 // Generate platform-specific URLs
                 if (account.platform === "linkedin") {
                   postUrl = `https://www.linkedin.com/feed/update/${postId}`;

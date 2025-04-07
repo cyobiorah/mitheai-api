@@ -1,5 +1,4 @@
 import express from "express";
-import { authenticateToken } from "../auth/auth.middleware";
 import { ScheduledPostController } from "./scheduledPost.controller";
 import { validateObjectId } from "../shared/validateObjectId";
 
@@ -10,6 +9,13 @@ router.post("/", ScheduledPostController.createScheduledPost);
 
 // Get all scheduled posts for the authenticated user
 router.get("/", ScheduledPostController.getScheduledPosts);
+
+// Get a scheduled post by ID
+router.get(
+  "/:postId",
+  validateObjectId("postId"),
+  ScheduledPostController.getScheduledPostById
+);
 
 // Update a scheduled post
 router.put(
