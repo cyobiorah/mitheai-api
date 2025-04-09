@@ -1,69 +1,27 @@
 {
   "version": 2,
+  "public": true,
   "builds": [
     {
-      "src": "dist/index.js",
+      "src": "src/app.ts",
       "use": "@vercel/node"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "dist/index.js"
+      "source": "/(.*)",
+      "destination": "src/app.ts"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "github": {
-    "enabled": true,
-    "silent": true
-  },
-  "git": {
-    "deploymentEnabled": {
-      "main": false,
-      "staging": false,
-      "development": false,
-      "kitchen": true,
-      "feature/*": true
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "X-Requested-With,Content-Type,Authorization" },
+        { "key": "Access-Control-Allow-Credentials", "value": "true" }
+      ]
     }
-  },
-  "branchEnvs": {
-    "main": {
-      "NODE_ENV": "production",
-      "MONGODB_URI": "@mongodb_uri_prod",
-      "SESSION_SECRET": "@session_secret_prod",
-      "JWT_SECRET": "@jwt_secret_prod",
-      "FRONTEND_URL": "https://app.mitheai.com",
-      "API_URL": "https://api.mitheai.com",
-      "WEBAPP_URL": "https://app.mitheai.com"
-    },
-    "staging": {
-      "NODE_ENV": "production",
-      "MONGODB_URI": "@mongodb_uri_staging",
-      "SESSION_SECRET": "@session_secret_staging",
-      "JWT_SECRET": "@jwt_secret_staging",
-      "FRONTEND_URL": "https://staging.mitheai-app.vercel.app",
-      "API_URL": "https://staging.mitheai-api.vercel.app",
-      "WEBAPP_URL": "https://staging.mitheai-app.vercel.app"
-    },
-    "development": {
-      "NODE_ENV": "development",
-      "MONGODB_URI": "@mongodb_uri_dev",
-      "SESSION_SECRET": "@session_secret_dev",
-      "JWT_SECRET": "@jwt_secret_dev",
-      "FRONTEND_URL": "https://dev.mitheai-app.vercel.app",
-      "API_URL": "https://dev.mitheai-api.vercel.app",
-      "WEBAPP_URL": "https://dev.mitheai-app.vercel.app"
-    },
-    "feature/*": {
-      "NODE_ENV": "development",
-      "MONGODB_URI": "@mongodb_uri_dev",
-      "SESSION_SECRET": "@session_secret_dev",
-      "JWT_SECRET": "@jwt_secret_dev",
-      "FRONTEND_URL": "https://$BRANCH.mitheai-app.vercel.app",
-      "API_URL": "https://$BRANCH.mitheai-api.vercel.app",
-      "WEBAPP_URL": "https://$BRANCH.mitheai-app.vercel.app"
-    }
-  }
+  ]
 }
