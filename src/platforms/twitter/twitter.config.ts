@@ -8,13 +8,34 @@ import threadsStrategy from "../threads/threads.config";
 
 const twitterService = new TwitterService();
 
+const MONGODB_URI =
+  process.env.NODE_ENV === "staging"
+    ? process.env.MONGODB_URI_STAGING
+    : process.env.MONGODB_URI;
+
 // Ensure consistent URL format for both local and Vercel environments
-const callbackUrl = (
-  process.env.TWITTER_CALLBACK_URL ??
-  (process.env.NODE_ENV === "production"
-    ? "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app/api/social-accounts/twitter/callback"
-    : "http://localhost:3001/api/social-accounts/twitter/callback")
-).replace(/:\d+/, ":3001"); // Force port 3001 for local
+let rawCallbackUrl: string | undefined;
+
+if (process.env.NODE_ENV === "staging") {
+  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_STAGING;
+} else if (process.env.NODE_ENV === "production") {
+  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_PROD;
+} else {
+  rawCallbackUrl =
+    process.env.TWITTER_CALLBACK_URL_DEV ??
+    "http://localhost:3001/api/social-accounts/twitter/callback";
+}
+
+if (!rawCallbackUrl) {
+  throw new Error(
+    "Missing Twitter callback URL for environment: " + process.env.NODE_ENV
+  );
+}
+
+const callbackUrl =
+  process.env.NODE_ENV === "development"
+    ? rawCallbackUrl.replace(/:\d+/, ":3001")
+    : rawCallbackUrl;
 
 passport.serializeUser((user: any, done) => {
   done(null, user);

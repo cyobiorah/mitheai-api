@@ -62,6 +62,29 @@ interface TwitterUserResponse {
 const router = Router();
 const controller = new SocialAccountController();
 
+let rawCallbackUrl: string | undefined;
+
+if (process.env.NODE_ENV === "staging") {
+  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_STAGING;
+} else if (process.env.NODE_ENV === "production") {
+  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_PROD;
+} else {
+  rawCallbackUrl =
+    process.env.TWITTER_CALLBACK_URL_DEV ??
+    "http://localhost:3001/api/social-accounts/twitter/callback";
+}
+
+if (!rawCallbackUrl) {
+  throw new Error(
+    "Missing Twitter callback URL for environment: " + process.env.NODE_ENV
+  );
+}
+
+const callbackUrl =
+  process.env.NODE_ENV === "development"
+    ? rawCallbackUrl.replace(/:\d+/, ":3001")
+    : rawCallbackUrl;
+
 // Mount Facebook routes
 router.use("/", facebookRoutes);
 
@@ -325,11 +348,7 @@ router.get("/twitter/direct-auth", authenticateToken, async (req: any, res) => {
     const authUrl = new URL("https://twitter.com/i/oauth2/authorize");
     authUrl.searchParams.append("response_type", "code");
     authUrl.searchParams.append("client_id", process.env.TWITTER_CLIENT_ID!);
-    authUrl.searchParams.append(
-      "redirect_uri",
-      process.env.TWITTER_CALLBACK_URL ??
-        process.env.API_URL + "/api/social-accounts/twitter/callback"
-    );
+    authUrl.searchParams.append("redirect_uri", callbackUrl);
     authUrl.searchParams.append(
       "scope",
       "tweet.read tweet.write users.read offline.access"
@@ -579,9 +598,7 @@ router.get("/twitter/callback", async (req: any, res) => {
     console.log("Proceeding with token exchange:", {
       code: (code as string).substring(0, 10) + "...",
       codeVerifier: codeVerifier.substring(0, 10) + "...",
-      redirect_uri:
-        process.env.TWITTER_CALLBACK_URL ??
-        "http://localhost:3001/api/social-accounts/twitter/callback",
+      redirect_uri: callbackUrl,
     });
 
     // Exchange the authorization code for an access token
@@ -598,9 +615,7 @@ router.get("/twitter/callback", async (req: any, res) => {
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code: code as string,
-          redirect_uri:
-            process.env.TWITTER_CALLBACK_URL ??
-            "http://localhost:3001/api/social-accounts/twitter/callback",
+          redirect_uri: callbackUrl,
           code_verifier: codeVerifier,
         }).toString(),
       }

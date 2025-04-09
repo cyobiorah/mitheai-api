@@ -72,10 +72,15 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const MONGODB_URI =
+  process.env.NODE_ENV === "staging"
+    ? process.env.MONGODB_URI_STAGING
+    : process.env.MONGODB_URI;
+
 // Create MongoDB session store
 const MongoDBStore = connectMongoDBSession(session);
 const store = new MongoDBStore({
-  uri: process.env.MONGODB_URI ?? "mongodb://localhost:27017/mitheai",
+  uri: MONGODB_URI ?? "",
   collection: "sessions",
   expires: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
   connectionOptions: {

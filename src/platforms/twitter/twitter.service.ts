@@ -872,19 +872,42 @@ export class TwitterService {
 
   async getAuthUrl(): Promise<string> {
     // Determine the appropriate callback URL based on the environment
-    const callbackUrl =
-      process.env.NODE_ENV === "production"
-        ? `${
-            process.env.API_URL ||
-            "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app"
-          }/api/social-accounts/twitter/callback`
-        : process.env.TWITTER_CALLBACK_URL!;
+    // const callbackUrl =
+    //   process.env.NODE_ENV === "production"
+    //     ? `${
+    //         process.env.API_URL ||
+    //         "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app"
+    //       }/api/social-accounts/twitter/callback`
+    //     : process.env.TWITTER_CALLBACK_URL!;
 
     // console.log("Twitter OAuth Config:", {
     //   clientId: process.env.TWITTER_CLIENT_ID,
     //   callbackUrl: callbackUrl,
     //   environment: process.env.NODE_ENV,
     // });
+
+    let rawCallbackUrl: string | undefined;
+
+    if (process.env.NODE_ENV === "staging") {
+      rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_STAGING;
+    } else if (process.env.NODE_ENV === "production") {
+      rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_PROD;
+    } else {
+      rawCallbackUrl =
+        process.env.TWITTER_CALLBACK_URL_DEV ??
+        "http://localhost:3001/api/social-accounts/twitter/callback";
+    }
+
+    if (!rawCallbackUrl) {
+      throw new Error(
+        "Missing Twitter callback URL for environment: " + process.env.NODE_ENV
+      );
+    }
+
+    const callbackUrl =
+      process.env.NODE_ENV === "development"
+        ? rawCallbackUrl.replace(/:\d+/, ":3001")
+        : rawCallbackUrl;
 
     const cleanCallbackUrl = callbackUrl.replace("www.", "");
     const { verifier, challenge } = await this.generateCodeChallenge();
