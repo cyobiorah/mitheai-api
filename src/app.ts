@@ -18,7 +18,7 @@ import contentRouter from "./content/content.routes";
 import socialAccountRouter from "./socialAccount/socialAccount.routes";
 import socialPostRouter from "./socialPost/socialPost.routes";
 import scheduledPostRouter from "./scheduledPost/scheduledPost.routes";
-import { setupCronJobs } from "./cron";
+import manualCronRouter from "./shared/manualCron.router";
 
 config();
 
@@ -161,6 +161,7 @@ app.use("/api/content", authenticateToken, contentRouter);
 app.use("/api/social-accounts", socialAccountRouter);
 app.use("/api/social-posts", socialPostRouter);
 app.use("/api/scheduled-posts", authenticateToken, scheduledPostRouter);
+app.use("/api/manual-cron", manualCronRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");
