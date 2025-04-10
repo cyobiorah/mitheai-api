@@ -29,9 +29,8 @@ const facebookService = new FacebookService();
 
 // Configure callback URL based on environment
 const callbackUrl =
-  process.env.NODE_ENV === "production"
-    ? `${process.env.API_URL}/api/social-accounts/facebook/callback`
-    : "http://localhost:3001/api/social-accounts/facebook/callback";
+  process.env.API_URL ??
+  "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app";
 
 passport.serializeUser((user: any, done) => {
   done(null, user);

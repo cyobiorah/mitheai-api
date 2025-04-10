@@ -11,10 +11,7 @@ export class MongoDBConnection {
   private connectionPromise: Promise<Db> | null = null;
 
   private constructor() {
-    const uri =
-      process.env.NODE_ENV === "staging"
-        ? process.env.MONGODB_URI_STAGING
-        : process.env.MONGODB_URI;
+    const uri = process.env.MONGODB_URI;
     if (!uri) {
       throw new Error("MongoDB URI is not defined in environment variables");
     }

@@ -62,17 +62,7 @@ interface TwitterUserResponse {
 const router = Router();
 const controller = new SocialAccountController();
 
-let rawCallbackUrl: string | undefined;
-
-if (process.env.NODE_ENV === "staging") {
-  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_STAGING;
-} else if (process.env.NODE_ENV === "production") {
-  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_PROD;
-} else {
-  rawCallbackUrl =
-    process.env.TWITTER_CALLBACK_URL_DEV ??
-    "http://localhost:3001/api/social-accounts/twitter/callback";
-}
+const rawCallbackUrl: string | undefined = process.env.TWITTER_CALLBACK_URL;
 
 if (!rawCallbackUrl) {
   throw new Error(

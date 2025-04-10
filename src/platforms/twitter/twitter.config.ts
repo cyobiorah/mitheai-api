@@ -8,35 +8,6 @@ import threadsStrategy from "../threads/threads.config";
 
 const twitterService = new TwitterService();
 
-const MONGODB_URI =
-  process.env.NODE_ENV === "staging"
-    ? process.env.MONGODB_URI_STAGING
-    : process.env.MONGODB_URI;
-
-// Ensure consistent URL format for both local and Vercel environments
-let rawCallbackUrl: string | undefined;
-
-if (process.env.NODE_ENV === "staging") {
-  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_STAGING;
-} else if (process.env.NODE_ENV === "production") {
-  rawCallbackUrl = process.env.TWITTER_CALLBACK_URL_PROD;
-} else {
-  rawCallbackUrl =
-    process.env.TWITTER_CALLBACK_URL_DEV ??
-    "http://localhost:3001/api/social-accounts/twitter/callback";
-}
-
-if (!rawCallbackUrl) {
-  throw new Error(
-    "Missing Twitter callback URL for environment: " + process.env.NODE_ENV
-  );
-}
-
-const callbackUrl =
-  process.env.NODE_ENV === "development"
-    ? rawCallbackUrl.replace(/:\d+/, ":3001")
-    : rawCallbackUrl;
-
 passport.serializeUser((user: any, done) => {
   done(null, user);
 });
@@ -51,7 +22,7 @@ const strategy = new OAuth2Strategy(
     tokenURL: "https://api.twitter.com/2/oauth2/token",
     clientID: process.env.TWITTER_CLIENT_ID!,
     clientSecret: process.env.TWITTER_CLIENT_SECRET!,
-    callbackURL: callbackUrl,
+    callbackURL: process.env.TWITTER_CALLBACK_URL,
     scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
     state: true,
     pkce: true,
@@ -378,7 +349,7 @@ const originalOAuthGetToken = (strategy as any)._oauth2.getOAuthAccessToken;
   params.code_verifier = codeVerifier;
 
   // Set redirect_uri and log params
-  params.redirect_uri = callbackUrl;
+  params.redirect_uri = process.env.TWITTER_CALLBACK_URL;
   console.log("Token request params:", {
     ...params,
     code: code ? `${code.substring(0, 10)}...` : "undefined",
@@ -386,7 +357,7 @@ const originalOAuthGetToken = (strategy as any)._oauth2.getOAuthAccessToken;
       ? `${codeVerifier.substring(0, 10)}...`
       : "undefined",
   });
-  console.log("Expected redirect_uri:", callbackUrl);
+  console.log("Expected redirect_uri:", process.env.TWITTER_CALLBACK_URL);
 
   // Clean up the map
   verifierMap.delete(state);
