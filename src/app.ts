@@ -4,56 +4,104 @@ import morgan from "morgan";
 import helmet from "helmet";
 import compression from "compression";
 import session from "express-session";
+import connectMongoDBSession from "connect-mongodb-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
-import { authenticateToken } from "./middleware/auth.middleware";
-import passport from "./config/passport.config";
+import { authenticateToken } from "./auth/auth.middleware";
+import passport from "./platforms/twitter/twitter.config";
 
-// Import routes
-import authRoutes from "./routes/auth.routes";
-import usersRouter from "./routes/users.routes";
-import teamsRouter from "./routes/teams.routes";
-import invitationsRouter from "./routes/invitations.routes";
-import contentRouter from "./routes/content.routes";
-import collectionsRouter from "./routes/collections.routes";
-import analysisRouter from "./routes/analysis.routes";
-import socialAccountRouter from "./routes/social-account.routes";
-import analyticsRouter from "./routes/analytics.routes";
+import authRoutes from "./auth/auth.routes";
+import usersRouter from "./users/users.routes";
+import teamsRouter from "./teams/teams.routes";
+import invitationsRouter from "./invite/invitations.routes";
+import contentRouter from "./content/content.routes";
+import socialAccountRouter from "./socialAccount/socialAccount.routes";
+import socialPostRouter from "./socialPost/socialPost.routes";
+import scheduledPostRouter from "./scheduledPost/scheduledPost.routes";
+import manualCronRouter from "./shared/manualCron.router";
 
-// Load environment variables
 config();
 
 const app = express();
-const port = process.env.PORT || 3001;
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3001",
+  "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
+  "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
+  // Add specific Vercel preview domains instead of wildcards
+  "https://mitheai-app.vercel.app",
+  "https://mitheai-api.vercel.app",
+  // Add production domains if different
+  "https://app.mitheai.com",
+  "https://api.mitheai.com",
+];
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-); // Enable CORS with specific options
-app.use(compression()); // Compress responses
-app.use(morgan("dev")); // Request logging
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+    origin: function (origin, callback) {
+      // For development/testing - allow requests with no origin (like mobile apps, curl, etc)
+      if (!origin) {
+        return callback(null, true);
+      }
 
-// Session configuration
+      // Check if the origin is in our allowedOrigins list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, origin); // Return the actual origin instead of true
+      }
+
+      // For Vercel preview deployments which have dynamic URLs
+      if (origin.includes("vercel.app")) {
+        return callback(null, origin); // Allow all vercel.app domains and return the specific origin
+      }
+
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Time"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
+
+app.use(compression());
+app.use(morgan("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Create MongoDB session store
+const MongoDBStore = connectMongoDBSession(session);
+const store = new MongoDBStore({
+  uri: process.env.MONGODB_URI ?? "",
+  collection: "sessions",
+  expires: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
+  connectionOptions: {
+    serverSelectionTimeoutMS: 10000,
+  },
+});
+
+// Handle store errors
+store.on("error", function (error) {
+  console.error("Session store error:", error);
+});
+
+// Configure session middleware
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: process.env.SESSION_SECRET ?? "your-secret-key-change-this",
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Only use secure in production
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // For cross-site requests in production
+    },
+    store: store,
     resave: false,
     saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: "lax",
-    },
-    name: "mitheai.sid",
+    name: "mitheai.sid", // Custom name for the session cookie
   })
 );
 
@@ -92,7 +140,7 @@ app.get("/test", (req, res) => {
 });
 
 // Test endpoint with explicit CORS
-app.options("/test-cors", cors()); // Enable pre-flight for this specific route
+app.options("/test-cors", cors());
 app.get("/test-cors", (req, res) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -104,26 +152,23 @@ app.get("/test-cors", (req, res) => {
   });
 });
 
-// Routes
-// console.log("\n[DEBUG] ====== Mounting routes... ======");
-
 // Mount routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authenticateToken, usersRouter);
 app.use("/api/teams", authenticateToken, teamsRouter);
-app.use("/api/invitations", authenticateToken, invitationsRouter);
+app.use("/api/invitations", invitationsRouter);
 app.use("/api/content", authenticateToken, contentRouter);
-app.use("/api/collections", authenticateToken, collectionsRouter);
-app.use("/api/analysis", authenticateToken, analysisRouter);
 app.use("/api/social-accounts", socialAccountRouter);
-app.use("/api/analytics", authenticateToken, analyticsRouter);
+app.use("/api/social-posts", socialPostRouter);
+app.use("/api/scheduled-posts", authenticateToken, scheduledPostRouter);
+app.use("/api/manual-cron", manualCronRouter);
 
 // Log all registered routes
 // console.log("\n[DEBUG] ====== All registered routes: ======");
 function listEndpoints(prefix: string, router: any) {
   const routes: any[] = [];
 
-  if (!router || !router.stack) {
+  if (!router?.stack) {
     console.log(`[DEBUG] No routes found for prefix: ${prefix}`);
     return routes;
   }
@@ -132,7 +177,6 @@ function listEndpoints(prefix: string, router: any) {
     if (middleware.route) {
       const path = prefix + middleware.route.path;
       const methods = Object.keys(middleware.route.methods);
-      // console.log(`[DEBUG] Route: ${methods.join(",")} ${path}`);
       routes.push({
         path,
         methods: methods.join(","),
@@ -182,39 +226,7 @@ app.use(
   }
 );
 
-// Start server with error handling
-try {
-  const server = app.listen(port, () => {
-    console.log(`[${new Date().toISOString()}] Server running on port ${port}`);
-    // console.log("[DEBUG] Environment:", process.env.NODE_ENV);
-  });
+// setupCronJobs();
 
-  server.on("error", (error: any) => {
-    console.error("[FATAL] Server failed to start:", error);
-    process.exit(1);
-  });
-
-  process.on("uncaughtException", (error: Error) => {
-    console.error("[FATAL] Uncaught exception:", error);
-    server.close(() => {
-      process.exit(1);
-    });
-  });
-
-  process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
-    console.error(
-      "[FATAL] Unhandled Rejection at:",
-      promise,
-      "reason:",
-      reason
-    );
-    server.close(() => {
-      process.exit(1);
-    });
-  });
-} catch (error) {
-  console.error("[FATAL] Failed to start server:", error);
-  process.exit(1);
-}
-
+// Export the app for use in server.ts
 export default app;
