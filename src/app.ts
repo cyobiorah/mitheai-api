@@ -10,6 +10,8 @@ import { authenticateToken } from "./auth/auth.middleware";
 import passport from "./platforms/twitter/twitter.config";
 import { RedisStore } from "connect-redis";
 import Redis from "ioredis";
+import rateLimit from "express-rate-limit";
+import { RedisStore as RateLimitRedisStore } from "rate-limit-redis";
 
 import authRoutes from "./auth/auth.routes";
 import usersRouter from "./users/users.routes";
@@ -109,6 +111,39 @@ app.use(
     next();
   }
 );
+
+// Configure rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: "Too many requests from this IP, please try again after 15 minutes",
+  store: new RateLimitRedisStore({
+    // @ts-ignore - Redis client types might not match exactly
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+    prefix: "rate-limit:",
+  }),
+});
+
+// More restrictive limiter for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 login/register attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many login attempts, please try again after an hour",
+  store: new RateLimitRedisStore({
+    // @ts-ignore - Redis client types might not match exactly
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+    prefix: "auth-limit:",
+  }),
+});
+
+// Apply rate limiters to routes
+app.use("/api", apiLimiter); // Apply to all API routes
+app.use("/api/auth/login", authLimiter); // More restrictive for login
+app.use("/api/auth/register", authLimiter); // More restrictive for registration
 
 // Health check endpoint
 app.get("/health", (req, res) => {

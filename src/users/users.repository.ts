@@ -1,7 +1,6 @@
-import { Db, ObjectId } from "mongodb";
+import { Db } from "mongodb";
 import { MongoDBRepository } from "../repositories/mongodb.repository";
 import { User } from "../appTypes";
-import { toObjectId } from "../shared/objectId";
 
 export class UserRepository extends MongoDBRepository<User> {
   constructor(db: Db) {

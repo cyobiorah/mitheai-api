@@ -48,13 +48,13 @@ export class UserService {
 
   async findById(id: string): Promise<User | null> {
     await this.ensureInitialized();
-    
+
     // Try to find by uid first, since that's what we store in JWT
     const userByUid = await this.userRepository.findOne({ uid: id });
     if (userByUid) {
       return userByUid;
     }
-    
+
     // Fall back to MongoDB ObjectId lookup if uid not found
     try {
       return await this.userRepository.findById(id);
@@ -89,7 +89,7 @@ export class UserService {
     userData: Omit<User, "uid" | "createdAt" | "updatedAt">
   ): Promise<User> {
     await this.ensureInitialized();
-    
+
     // Let MongoDB generate the _id automatically
     const newUser = await this.userRepository.create({
       ...userData,
@@ -173,24 +173,5 @@ export class UserService {
       user: userWithoutPassword as User,
       token,
     };
-  }
-
-  private generateToken(user: User): string {
-    const payload = {
-      uid: user.uid,
-      email: user.email,
-      role: user.role,
-    };
-
-    return jwt.sign(
-      payload,
-      process.env.JWT_SECRET ?? "your-secret-key-change-this-in-production",
-      { expiresIn: "24h" }
-    );
-  }
-
-  private async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return await bcrypt.hash(password, saltRounds);
   }
 }

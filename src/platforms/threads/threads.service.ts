@@ -103,12 +103,14 @@ export class ThreadsService {
         const longLivedToken = await this.exchangeForLongLivedToken(
           response.data.access_token
         );
-        
+
         if (longLivedToken) {
           console.log("Successfully exchanged for long-lived Threads token");
           return longLivedToken;
         } else {
-          console.warn("Failed to get long-lived token, using short-lived token instead");
+          console.warn(
+            "Failed to get long-lived token, using short-lived token instead"
+          );
           return response.data.access_token;
         }
       }
@@ -828,10 +830,6 @@ export class ThreadsService {
         return true;
       } catch (verifyError: any) {
         // If we get a 401 or other error during verification, handle it as a refresh error
-        console.error(
-          `Error verifying token for Threads account ${accountId}:`,
-          verifyError.response?.data || verifyError.message
-        );
 
         // Check if the error is due to an expired token
         const isExpiredToken =

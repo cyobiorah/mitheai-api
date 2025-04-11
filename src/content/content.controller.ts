@@ -516,9 +516,26 @@ export const updateContent = async (req: Request, res: Response) => {
     delete updates.organizationId;
     delete updates.teamId;
 
+    const allowedFields = [
+      "title",
+      "description",
+      "type",
+      "url",
+      "content",
+      "metadata",
+      "status",
+    ];
+
+    const safeUpdates: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (key in updates) {
+        safeUpdates[key] = updates[key];
+      }
+    }
+
     await contentCollection.updateOne(
       { _id: new ObjectId(contentId) },
-      { $set: updates }
+      { $set: safeUpdates }
     );
 
     const updatedContent = await contentCollection.findOne({
