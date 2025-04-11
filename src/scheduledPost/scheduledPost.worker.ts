@@ -96,11 +96,10 @@ export class ScheduledPostWorker {
                   console.log(`Attempting to post to Threads with account ${account._id.toString()}`);
                   
                   try {
-                    // First check if token needs refreshing
-                    await threadsService.checkAndRefreshToken(account._id.toString());
-                    console.log(`Token refresh not needed yet for account ${account._id.toString()}`);
+                    // We'll skip the explicit token check here since postContent will handle it internally
+                    // This prevents redundant API calls and reduces the chance of timeouts
                     
-                    // Now post the content with the valid token
+                    // Post the content directly - token refresh will happen inside postContent if needed
                     postResult = await threadsService.postContent(
                       account._id.toString(),
                       post.content,
