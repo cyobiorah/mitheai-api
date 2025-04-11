@@ -1,11 +1,6 @@
 {
   "version": 2,
   "public": true,
-  "functions": {
-    "api/manual-cron": {
-      "maxDuration": 30
-    }
-  },
   "crons": [
     {
       "path": "/api/manual-cron",
