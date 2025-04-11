@@ -50,6 +50,89 @@ export class ThreadsService {
   }
 
   /**
+   * Exchange authorization code for a Threads access token
+   * https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions
+   */
+  async exchangeCodeForToken(code: string): Promise<string | null> {
+    try {
+      // Prepare the token exchange request for Threads
+      const redirectUri =
+        process.env.THREADS_CALLBACK_URL ??
+        "http://localhost:3001/api/social-accounts/threads/callback";
+
+      const params = new URLSearchParams();
+      params.append("client_id", process.env.THREADS_APP_ID ?? "");
+      params.append("client_secret", process.env.THREADS_APP_SECRET ?? "");
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+
+      // Make the token exchange request to Threads
+      console.log("Exchanging code for Threads token with params:", {
+        clientId: process.env.THREADS_APP_ID ?? "",
+        hasClientSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
+        redirectUri,
+        code: code.substring(0, 10) + "...", // Log partial code for debugging without exposing full code
+      });
+
+      // Use the Threads-specific endpoint as per the official documentation
+      const response = await axios.post(
+        "https://graph.threads.net/oauth/access_token",
+        params,
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          // Add timeout to prevent hanging requests
+          timeout: 10000,
+          // Add validateStatus to get full error responses
+          validateStatus: function (status) {
+            return status < 500; // Resolve only if the status code is less than 500
+          },
+        }
+      );
+
+      console.log("Threads token exchange response:", {
+        status: response.status,
+        hasAccessToken: !!response.data.access_token,
+        data: response.data,
+      });
+
+      // If we have a short-lived token, exchange it for a long-lived token
+      if (response.data.access_token) {
+        const longLivedToken = await this.exchangeForLongLivedToken(
+          response.data.access_token
+        );
+        
+        if (longLivedToken) {
+          console.log("Successfully exchanged for long-lived Threads token");
+          return longLivedToken;
+        } else {
+          console.warn("Failed to get long-lived token, using short-lived token instead");
+          return response.data.access_token;
+        }
+      }
+
+      // Return the access token
+      return response.data.access_token || null;
+    } catch (error: any) {
+      console.error(
+        "Error exchanging code for Threads token:",
+        error.response?.data || error.message
+      );
+
+      // Log more detailed error information
+      if (error.response) {
+        console.error("Response status:", error.response.status);
+        console.error("Response headers:", error.response.headers);
+        console.error("Response data:", error.response.data);
+      }
+
+      return null;
+    }
+  }
+
+  /**
    * Exchange a short-lived token for a long-lived token (60 days)
    * https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
    */
