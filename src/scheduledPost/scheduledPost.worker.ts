@@ -93,15 +93,39 @@ export class ScheduledPostWorker {
                   );
                   break;
                 case "threads":
-                  // Call Threads API
-                  postResult = await threadsService.postContent(
-                    account._id.toString(),
-                    post.content,
-                    post.mediaType
-                      ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
-                      : "TEXT",
-                    post.mediaUrls?.[0]
-                  );
+                  console.log(`Attempting to post to Threads with account ${account._id.toString()}`);
+                  
+                  try {
+                    // First check if token needs refreshing
+                    await threadsService.checkAndRefreshToken(account._id.toString());
+                    console.log(`Token refresh not needed yet for account ${account._id.toString()}`);
+                    
+                    // Now post the content with the valid token
+                    postResult = await threadsService.postContent(
+                      account._id.toString(),
+                      post.content,
+                      post.mediaType
+                        ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
+                        : "TEXT",
+                      post.mediaUrls?.[0]
+                    );
+                  } catch (tokenError: any) {
+                    // If token is expired, mark the account as needing reauthorization
+                    if (tokenError.code === "TOKEN_EXPIRED") {
+                      await socialAccountRepository.update(account._id.toString(), {
+                        status: "expired",
+                        metadata: {
+                          ...account.metadata,
+                          requiresReauth: true,
+                          lastError: tokenError.message,
+                          lastErrorTime: new Date(),
+                        },
+                        updatedAt: new Date(),
+                      });
+                      throw new Error(`Threads account token has expired and requires reconnection: ${tokenError.message}`);
+                    }
+                    throw tokenError;
+                  }
                   break;
                 default:
                   throw new Error(`Unsupported platform: ${account.platform}`);
