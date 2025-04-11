@@ -1,6 +1,17 @@
 {
   "version": 2,
   "public": true,
+  "functions": {
+    "api/manual-cron": {
+      "maxDuration": 30
+    }
+  },
+  "cron": [
+    {
+      "path": "/api/manual-cron",
+      "schedule": "*/30 * * * *"
+    }
+  ],
   "builds": [
     {
       "src": "src/app.ts",
