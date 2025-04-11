@@ -48,17 +48,17 @@ export class MongoDBConnection {
       return this.connectionPromise;
     }
 
-    this.connectionPromise = new Promise(async (resolve, reject) => {
+    this.connectionPromise = new Promise((resolve, reject) => {
       try {
         console.log("Connecting to MongoDB...");
-        await this.client.connect();
+        this.client.connect();
         this.db = this.client.db("mitheai");
         console.log("Connected to MongoDB successfully");
         resolve(this.db);
       } catch (error) {
         console.error("Failed to connect to MongoDB:", error);
         this.connectionPromise = null;
-        reject(error);
+        reject(error as Error);
       }
     });
 
@@ -71,6 +71,16 @@ export class MongoDBConnection {
       this.db = null;
       this.connectionPromise = null;
       console.log("MongoDB connection closed");
+    }
+  }
+
+  public async ping(): Promise<void> {
+    try {
+      const db = await this.connect();
+      await db.command({ ping: 1 });
+      console.log("Pinged MongoDB successfully");
+    } catch (error) {
+      console.error("MongoDB ping failed:", error);
     }
   }
 }

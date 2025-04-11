@@ -21,7 +21,7 @@ export class ScheduledPostWorker {
       // Get all scheduled posts that are due for publishing
       const now = new Date();
       const postsToProcess = await scheduledPostRepository.find({
-        status: "scheduled",
+        status: { $in: ["scheduled", "pending"] },
         scheduledFor: { $lte: now },
       });
 
