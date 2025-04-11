@@ -4,11 +4,12 @@ import morgan from "morgan";
 import helmet from "helmet";
 import compression from "compression";
 import session from "express-session";
-import connectMongoDBSession from "connect-mongodb-session";
 import { validationResult } from "express-validator";
 import { config } from "dotenv";
 import { authenticateToken } from "./auth/auth.middleware";
 import passport from "./platforms/twitter/twitter.config";
+import { RedisStore } from "connect-redis";
+import Redis from "ioredis";
 
 import authRoutes from "./auth/auth.routes";
 import usersRouter from "./users/users.routes";
@@ -72,36 +73,25 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Create MongoDB session store
-const MongoDBStore = connectMongoDBSession(session);
-const store = new MongoDBStore({
-  uri: process.env.MONGODB_URI ?? "",
-  collection: "sessions",
-  expires: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
-  connectionOptions: {
-    serverSelectionTimeoutMS: 10000,
-  },
-});
-
-// Handle store errors
-store.on("error", function (error) {
-  console.error("Session store error:", error);
-});
+// const RedisStore = connectRedis(session);
+const redisClient = new Redis(
+  process.env.REDIS_URL ?? "redis://localhost:6379"
+);
 
 // Configure session middleware
 app.use(
   session({
     secret: process.env.SESSION_SECRET ?? "your-secret-key-change-this",
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week in milliseconds
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Only use secure in production
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // For cross-site requests in production
-    },
-    store: store,
+    store: new RedisStore({ client: redisClient }),
     resave: false,
     saveUninitialized: false,
-    name: "mitheai.sid", // Custom name for the session cookie
+    name: "mitheai.sid",
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    },
   })
 );
 
