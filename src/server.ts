@@ -1,5 +1,6 @@
 import app from "./app";
 import dotenv from "dotenv";
+import { MongoDBConnection } from "./config/mongodb";
 
 dotenv.config();
 
@@ -19,3 +20,20 @@ if (process.env.NODE_ENV === "development") {
     console.log(`Server is running on port ${port}`);
   });
 }
+
+let lastActivityTime = Date.now();
+
+app.use((req, res, next) => {
+  lastActivityTime = Date.now();
+  next();
+});
+
+// Keep-alive ping every 5 minutes
+setInterval(async () => {
+  const idleTime = Date.now() - lastActivityTime;
+  const fiveMinutes = 5 * 60 * 1000;
+
+  if (idleTime >= fiveMinutes) {
+    await MongoDBConnection.getInstance().ping();
+  }
+}, 5 * 60 * 1000);

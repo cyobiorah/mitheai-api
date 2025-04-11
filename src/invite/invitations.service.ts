@@ -90,8 +90,13 @@ export class InvitationService {
     if (!invitation) {
       throw new Error("Invalid invitation token");
     }
-    
-    console.log("Found invitation:", invitation.id, "for email:", invitation.email);
+
+    console.log(
+      "Found invitation:",
+      invitation.id,
+      "for email:",
+      invitation.email
+    );
 
     // Check if invitation is still valid
     if (invitation.status !== "pending") {
@@ -111,9 +116,9 @@ export class InvitationService {
     const existingUsers = await this.userRepository.find({
       email: invitation.email,
     });
-    
+
     console.log("Found existing users:", existingUsers.length);
-    
+
     let user;
 
     if (existingUsers && existingUsers.length > 0) {
@@ -122,7 +127,7 @@ export class InvitationService {
       const pendingUser =
         existingUsers.find((u: any) => u.status === "pending") ||
         existingUsers[0];
-      
+
       console.log("Selected user to update:", pendingUser.id);
 
       // Update the existing user instead of creating a new one
@@ -131,7 +136,7 @@ export class InvitationService {
         password: hashedPassword,
         updatedAt: new Date(),
       });
-      
+
       console.log("After update, user is:", user ? "found" : "null");
 
       // Delete any other duplicate users with the same email
@@ -145,7 +150,7 @@ export class InvitationService {
       // Create a new user if none exists
       console.log("No existing users found, creating new user");
       user = await this.userRepository.create({
-        uid: this.generateUserId(),
+        // uid: this.generateUserId(),
         email: invitation.email,
         firstName: invitation.firstName,
         lastName: invitation.lastName,
@@ -161,13 +166,13 @@ export class InvitationService {
         },
         password: hashedPassword,
       } as any);
-      
+
       console.log("After create, user is:", user ? "created" : "null");
     }
 
     // Mark invitation as accepted
     await this.invitationRepository.markAsAccepted(invitation.id);
-    
+
     console.log("Final user object to return:", user ? "valid" : "null");
 
     return user;

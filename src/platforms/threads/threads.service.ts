@@ -5,6 +5,7 @@ import { SocialAccountRepository } from "../../socialAccount/socialAccount.repos
 
 export class ThreadsService {
   private socialAccountRepository!: SocialAccountRepository;
+  private lastTokenExpirationDate: Date | null = null;
 
   constructor() {
     this.initialize();
@@ -97,6 +98,23 @@ export class ThreadsService {
         data: response.data,
       });
 
+      // If we have a short-lived token, exchange it for a long-lived token
+      if (response.data.access_token) {
+        const longLivedToken = await this.exchangeForLongLivedToken(
+          response.data.access_token
+        );
+
+        if (longLivedToken) {
+          console.log("Successfully exchanged for long-lived Threads token");
+          return longLivedToken;
+        } else {
+          console.warn(
+            "Failed to get long-lived token, using short-lived token instead"
+          );
+          return response.data.access_token;
+        }
+      }
+
       // Return the access token
       return response.data.access_token || null;
     } catch (error: any) {
@@ -109,6 +127,76 @@ export class ThreadsService {
       if (error.response) {
         console.error("Response status:", error.response.status);
         console.error("Response headers:", error.response.headers);
+        console.error("Response data:", error.response.data);
+      }
+
+      return null;
+    }
+  }
+
+  /**
+   * Exchange a short-lived token for a long-lived token (60 days)
+   * https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
+   */
+  async exchangeForLongLivedToken(
+    shortLivedToken: string
+  ): Promise<string | null> {
+    try {
+      console.log("Exchanging short-lived token for long-lived Threads token");
+
+      // According to Meta documentation, we need to use th_exchange_token for Threads
+      // https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
+      const params = new URLSearchParams();
+      params.append("grant_type", "th_exchange_token");
+      params.append("client_secret", process.env.THREADS_APP_SECRET ?? "");
+      params.append("access_token", shortLivedToken);
+
+      const response = await axios.get(
+        "https://graph.threads.net/access_token",
+        {
+          params,
+          timeout: 10000,
+          validateStatus: function (status) {
+            return status < 500;
+          },
+        }
+      );
+
+      if (response.data.access_token) {
+        console.log("Long-lived token exchange successful:", {
+          hasToken: !!response.data.access_token,
+          expiresIn: response.data.expires_in || "unknown",
+          tokenType: response.data.token_type || "unknown",
+        });
+
+        // Calculate token expiration date based on expires_in (in seconds)
+        const expiresInSeconds = response.data.expires_in || 5184000; // Default to 60 days if not provided
+        const expirationDate = new Date();
+        expirationDate.setSeconds(
+          expirationDate.getSeconds() + expiresInSeconds
+        );
+
+        console.log(`Token will expire at: ${expirationDate.toISOString()}`);
+
+        // Store the token expiration date for later use in checkAndRefreshToken
+        this.lastTokenExpirationDate = expirationDate;
+
+        return response.data.access_token;
+      } else {
+        console.error(
+          "No access token in long-lived token exchange response:",
+          response.data
+        );
+        return null;
+      }
+    } catch (error: any) {
+      console.error(
+        "Error exchanging for long-lived Threads token:",
+        error.response?.data || error.message
+      );
+
+      if (error.response) {
+        console.error("Response status:", error.response.status);
         console.error("Response data:", error.response.data);
       }
 
@@ -185,15 +273,17 @@ export class ThreadsService {
         userId
       );
 
+      // Use the token expiration date from the long-lived token exchange if available
+      // Otherwise default to 60 days from now
+      const now = new Date();
+      const tokenExpiresAt =
+        this.lastTokenExpirationDate ||
+        new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
+
       if (existingAccount) {
         console.log(`Updating existing Threads account for user ${userId}`);
 
         // Update the tokens
-        const now = new Date();
-        const tokenExpiresAt = new Date(
-          now.getTime() + 60 * 24 * 60 * 60 * 1000
-        ); // 60 days
-
         await this.socialAccountRepository.update(existingAccount._id, {
           accessToken,
           refreshToken: refreshToken ?? undefined,
@@ -216,9 +306,6 @@ export class ThreadsService {
 
       // Create a new social account
       console.log(`Creating new Threads account for user ${userId}`);
-
-      const now = new Date();
-      const tokenExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
       const newAccount = await this.socialAccountRepository.create({
         userId,
@@ -669,61 +756,87 @@ export class ThreadsService {
 
       // Check if token refresh is needed
       const tokenExpiresAt = socialAccount.metadata?.tokenExpiresAt
-        ? socialAccount.metadata.tokenExpiresAt
+        ? new Date(socialAccount.metadata.tokenExpiresAt)
         : null;
 
+      const now = new Date();
+
+      // If token is about to expire in the next 30 minutes, consider it expired
+      const thirtyMinutesInMs = 30 * 60 * 1000;
       const shouldRefresh =
         !tokenExpiresAt ||
-        tokenExpiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // Less than 7 days remaining
+        tokenExpiresAt.getTime() - now.getTime() <= thirtyMinutesInMs;
 
       if (!shouldRefresh) {
-        return false; // No refresh needed
+        console.log(`Token refresh not needed yet for account ${accountId}`);
+        return true; // Token is still valid and not close to expiration
       }
 
-      // Since Threads doesn't support token refresh in the same way as other Meta platforms,
-      // we'll just use the existing token and update the expiration date
+      console.log(
+        `Token is expiring soon or has expired for account ${accountId}, verifying with API`
+      );
+
+      // For Threads, verify the token is still valid by making a simple API call
       try {
-        // For Threads, we'll just verify the token is still valid by making a simple API call
         const response = await axios.get(
-          `https://graph.threads.net/me?fields=id&access_token=${socialAccount.accessToken}`
+          `https://graph.threads.net/v1.0/me?fields=id&access_token=${socialAccount.accessToken}`,
+          {
+            validateStatus: function (status) {
+              return status < 500; // Accept any status code below 500 to catch 401s
+            },
+            timeout: 10000, // 10 second timeout
+          }
         );
 
+        // If we got a 401, the token is invalid/expired
+        if (response.status === 401) {
+          console.log(
+            `Token is expired (401 response) for account ${accountId}`
+          );
+          throw new SocialAccountError(
+            "TOKEN_EXPIRED",
+            "Threads token has expired according to API response",
+            { accountId }
+          );
+        }
+
         if (!response.data?.id) {
-          throw new Error("Failed to verify Threads token");
+          console.log(
+            `Token verification failed for account ${accountId}: No user ID in response`
+          );
+          throw new Error(
+            "Failed to verify Threads token: No user ID in response"
+          );
         }
 
         // Token is still valid, update the expiration date
-        const now = new Date();
-        const tokenExpiresAt = new Date(
-          now.getTime() + 60 * 24 * 60 * 60 * 1000
-        ); // 60 days
+        // Meta long-lived tokens typically last 60 days
+        const newExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
+
+        console.log(
+          `Token is valid for account ${accountId}, updating expiration to ${newExpiresAt.toISOString()}`
+        );
 
         await this.socialAccountRepository.update(accountId, {
           lastRefreshed: now,
           metadata: {
             ...socialAccount.metadata,
-            tokenExpiresAt,
+            tokenExpiresAt: newExpiresAt,
             lastChecked: now,
           },
           updatedAt: now,
         });
-        console.log(
-          `Successfully refreshed token for Threads account ${accountId}`
-        );
+
         return true;
-      } catch (refreshError: any) {
-        console.error(
-          `Error refreshing token for Threads account ${accountId}:`,
-          refreshError
-        );
+      } catch (verifyError: any) {
+        // If we get a 401 or other error during verification, handle it as a refresh error
 
         // Check if the error is due to an expired token
         const isExpiredToken =
-          refreshError.response?.data?.error?.type === "OAuthException" &&
-          refreshError.response?.data?.error?.code === 190 &&
-          refreshError.response?.data?.error?.message?.includes(
-            "Session has expired"
-          );
+          verifyError.code === "TOKEN_EXPIRED" ||
+          verifyError.response?.status === 401 ||
+          (verifyError.response?.data?.error?.type === "OAuthException" &&
+            verifyError.response?.data?.error?.code === 190);
 
         // Mark the account as having a refresh error with appropriate status
         await this.socialAccountRepository.update(accountId, {
@@ -731,20 +844,19 @@ export class ThreadsService {
           metadata: {
             ...socialAccount.metadata,
             lastError:
-              refreshError.response?.data?.error?.message ||
-              refreshError.message,
-            lastErrorTime: new Date(),
+              verifyError.response?.data?.error?.message || verifyError.message,
+            lastErrorTime: now,
             requiresReauth: isExpiredToken,
           },
-          updatedAt: new Date(),
+          updatedAt: now,
         });
 
         throw new SocialAccountError(
           isExpiredToken ? "TOKEN_EXPIRED" : "TOKEN_REFRESH_FAILED",
           isExpiredToken
             ? `Threads account token has expired and requires reconnection`
-            : `Failed to refresh token for Threads account: ${
-                (refreshError as Error).message
+            : `Failed to verify token for Threads account: ${
+                (verifyError as Error).message
               }`,
           { accountId, platform: "threads" }
         );
