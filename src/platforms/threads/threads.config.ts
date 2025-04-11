@@ -4,9 +4,7 @@ import { ThreadsService } from "./threads.service";
 const threadsService = new ThreadsService();
 
 // Configure callback URL based on environment
-const callbackUrl =
-  process.env.API_URL ??
-  "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app";
+const callbackUrl = process.env.API_URL;
 
 // Debug information
 // console.log("Threads (via Instagram) OAuth configuration:", {

@@ -32,6 +32,10 @@ const allowedOrigins = [
   "http://localhost:3001",
   "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
   "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
+  "https://mitheai-app-git-dev-cyobiorahs-projects.vercel.app",
+  "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app",
+  "https://mitheai-app-git-staging-cyobiorahs-projects.vercel.app",
+  "https://mitheai-api-git-staging-cyobiorahs-projects.vercel.app",
   // Add specific Vercel preview domains instead of wildcards
   "https://mitheai-app.vercel.app",
   "https://mitheai-api.vercel.app",
@@ -75,7 +79,6 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// const RedisStore = connectRedis(session);
 const redisClient = new Redis(
   process.env.REDIS_URL ?? "redis://localhost:6379"
 );
@@ -124,6 +127,9 @@ const apiLimiter = rateLimit({
     sendCommand: (...args: string[]) => redisClient.call(...args),
     prefix: "rate-limit:",
   }),
+  skip: (req: express.Request) => {
+    return process.env.NODE_ENV !== "production";
+  },
 });
 
 // More restrictive limiter for authentication endpoints
@@ -138,6 +144,9 @@ const authLimiter = rateLimit({
     sendCommand: (...args: string[]) => redisClient.call(...args),
     prefix: "auth-limit:",
   }),
+  skip: (req: express.Request) => {
+    return process.env.NODE_ENV !== "production";
+  },
 });
 
 // Apply rate limiters to routes

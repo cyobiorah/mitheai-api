@@ -27,10 +27,20 @@ declare module "express-session" {
 
 const facebookService = new FacebookService();
 
+if (!process.env.API_URL) {
+  throw new Error("API_URL environment variable is required");
+}
+
+if (!process.env.FACEBOOK_CLIENT_ID) {
+  throw new Error("FACEBOOK_CLIENT_ID environment variable is required");
+}
+
+if (!process.env.FACEBOOK_CLIENT_SECRET) {
+  throw new Error("FACEBOOK_CLIENT_SECRET environment variable is required");
+}
+
 // Configure callback URL based on environment
-const callbackUrl =
-  process.env.API_URL ??
-  "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app";
+const callbackUrl = process.env.API_URL;
 
 passport.serializeUser((user: any, done) => {
   done(null, user);
@@ -43,12 +53,8 @@ passport.deserializeUser((user: any, done) => {
 // Create the Facebook authentication strategy
 const strategy = new FacebookStrategy(
   {
-    clientID:
-      process.env.FACEBOOK_CLIENT_ID ?? process.env.FACEBOOK_APP_ID ?? "",
-    clientSecret:
-      process.env.FACEBOOK_CLIENT_SECRET ??
-      process.env.FACEBOOK_APP_SECRET ??
-      "",
+    clientID: process.env.FACEBOOK_CLIENT_ID,
+    clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
     callbackURL: callbackUrl,
     profileFields: ["id", "displayName", "name", "email", "photos"],
     scope: ["email", "public_profile"],
