@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/manual-cron",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 * * * *"
     }
   ],
   "builds": [
