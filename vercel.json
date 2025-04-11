@@ -6,7 +6,7 @@
       "maxDuration": 30
     }
   },
-  "cron": [
+  "crons": [
     {
       "path": "/api/manual-cron",
       "schedule": "*/30 * * * *"
