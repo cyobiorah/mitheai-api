@@ -1,7 +1,7 @@
 import { Db } from "mongodb";
 import { MongoDBRepository } from "../repositories/mongodb.repository";
 import { Team } from "../types";
-import { isValidObjectId } from "../shared/objectId";
+import { toObjectId, isValidObjectId } from "../shared/objectId";
 
 export class TeamRepository extends MongoDBRepository<Team> {
   constructor(db: Db) {
@@ -10,11 +10,23 @@ export class TeamRepository extends MongoDBRepository<Team> {
 
   // Team-specific methods
   async findByOrganization(organizationId: string): Promise<Team[]> {
-    return await this.find({ organizationId });
+    const objectId = toObjectId(organizationId);
+    return await this.find({
+      organizationId: {
+        $in: [organizationId, ...(objectId ? [objectId] : [])],
+      },
+    });
   }
 
   async findByMember(userId: string): Promise<Team[]> {
-    return await this.find({ memberIds: userId });
+    const objectId = toObjectId(userId);
+    const query = {
+      $or: [
+        { memberIds: userId }, // Check string format
+        ...(objectId ? [{ memberIds: objectId }] : []) // Check ObjectId format if valid
+      ]
+    };
+    return await this.find(query);
   }
 
   async addMember(teamId: string, userId: string): Promise<Team | null> {
@@ -51,16 +63,16 @@ export class TeamRepository extends MongoDBRepository<Team> {
   // Handle dates when creating/updating
   async create(data: Omit<Team, "_id">): Promise<Team> {
     const now = new Date();
-    
+
     const mongoData = {
       ...data,
       createdAt: data.createdAt || now,
       updatedAt: data.updatedAt || now,
     };
-    
+
     return await super.create(mongoData);
   }
-  
+
   async update(id: string, data: Partial<Team>): Promise<Team | null> {
     if (!isValidObjectId(id)) {
       console.error(`Invalid ObjectId for team update: ${id}`);
@@ -71,7 +83,7 @@ export class TeamRepository extends MongoDBRepository<Team> {
       ...data,
       updatedAt: new Date(),
     };
-    
+
     return await super.update(id, updateData);
   }
 }

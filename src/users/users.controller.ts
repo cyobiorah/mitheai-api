@@ -150,21 +150,21 @@ export const inviteUser = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   const userService = await initAuthController();
   try {
-    const { uid } = req.params;
+    const { userId } = req.params;
 
-    if (!uid) {
+    if (!userId) {
       return res.status(400).json({
-        error: "Missing required parameter: uid",
+        error: "Missing required parameter: userId",
       });
     }
 
-    const existingUser = await userService.findById(uid);
+    const existingUser = await userService.findById(userId);
 
     if (!existingUser) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const updatedUser = await userService.update(uid, req.body);
+    const updatedUser = await userService.update(userId, req.body);
     res.json(updatedUser);
   } catch (error) {
     console.error("Error updating user:", error);

@@ -54,16 +54,6 @@ router.get("/threads/direct-auth", authenticateToken, async (req: any, res) => {
  * https://developers.facebook.com/docs/threads/get-started
  */
 router.get("/threads/connect", async (req, res) => {
-  // console.log("Threads connect request:", {
-  //   query: req.query,
-  //   headers: {
-  //     authorization: req.headers.authorization ? "Present" : "Missing",
-  //     cookie: req.headers.cookie ? "Present" : "Missing",
-  //   },
-  //   sessionID: req.sessionID,
-  //   hasSession: !!req.session,
-  // });
-
   // Check for state parameter
   const { state } = req.query;
 
@@ -141,23 +131,12 @@ router.get("/threads/callback", async (req, res) => {
   try {
     const { code, state, error, error_description } = req.query;
 
-    // console.log("Threads callback received:", {
-    //   query: req.query,
-    //   headers: {
-    //     authorization: req.headers.authorization ? "Present" : "Missing",
-    //     cookie: req.headers.cookie ? "Present" : "Missing",
-    //   },
-    //   sessionID: req.sessionID,
-    //   hasSession: !!req.session,
-    //   stateParam: state || "Missing",
-    // });
-
     // Handle errors from Threads
     if (error) {
       console.error("Threads OAuth error:", error, error_description);
       return res.redirect(
         `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
-          error_description?.toString() || "Authentication failed"
+          error_description?.toString() ?? "Authentication failed"
         )}`
       );
     }
@@ -378,10 +357,11 @@ router.post(
           const hasAccess =
             (account.organizationId &&
               isOrganizationUser(user) &&
-              account.organizationId === user.organizationId) ||
+              account.organizationId.toString() ===
+                user.organizationId.toString()) ||
             (account.teamId &&
               isOrganizationUser(user) &&
-              user.teamIds?.includes(account.teamId)) ||
+              user.teamIds?.includes(account.teamId.toString())) ||
             user.role === "super_admin";
 
           if (!hasAccess) {
@@ -427,8 +407,8 @@ router.post(
 
           const socialPost: SocialPost = {
             userId: account.userId,
-            teamId: account.teamId,
-            organizationId: account.organizationId,
+            teamId: account.teamId ?? undefined,
+            organizationId: account.organizationId ?? undefined,
             socialAccountId: accountId,
             platform: "threads",
             content: content,

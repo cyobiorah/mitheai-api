@@ -11,7 +11,7 @@ import { ScheduledPostRepository } from "../scheduledPost/scheduledPost.reposito
 export class RepositoryFactory {
   private static db: Db;
 
-  private static async getDatabase(): Promise<Db> {
+  static async getDatabase(): Promise<Db> {
     if (!this.db) {
       this.db = await getDb();
     }

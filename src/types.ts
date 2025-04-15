@@ -97,6 +97,7 @@ export interface ContentItem {
       postId?: string;
       retryCount?: number;
       failureReason?: string;
+      accountId?: string;
     };
   };
   analysis?: {
@@ -184,7 +185,7 @@ export interface AnalysisTemplate {
   updatedAt: Date;
 }
 
-export type SocialPlatform = "twitter" | "facebook" | "linkedin" | "instagram";
+export type SocialPlatform = "twitter" | "facebook" | "linkedin" | "instagram" | "threads" | "bluesky";
 
 export interface Invitation {
   id: string;

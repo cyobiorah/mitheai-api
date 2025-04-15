@@ -1,4 +1,4 @@
-import { ObjectId } from 'mongodb';
+import { ObjectId } from "mongodb";
 
 /**
  * Converts a string or ObjectId to an ObjectId instance
@@ -6,12 +6,30 @@ import { ObjectId } from 'mongodb';
  * @returns ObjectId instance or null if conversion fails
  */
 export function toObjectId(id: string | ObjectId): ObjectId | null {
+  // console.log(`[DEBUG] toObjectId received: '${id}', type: ${typeof id}`);
+
   try {
-    if (id instanceof ObjectId) return id;
-    if (ObjectId.isValid(id)) return new ObjectId(id);
+    if (id instanceof ObjectId) {
+      // console.log(`[DEBUG] toObjectId: Input is already an ObjectId. Returning it.`);
+      return id;
+    }
+
+    const isValid = ObjectId.isValid(id);
+    // console.log(`[DEBUG] toObjectId: ObjectId.isValid('${id}') returned: ${isValid}`);
+
+    if (isValid) {
+      const objectIdInstance = new ObjectId(id);
+      // console.log(`[DEBUG] toObjectId: Successfully created new ObjectId:`, objectIdInstance);
+      return objectIdInstance;
+    }
+
+    // console.log(`[DEBUG] toObjectId: Input is not a valid ObjectId string or instance. Returning null.`);
     return null;
   } catch (error) {
-    console.error(`Failed to convert to ObjectId: ${id}`, error);
+    console.error(
+      `[ERROR] toObjectId caught an error during conversion for id: '${id}'. Error:`,
+      error
+    );
     return null;
   }
 }

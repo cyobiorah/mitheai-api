@@ -23,7 +23,18 @@ export class SocialAccountService {
   }
 
   async findById(id: string): Promise<SocialAccount | null> {
-    return await this.socialAccountRepository.findById(id);
+    // console.log(`[DEBUG] SocialAccountService.findById called with id: ${id}`);
+
+    let account = await this.socialAccountRepository.findById(id);
+    // console.log(`[DEBUG] SocialAccountService.findById result:`, account);
+
+    if (!account) {
+      // Try direct query to see what's in the collection
+      const directResult = await this.socialAccountRepository.findOne({});
+      console.log(`[DEBUG] First document in collection:`, directResult);
+    }
+
+    return account;
   }
 
   async findByUser(userId: string): Promise<SocialAccount[]> {

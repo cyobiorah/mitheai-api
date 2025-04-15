@@ -65,7 +65,7 @@ router.get("/posts", authenticateToken, async (req: any, res) => {
       posts.map(async (post) => {
         try {
           const account = await socialAccountRepository.findById(
-            post.socialAccountId
+            post.socialAccountId.toString()
           );
           return {
             ...post,
@@ -129,10 +129,10 @@ router.delete("/posts/:postId", authenticateToken, async (req: any, res) => {
       const hasAccess =
         (post.organizationId &&
           isOrganizationUser(user) &&
-          post.organizationId === user.organizationId) ||
+          post.organizationId.toString() === user.organizationId) ||
         (post.teamId &&
           isOrganizationUser(user) &&
-          user.teamIds?.includes(post.teamId)) ||
+          user.teamIds?.includes(post.teamId.toString())) ||
         user.role === "super_admin";
 
       if (!hasAccess) {

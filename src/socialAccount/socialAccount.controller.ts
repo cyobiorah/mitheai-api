@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { TwitterService } from "../platforms/twitter/twitter.service";
 import { SocialAccountService } from "./socialAccount.service";
 import { LinkedInService } from "../platforms/linkedin/linkedin.service";
+import { ObjectId } from "mongodb";
+import { RepositoryFactory } from "../repositories/repository.factory";
 
 export class SocialAccountController {
   private readonly twitterService: TwitterService;
@@ -19,7 +21,9 @@ export class SocialAccountController {
       if (req.query.error) {
         console.error("OAuth error:", req.query);
         return res.redirect(
-          `${process.env.FRONTEND_URL}/account-setup?error=${req.query.error as any}`
+          `${process.env.FRONTEND_URL}/account-setup?error=${
+            req.query.error as any
+          }`
         );
       }
 
@@ -322,36 +326,96 @@ export class SocialAccountController {
         });
       }
 
+      // console.log(`[DEBUG] Disconnect request for accountId: ${accountId}`);
+
       const userId = req.user?.uid;
 
       if (!userId) {
         return res.status(401).json({ error: "Authentication required" });
       }
 
-      // Get the account to check ownership
-      const account = await this.socialAccountService.findById(accountId);
+      // Try to find the account directly in the MongoDB collection
+      try {
+        // Get direct access to the collection
+        const db = await RepositoryFactory.getDatabase();
+        const collection = db.collection("socialAccounts");
 
-      if (!account) {
-        return res.status(404).json({ error: "Social account not found" });
-      }
+        // Try multiple lookup strategies
+        let foundAccount = null;
 
-      // Check if user owns the account or has organization access
-      const hasAccess =
-        account.userId === userId ||
-        (req.user?.organizationId === account.organizationId &&
-          req.user?.role === "org_owner");
+        // Try with ObjectId first
+        try {
+          // console.log(`[DEBUG] Trying with MongoDB ObjectId`);
+          foundAccount = await collection.findOne({
+            _id: new ObjectId(accountId),
+          });
+          // console.log(
+          //   `[DEBUG] ObjectId lookup result:`,
+          //   foundAccount ? "Found" : "Not found"
+          // );
+        } catch (objIdError: any) {
+          console.log(`[DEBUG] Error creating ObjectId:`, objIdError.message);
+          // Continue to other lookup methods
+        }
 
-      if (!hasAccess) {
-        return res.status(403).json({
-          error: "Access denied",
-          message: "You do not have permission to disconnect this account",
+        // Try with string _id (in case it's stored as string) - this is what worked!
+        if (!foundAccount) {
+          // console.log(`[DEBUG] Trying with _id as string`);
+          foundAccount = await collection.findOne({ _id: accountId as any });
+          // console.log(
+          //   `[DEBUG] String _id lookup result:`,
+          //   foundAccount ? "Found" : "Not found"
+          // );
+        }
+
+        if (!foundAccount) {
+          // console.log(`[DEBUG] All lookup attempts failed, account not found`);
+          return res.status(404).json({ error: "Social account not found" });
+        }
+
+        // console.log(`[DEBUG] Found account:`, foundAccount._id.toString());
+
+        // Check if user owns the account or has organization access
+        const hasAccess =
+          foundAccount.userId === userId ||
+          (req.user?.organizationId === foundAccount.organizationId &&
+            req.user?.role === "org_owner");
+
+        if (!hasAccess) {
+          return res.status(403).json({
+            error: "Access denied",
+            message: "You do not have permission to disconnect this account",
+          });
+        }
+
+        // Delete the account using the found MongoDB ObjectId
+        // console.log(
+        //   `[DEBUG] Deleting account with ObjectId: ${foundAccount._id}`
+        // );
+        const result = await collection.deleteOne({ _id: foundAccount._id });
+
+        if (result.deletedCount === 0) {
+          // console.log(
+          //   `[DEBUG] Failed to delete account with ID: ${foundAccount._id}`
+          // );
+          return res
+            .status(500)
+            .json({ error: "Failed to disconnect account" });
+        }
+
+        // console.log(
+        //   `[DEBUG] Successfully deleted account with ID: ${foundAccount._id}`
+        // );
+        return res.json({
+          message: "Social account disconnected successfully",
+        });
+      } catch (dbError) {
+        console.error(`[DEBUG] Database error:`, dbError);
+        return res.status(500).json({
+          error: "Failed to disconnect account",
+          message: dbError instanceof Error ? dbError.message : String(dbError),
         });
       }
-
-      // Delete the account
-      await this.socialAccountService.delete(accountId);
-
-      res.json({ message: "Social account disconnected successfully" });
     } catch (error) {
       console.error("Error disconnecting social account:", error);
       res.status(500).json({
@@ -428,6 +492,8 @@ export class SocialAccountController {
         return res.status(404).json({ error: "Social account not found" });
       }
 
+      console.log({ account });
+
       // Update the account with the new team ID
       await this.socialAccountService.update(accountId, {
         teamId,
@@ -444,12 +510,49 @@ export class SocialAccountController {
     }
   }
 
+  // // Try multiple lookup strategies
+  // let foundAccount = null;
+
+  // // Try with ObjectId first
+  // try {
+  //   console.log(`[DEBUG] Trying with MongoDB ObjectId`);
+  //   foundAccount = await collection.findOne({
+  //     _id: new ObjectId(accountId),
+  //   });
+  //   console.log(
+  //     `[DEBUG] ObjectId lookup result:`,
+  //     foundAccount ? "Found" : "Not found"
+  //   );
+  // } catch (objIdError: any) {
+  //   console.log(`[DEBUG] Error creating ObjectId:`, objIdError.message);
+  //   // Continue to other lookup methods
+  // }
+
+  // // Try with string _id (in case it's stored as string) - this is what worked!
+  // if (!foundAccount) {
+  //   console.log(`[DEBUG] Trying with _id as string`);
+  //   foundAccount = await collection.findOne({ _id: accountId as any });
+  //   console.log(
+  //     `[DEBUG] String _id lookup result:`,
+  //     foundAccount ? "Found" : "Not found"
+  //   );
+  // }
+
+  // if (!foundAccount) {
+  //   console.log(`[DEBUG] All lookup attempts failed, account not found`);
+  //   return res.status(404).json({ error: "Social account not found" });
+  // }
+
+  // console.log(`[DEBUG] Found account:`, foundAccount._id.toString());
+
   async handleLinkedInCallback(req: Request, res: Response) {
     try {
       if (req.query.error) {
         console.error("LinkedIn OAuth error:", req.query);
         return res.redirect(
-          `${process.env.FRONTEND_URL}/account-setup?error=${req.query.error as any}`
+          `${process.env.FRONTEND_URL}/account-setup?error=${
+            req.query.error as any
+          }`
         );
       }
 

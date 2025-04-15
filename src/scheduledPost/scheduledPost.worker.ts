@@ -3,6 +3,7 @@ import { TwitterService } from "../platforms/twitter/twitter.service";
 import { LinkedInService } from "../platforms/linkedin/linkedin.service";
 import { ThreadsService } from "../platforms/threads/threads.service";
 import { ContentItem } from "../types";
+import mongoose from "mongoose";
 
 export class ScheduledPostWorker {
   static async processScheduledPosts() {
@@ -65,6 +66,7 @@ export class ScheduledPostWorker {
                       socialPost: {
                         platform: "twitter",
                         scheduledTime: post.scheduledFor,
+                        accountId: platform.accountId,
                       },
                     },
                     status: "pending",
@@ -93,12 +95,14 @@ export class ScheduledPostWorker {
                   );
                   break;
                 case "threads":
-                  console.log(`Attempting to post to Threads with account ${account._id.toString()}`);
-                  
+                  console.log(
+                    `Attempting to post to Threads with account ${account._id.toString()}`
+                  );
+
                   try {
                     // We'll skip the explicit token check here since postContent will handle it internally
                     // This prevents redundant API calls and reduces the chance of timeouts
-                    
+
                     // Post the content directly - token refresh will happen inside postContent if needed
                     postResult = await threadsService.postContent(
                       account._id.toString(),
@@ -111,17 +115,22 @@ export class ScheduledPostWorker {
                   } catch (tokenError: any) {
                     // If token is expired, mark the account as needing reauthorization
                     if (tokenError.code === "TOKEN_EXPIRED") {
-                      await socialAccountRepository.update(account._id.toString(), {
-                        status: "expired",
-                        metadata: {
-                          ...account.metadata,
-                          requiresReauth: true,
-                          lastError: tokenError.message,
-                          lastErrorTime: new Date(),
-                        },
-                        updatedAt: new Date(),
-                      });
-                      throw new Error(`Threads account token has expired and requires reconnection: ${tokenError.message}`);
+                      await socialAccountRepository.update(
+                        account._id.toString(),
+                        {
+                          status: "expired",
+                          metadata: {
+                            ...account.metadata,
+                            requiresReauth: true,
+                            lastError: tokenError.message,
+                            lastErrorTime: new Date(),
+                          },
+                          updatedAt: new Date(),
+                        }
+                      );
+                      throw new Error(
+                        `Threads account token has expired and requires reconnection: ${tokenError.message}`
+                      );
                     }
                     throw tokenError;
                   }
@@ -170,14 +179,18 @@ export class ScheduledPostWorker {
                 content: post.content,
                 mediaUrls: post.mediaUrls ?? [],
                 platform: account.platform,
-                socialAccountId: account._id.toString(),
+                socialAccountId: account._id,
                 postId: postId,
                 postUrl: postUrl,
                 publishedDate: new Date(),
                 status: "published",
                 userId: post.createdBy,
-                teamId: post.teamId,
-                organizationId: post.organizationId,
+                teamId: post.teamId
+                  ? new mongoose.Types.ObjectId(post.teamId)
+                  : undefined,
+                organizationId: post.organizationId
+                  ? new mongoose.Types.ObjectId(post.organizationId)
+                  : undefined,
                 scheduledPostId: post._id!.toString(),
                 createdAt: new Date(),
                 updatedAt: new Date(),

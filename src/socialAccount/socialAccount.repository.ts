@@ -50,8 +50,22 @@ export class SocialAccountRepository extends MongoDBRepository<SocialAccount> {
   async create(data: Omit<SocialAccount, "_id">): Promise<SocialAccount> {
     const now = new Date();
 
+    // Convert organizationId to ObjectId if it's a string, or leave as undefined
+    let organizationId: ObjectId | undefined = undefined;
+    if (data.organizationId) {
+      if (data.organizationId instanceof ObjectId) {
+        organizationId = data.organizationId;
+      } else if (typeof data.organizationId === 'string') {
+        const objId = toObjectId(data.organizationId);
+        if (objId) {
+          organizationId = objId;
+        }
+      }
+    }
+
     const mongoData = {
       ...data,
+      organizationId,
       tokenExpiry: data.tokenExpiry || null,
       lastRefreshed: data.lastRefreshed || now,
       metadata: {

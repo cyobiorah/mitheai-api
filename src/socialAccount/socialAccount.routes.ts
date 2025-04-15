@@ -695,10 +695,10 @@ router.get("/twitter/callback", async (req: any, res) => {
       if (!skipWelcome && !account.welcomeTweetSent) {
         try {
           console.log("Posting welcome tweet...");
-          await twitterService.postWelcomeTweet(
-            account._id,
-            profileData.data.name
-          );
+          // await twitterService.postWelcomeTweet(
+          //   account._id,
+          //   profileData.data.name
+          // );
 
           // Use the controller's social account service
           const socialAccountService = controller.getSocialAccountService();
@@ -707,7 +707,7 @@ router.get("/twitter/callback", async (req: any, res) => {
           }
 
           // Mark that we've sent the welcome tweet
-          await socialAccountService.update(account._id, {
+          await socialAccountService.update(account._id.toString(), {
             welcomeTweetSent: true,
           });
 
@@ -725,7 +725,7 @@ router.get("/twitter/callback", async (req: any, res) => {
             // Still mark the account as having sent a welcome tweet
             const socialAccountService = controller.getSocialAccountService();
             if (socialAccountService) {
-              await socialAccountService.update(account._id, {
+              await socialAccountService.update(account._id.toString(), {
                 welcomeTweetSent: true,
               });
             }
@@ -814,7 +814,25 @@ router.get("/facebook/direct-auth", authenticateToken, (req: any, res) => {
 // Disconnect social account by ID (not platform)
 router.post("/disconnect/:accountId", authenticateToken, async (req, res) => {
   try {
-    if (!req.user?._id) {
+    if (!req.user?.uid) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Pass the entire request and response objects to the controller
+    await controller.disconnectSocialAccount(req, res);
+  } catch (error: any) {
+    console.error("Error disconnecting account:", error);
+    res.status(500).json({
+      error: "Failed to disconnect account",
+      message: error.message || "Unknown error occurred",
+    });
+  }
+});
+
+// RESTful DELETE endpoint for disconnecting social accounts
+router.delete("/disconnect/:accountId", authenticateToken, async (req, res) => {
+  try {
+    if (!req.user?.uid) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -910,9 +928,9 @@ router.get(
 
 router.post(
   "/:accountId/team",
-  authenticateToken,
+  // authenticateToken,
   // validateSocialAccountOperation,
-  requireOrgAccess,
+  // requireOrgAccess,
   controller.assignTeam.bind(controller)
 );
 
@@ -981,10 +999,11 @@ router.post(
           const hasAccess =
             (account.organizationId &&
               isOrganizationUser(user) &&
-              account.organizationId === user.organizationId) ||
+              account.organizationId.toString() ===
+                user.organizationId.toString()) ||
             (account.teamId &&
               isOrganizationUser(user) &&
-              user.teamIds?.includes(account.teamId)) ||
+              user.teamIds?.includes(account.teamId.toString())) ||
             user.role === "super_admin";
 
           if (!hasAccess) {

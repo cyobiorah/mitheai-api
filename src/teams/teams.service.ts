@@ -61,12 +61,34 @@ export class TeamService {
     teamData: Omit<Team, "id" | "createdAt" | "updatedAt">
   ): Promise<Team> {
     await this.ensureInitialized();
+
+    // Ensure memberIds is initialized and contains at least one member (the creator)
+    if (!teamData.memberIds || teamData.memberIds.length === 0) {
+      throw new Error("Team must have at least one member (the creator)");
+    }
+
     // Generate a unique ID for the team
     const newTeam = await this.teamRepository.create({
       ...teamData,
       id: this.generateTeamId(),
-      memberIds: teamData.memberIds || [],
+      memberIds: teamData.memberIds,
     } as Team);
+
+    // Update all members' teamIds arrays
+    const updatePromises = teamData.memberIds.map(async (userId) => {
+      const user = await this.userRepository.findById(userId);
+      if (user) {
+        // Add the new team ID to the user's teamIds array if it's not already there
+        const teamIds = user.teamIds || [];
+        if (!teamIds.includes(newTeam.id)) {
+          teamIds.push(newTeam.id);
+          await this.userRepository.update(userId, { teamIds });
+        }
+      }
+    });
+
+    // Wait for all user updates to complete
+    await Promise.all(updatePromises);
 
     return newTeam;
   }
@@ -83,22 +105,19 @@ export class TeamService {
 
   async addMember(teamId: string, userId: string): Promise<Team | null> {
     await this.ensureInitialized();
-    // Check if user exists
-    const user = await this.userRepository.findById(userId);
-    if (!user) {
-      throw new Error("User not found");
-    }
 
-    // Add user to team
+    // Add member to team
     const updatedTeam = await this.teamRepository.addMember(teamId, userId);
-    if (!updatedTeam) {
-      throw new Error("Failed to add user to team");
-    }
+    if (!updatedTeam) return null;
 
-    // Update user's teamIds if needed
-    if (!user.teamIds?.includes(teamId)) {
-      const teamIds = user.teamIds ? [...user.teamIds, teamId] : [teamId];
-      await this.userRepository.update(userId, { teamIds });
+    // Update user's teamIds
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      const teamIds = user.teamIds || [];
+      if (!teamIds.includes(teamId)) {
+        teamIds.push(teamId);
+        await this.userRepository.update(userId, { teamIds });
+      }
     }
 
     return updatedTeam;

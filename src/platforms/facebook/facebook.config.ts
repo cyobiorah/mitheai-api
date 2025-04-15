@@ -40,7 +40,7 @@ if (!process.env.FACEBOOK_CLIENT_SECRET) {
 }
 
 // Configure callback URL based on environment
-const callbackUrl = process.env.API_URL;
+const callbackUrl = `${process.env.API_URL}/api/social-accounts/facebook/callback`;
 
 passport.serializeUser((user: any, done) => {
   done(null, user);

@@ -156,9 +156,9 @@ app.use("/api/auth/register", authLimiter); // More restrictive for registration
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  console.log("[DEBUG] Health check endpoint hit");
-  console.log("[DEBUG] Request headers:", req.headers);
-  console.log("[DEBUG] Request method:", req.method);
+  // console.log("[DEBUG] Health check endpoint hit");
+  // console.log("[DEBUG] Request headers:", req.headers);
+  // console.log("[DEBUG] Request method:", req.method);
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
@@ -169,7 +169,7 @@ app.get("/health", (req, res) => {
 
 // Test endpoint at app level
 app.get("/test", (req, res) => {
-  console.log("[DEBUG] App-level test endpoint hit");
+  // console.log("[DEBUG] App-level test endpoint hit");
   res.json({ message: "App is working" });
 });
 
@@ -203,7 +203,7 @@ function listEndpoints(prefix: string, router: any) {
   const routes: any[] = [];
 
   if (!router?.stack) {
-    console.log(`[DEBUG] No routes found for prefix: ${prefix}`);
+    // console.log(`[DEBUG] No routes found for prefix: ${prefix}`);
     return routes;
   }
 

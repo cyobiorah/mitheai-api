@@ -15,6 +15,7 @@ export class ScheduledPostController {
         teamId,
         organizationId,
         mediaType,
+        timezone,
       } = req.body;
       const userId = (req as any).user.uid;
 
@@ -47,6 +48,7 @@ export class ScheduledPostController {
         createdAt: new Date(),
         updatedAt: new Date(),
         mediaType,
+        timezone,
       };
 
       const createdPost = await scheduledPostRepository.create(

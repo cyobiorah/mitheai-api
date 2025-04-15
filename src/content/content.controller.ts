@@ -192,10 +192,10 @@ Remember to:
       }
     }
 
-    console.log("[DEBUG] Calling OpenAI with prompts:", {
-      systemPrompt,
-      userPrompt,
-    });
+    // console.log("[DEBUG] Calling OpenAI with prompts:", {
+    //   systemPrompt,
+    //   userPrompt,
+    // });
     const completion = await aiService.createCompletion({
       messages: [
         {
@@ -209,7 +209,7 @@ Remember to:
       ],
     });
 
-    console.log("[DEBUG] OpenAI response:", completion);
+    // console.log("[DEBUG] OpenAI response:", completion);
 
     // Extract hashtags if they exist
     const hashtags = completion.content.match(/#[a-zA-Z0-9_]+/g) || [];
@@ -769,7 +769,7 @@ export const listTeamContent = async (req: Request, res: Response) => {
     const { teamId } = req.params;
     const user = req.user as User;
 
-    console.log(`[DEBUG] Listing team content for teamId: ${teamId}`);
+    // console.log(`[DEBUG] Listing team content for teamId: ${teamId}`);
 
     if (!user) {
       return res.status(401).json({
@@ -787,23 +787,23 @@ export const listTeamContent = async (req: Request, res: Response) => {
     const db = await getDb();
     const contentCollection = db.collection("content");
 
-    console.log(
-      `[DEBUG] Executing MongoDB query: find({ teamId: "${teamId}" })`
-    );
+    // console.log(
+    //   `[DEBUG] Executing MongoDB query: find({ teamId: "${teamId}" })`
+    // );
 
     const snapshot = await contentCollection
       .find({ teamId: teamId })
       .sort({ createdAt: -1 })
       .toArray();
 
-    console.log(`[DEBUG] Query returned ${snapshot.length} documents`);
+    // console.log(`[DEBUG] Query returned ${snapshot.length} documents`);
 
     // Map the documents and use _id instead of uid
     const content = snapshot.map((doc: any) => {
       // Check if _id exists and is valid
-      if (!doc._id) {
-        console.log(`[WARNING] Document without _id found:`, doc);
-      }
+      // if (!doc._id) {
+      //   console.log(`[WARNING] Document without _id found:`, doc);
+      // }
 
       return {
         ...doc,

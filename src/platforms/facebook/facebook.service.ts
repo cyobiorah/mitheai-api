@@ -73,12 +73,15 @@ export class FacebookService {
         );
 
         // Update the tokens in the existing account
-        await this.socialAccountRepository.update(existingAccount._id, {
-          accessToken: accessToken,
-          refreshToken: refreshToken ?? "",
-          lastRefreshed: new Date(),
-          updatedAt: new Date(),
-        });
+        await this.socialAccountRepository.update(
+          existingAccount._id.toString(),
+          {
+            accessToken: accessToken,
+            refreshToken: refreshToken ?? "",
+            lastRefreshed: new Date(),
+            updatedAt: new Date(),
+          }
+        );
 
         console.log(
           `Updated tokens for existing account ${existingAccount._id}`
@@ -103,7 +106,7 @@ export class FacebookService {
 
       // Create new social account if no existing connection found
       const socialAccount: SocialAccount = {
-        _id: new mongoose.Types.ObjectId().toString(),
+        _id: new mongoose.Types.ObjectId(),
         platform: "facebook",
         platformAccountId: profile.id,
         accountType: "personal",
@@ -135,11 +138,13 @@ export class FacebookService {
 
       // Only add optional fields if they have values
       if (organizationId) {
-        socialAccount.organizationId = organizationId;
+        socialAccount.organizationId = new mongoose.Types.ObjectId(
+          organizationId
+        );
       }
 
       if (teamId) {
-        socialAccount.teamId = teamId;
+        socialAccount.teamId = new mongoose.Types.ObjectId(teamId);
       }
 
       // Create the account in MongoDB

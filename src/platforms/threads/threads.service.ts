@@ -2,6 +2,7 @@ import axios from "axios";
 import { SocialAccount } from "../../socialAccount/socialAccount.model";
 import { RepositoryFactory } from "../../repositories/repository.factory";
 import { SocialAccountRepository } from "../../socialAccount/socialAccount.repository";
+import mongoose from "mongoose";
 
 export class ThreadsService {
   private socialAccountRepository!: SocialAccountRepository;
@@ -284,18 +285,21 @@ export class ThreadsService {
         console.log(`Updating existing Threads account for user ${userId}`);
 
         // Update the tokens
-        await this.socialAccountRepository.update(existingAccount._id, {
-          accessToken,
-          refreshToken: refreshToken ?? undefined,
-          status: "active",
-          lastRefreshed: now,
-          metadata: {
-            ...existingAccount.metadata,
-            tokenExpiresAt,
-            lastChecked: now,
-          },
-          updatedAt: now,
-        });
+        await this.socialAccountRepository.update(
+          existingAccount._id.toString(),
+          {
+            accessToken,
+            refreshToken: refreshToken ?? undefined,
+            status: "active",
+            lastRefreshed: now,
+            metadata: {
+              ...existingAccount.metadata,
+              tokenExpiresAt,
+              lastChecked: now,
+            },
+            updatedAt: now,
+          }
+        );
 
         return {
           ...existingAccount,
@@ -309,8 +313,10 @@ export class ThreadsService {
 
       const newAccount = await this.socialAccountRepository.create({
         userId,
-        organizationId: organizationId ?? undefined,
-        teamId: teamId ?? undefined,
+        organizationId: organizationId
+          ? new mongoose.Types.ObjectId(organizationId)
+          : undefined,
+        teamId: teamId ? new mongoose.Types.ObjectId(teamId) : undefined,
         platform: "threads",
         platformAccountId: profile.id,
         accountName: profile.username || "Threads User",

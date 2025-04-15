@@ -219,12 +219,15 @@ export class LinkedInService {
         );
 
         // Update the tokens in the existing account
-        await this.socialAccountRepository.update(existingAccount._id, {
-          accessToken: accessToken,
-          refreshToken: refreshToken ?? "",
-          lastRefreshed: new Date(),
-          updatedAt: new Date(),
-        });
+        await this.socialAccountRepository.update(
+          existingAccount._id.toString(),
+          {
+            accessToken: accessToken,
+            refreshToken: refreshToken ?? "",
+            lastRefreshed: new Date(),
+            updatedAt: new Date(),
+          }
+        );
 
         console.log(
           `Updated tokens for existing account ${existingAccount._id}`
@@ -285,11 +288,13 @@ export class LinkedInService {
 
       // Only add optional fields if they have values
       if (organizationId) {
-        socialAccount.organizationId = organizationId;
+        socialAccount.organizationId = new mongoose.Types.ObjectId(
+          organizationId
+        );
       }
 
       if (teamId) {
-        socialAccount.teamId = teamId;
+        socialAccount.teamId = new mongoose.Types.ObjectId(teamId);
       }
 
       // Create the account in MongoDB
@@ -425,9 +430,11 @@ export class LinkedInService {
 
         const socialPost: SocialPost = {
           userId: account.userId,
-          teamId: account.teamId,
-          organizationId: account.organizationId,
-          socialAccountId: accountId,
+          teamId: account.teamId ? account.teamId : undefined,
+          organizationId: account.organizationId
+            ? account.organizationId
+            : undefined,
+          socialAccountId: new mongoose.Types.ObjectId(accountId),
           platform: "linkedin",
           content: message,
           mediaType: "TEXT",

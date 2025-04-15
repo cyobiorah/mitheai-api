@@ -130,7 +130,7 @@ const strategy = new OAuth2Strategy(
           try {
             console.log("Attempting to post welcome tweet...");
             await twitterService.postWelcomeTweet(
-              account._id,
+              account._id.toString(),
               userData.data.name
             );
 

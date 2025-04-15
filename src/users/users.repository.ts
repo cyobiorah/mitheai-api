@@ -1,6 +1,7 @@
 import { Db } from "mongodb";
 import { MongoDBRepository } from "../repositories/mongodb.repository";
 import { User } from "../appTypes";
+import { toObjectId } from "../shared/objectId";
 
 export class UserRepository extends MongoDBRepository<User> {
   constructor(db: Db) {
@@ -14,6 +15,16 @@ export class UserRepository extends MongoDBRepository<User> {
 
   async findByOrganization(organizationId: string): Promise<User[]> {
     return await this.find({ organizationId });
+  }
+
+  async findByTeam(teamId: string): Promise<User[]> {
+    const objectId = toObjectId(teamId);
+    const query = {
+      teamIds: {
+        $in: [teamId, ...(objectId ? [objectId] : [])]
+      }
+    };
+    return await this.find(query);
   }
 
   async findById(id: string): Promise<User | null> {

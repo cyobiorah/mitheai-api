@@ -129,7 +129,7 @@ export class TwitterService {
 
       // Create new social account if no existing connection found
       const socialAccount: SocialAccount = {
-        _id: new mongoose.Types.ObjectId().toString(),
+        _id: new mongoose.Types.ObjectId(),
         platform: "twitter",
         platformAccountId: profile.id,
         accountType: "personal",
@@ -159,11 +159,13 @@ export class TwitterService {
 
       // Only add optional fields if they have values
       if (organizationId) {
-        socialAccount.organizationId = organizationId;
+        socialAccount.organizationId = new mongoose.Types.ObjectId(
+          organizationId
+        );
       }
 
       if (teamId) {
-        socialAccount.teamId = teamId;
+        socialAccount.teamId = new mongoose.Types.ObjectId(teamId);
       }
 
       // Create with transaction to ensure atomicity
@@ -462,7 +464,7 @@ export class TwitterService {
     v1Status: { success: boolean; details: any; error?: string };
     v2Status: { success: boolean; details: any; error?: string };
   }> {
-    console.log(`[DEBUG] Testing Twitter API for account ${accountId}`);
+    // console.log(`[DEBUG] Testing Twitter API for account ${accountId}`);
 
     const account = await this.getValidAccount(accountId);
     const testMessage = `Testing MitheAI connection... ${new Date().toISOString()}`;
@@ -475,7 +477,7 @@ export class TwitterService {
 
     // Test V2 API
     try {
-      console.log("[DEBUG] Testing Twitter V2 API...");
+      // console.log("[DEBUG] Testing Twitter V2 API...");
       const client = new Client(new auth.OAuth2Bearer(account.accessToken));
 
       const v2Response = await client.tweets.createTweet({
@@ -484,7 +486,7 @@ export class TwitterService {
 
       result.v2Status.success = true;
       result.v2Status.details = v2Response.data || {};
-      console.log("[DEBUG] V2 API test successful:", v2Response.data);
+      // console.log("[DEBUG] V2 API test successful:", v2Response.data);
     } catch (error: any) {
       result.v2Status.success = false;
       result.v2Status.error = error.message || "Unknown error";
@@ -498,7 +500,7 @@ export class TwitterService {
 
     // Test V1 API
     try {
-      console.log("[DEBUG] Testing Twitter V1.1 API...");
+      // console.log("[DEBUG] Testing Twitter V1.1 API...");
 
       // For Twitter OAuth 1.0a, we need consumer keys and tokens
       if (
@@ -524,7 +526,7 @@ export class TwitterService {
 
       result.v1Status.success = true;
       result.v1Status.details = v1Response.data || {};
-      console.log("[DEBUG] V1.1 API test successful:", v1Response.data);
+      // console.log("[DEBUG] V1.1 API test successful:", v1Response.data);
     } catch (error: any) {
       result.v1Status.success = false;
       result.v1Status.error = error.message || "Unknown error";
@@ -537,15 +539,15 @@ export class TwitterService {
     }
 
     // Log overall result
-    console.log("[DEBUG] Twitter API test results:", {
-      v1Working: result.v1Status.success,
-      v2Working: result.v2Status.success,
-      recommendedAPI: result.v2Status.success
-        ? "v2"
-        : result.v1Status.success
-        ? "v1"
-        : "none",
-    });
+    // console.log("[DEBUG] Twitter API test results:", {
+    //   v1Working: result.v1Status.success,
+    //   v2Working: result.v2Status.success,
+    //   recommendedAPI: result.v2Status.success
+    //     ? "v2"
+    //     : result.v1Status.success
+    //     ? "v1"
+    //     : "none",
+    // });
 
     return result;
   }
@@ -922,18 +924,33 @@ export class TwitterService {
       throw new Error("Invalid platform for Twitter post");
     }
 
-    // Get the social account for this user
-    const account = await this.socialAccountRepository.findOne({
-      userId: content.createdBy,
-      platform: "twitter",
-      status: "active",
-    });
+    let account;
 
-    if (!account) {
-      throw new Error("No active Twitter account found for user");
+    // First try to find by accountId if it's in the metadata
+    if (content.metadata.socialPost.accountId) {
+      account = await this.socialAccountRepository.findById(
+        content.metadata.socialPost.accountId
+      );
     }
 
-    const accountId = account._id;
+    // if (content.id) {
+    //   account = await this.socialAccountRepository.findById(content.id);
+    // }
+
+    // If no account found by ID, try to find by userId
+    if (!account) {
+      account = await this.socialAccountRepository.findOne({
+        userId: content.createdBy,
+        platform: "twitter",
+        status: "active",
+      });
+    }
+
+    if (!account) {
+      throw new Error("No active Twitter account found");
+    }
+
+    const accountId = account._id.toString();
 
     try {
       // Reuse the postTweet method which already handles token refresh
