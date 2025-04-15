@@ -55,7 +55,7 @@ export class SocialAccountRepository extends MongoDBRepository<SocialAccount> {
     if (data.organizationId) {
       if (data.organizationId instanceof ObjectId) {
         organizationId = data.organizationId;
-      } else if (typeof data.organizationId === 'string') {
+      } else if (typeof data.organizationId === "string") {
         const objId = toObjectId(data.organizationId);
         if (objId) {
           organizationId = objId;
@@ -175,5 +175,21 @@ export class SocialAccountRepository extends MongoDBRepository<SocialAccount> {
       _id: objectId,
     });
     return result.deletedCount === 1;
+  }
+
+  // src/socialAccount/socialAccount.repository.ts
+  async findAccessibleAccounts(
+    userId: string | undefined,
+    organizationId?: string,
+    teamId?: string
+  ) {
+    const query: any = {
+      $or: [
+        ...(userId ? [{ userId }] : []),
+        ...(organizationId ? [{ organizationId }] : []),
+        ...(teamId ? [{ teamId }] : []),
+      ],
+    };
+    return await this.find(query);
   }
 }

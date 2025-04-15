@@ -209,4 +209,30 @@ export class SocialAccountService {
       organizationId: newOwnerData.organizationId,
     });
   }
+
+  // async findAccessibleAccounts(
+  //   userId: string,
+  //   organizationId?: string,
+  //   teamId?: string
+  // ) {
+  //   return await this.socialAccountRepository.findAccessibleAccounts(
+  //     userId,
+  //     organizationId,
+  //     teamId
+  //   );
+  // }
+
+  async findAccessibleAccounts(
+    organizationId: string
+  ): Promise<SocialAccount[]> {
+    return await this.socialAccountRepository.find({
+      organizationId: { $in: [organizationId, toObjectId(organizationId)] },
+    });
+  }
 }
+
+// async findByOrganization(organizationId: string): Promise<User[]> {
+//   return await this.find({
+//   organizationId: { $in: [organizationId, toObjectId(organizationId)] },
+//   });
+//   }

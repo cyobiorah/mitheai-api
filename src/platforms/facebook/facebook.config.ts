@@ -59,7 +59,7 @@ const strategy = new FacebookStrategy(
     profileFields: ["id", "displayName", "name", "email", "photos"],
     scope: ["email", "public_profile"],
     passReqToCallback: true,
-    enableProof: true, // Keep this for security
+    enableProof: true,
   },
   async (
     req: any,
@@ -69,84 +69,57 @@ const strategy = new FacebookStrategy(
     done: any
   ) => {
     try {
-      console.log("Facebook OAuth callback received:", {
-        accessToken: accessToken.substring(0, 10) + "...",
-        refreshToken: refreshToken
-          ? refreshToken.substring(0, 10) + "..."
-          : "none",
-        profile: {
-          id: profile.id,
-          displayName: profile.displayName,
-          name: profile.name,
-          emails: profile.emails,
-        },
-      });
-
-      // Check for userId in session
+      // --- Extract user/session info ---
       let userId = req.session?.user?.uid;
       let organizationId = req.session?.user?.organizationId;
       let currentTeamId = req.session?.user?.currentTeamId;
 
-      // If no user ID in session, try to get from Redis using state ID
+      // If no userId in session, try to get from Redis using stateId
       if (!userId && req.session?.facebookStateId) {
         try {
-          // Import Redis service
           const redisService = require("../services/redis.service").default;
-
-          // Get state data from Redis
           const stateData = await redisService.get(
             `facebook:${req.session.facebookStateId}`
           );
-
           if (stateData) {
             userId = stateData.uid;
             organizationId = stateData.organizationId;
             currentTeamId = stateData.currentTeamId;
-
-            // Clean up Redis state
             await redisService.delete(
               `facebook:${req.session.facebookStateId}`
             );
           }
-        } catch (redisError) {
-          console.error("Error retrieving state from Redis:", redisError);
+        } catch (err) {
+          console.error("Error retrieving state from Redis:", err);
         }
       }
 
+      // --- STRONG VALIDATION: userId must be present ---
       if (!userId) {
         console.error(
           "No user ID found in session or Redis for Facebook callback"
         );
-        return done(new Error("No user ID found in session"));
+        return done(new Error("No user ID found in session"), null);
       }
 
+      // --- Proceed to create the social account ---
       try {
-        // Create/update the social account
         const account = await facebookService.createSocialAccount(
           profile,
           accessToken,
-          refreshToken ?? "", // Use empty string instead of undefined
+          refreshToken ?? "",
           userId,
           organizationId,
           currentTeamId
         );
-
-        // Return the account object to the callback
         return done(null, account);
       } catch (accountError: any) {
-        // Handle the case where the account is already connected to another user
         if (
           accountError.code === "ACCOUNT_ALREADY_LINKED" ||
           accountError.code === "account_already_connected"
         ) {
-          console.warn(
-            "Attempted to connect already connected account:",
-            accountError.message
-          );
           return done(accountError);
         }
-
-        // Handle other errors
         console.error("Error creating/updating social account:", accountError);
         return done(accountError);
       }
@@ -158,5 +131,4 @@ const strategy = new FacebookStrategy(
 );
 
 passport.use("facebook", strategy);
-
 export default passport;

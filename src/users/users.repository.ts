@@ -14,15 +14,17 @@ export class UserRepository extends MongoDBRepository<User> {
   }
 
   async findByOrganization(organizationId: string): Promise<User[]> {
-    return await this.find({ organizationId });
+    return await this.find({
+      organizationId: { $in: [organizationId, toObjectId(organizationId)] },
+    });
   }
 
   async findByTeam(teamId: string): Promise<User[]> {
     const objectId = toObjectId(teamId);
     const query = {
       teamIds: {
-        $in: [teamId, ...(objectId ? [objectId] : [])]
-      }
+        $in: [teamId, ...(objectId ? [objectId] : [])],
+      },
     };
     return await this.find(query);
   }
@@ -32,7 +34,7 @@ export class UserRepository extends MongoDBRepository<User> {
       // First try to find by uid (non-ObjectId field)
       let user = await this.findOne({ uid: id });
       if (user) return user;
-      
+
       // Then try to find by _id using the base repository method
       return await super.findById(id);
     } catch (error) {

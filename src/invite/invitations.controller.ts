@@ -53,7 +53,7 @@ export const createInvitation = async (req: Request, res: Response) => {
         lastName,
         role,
         organizationId,
-        teamIds: teamIds || [],
+        teamIds: teamIds ?? [],
       });
 
       console.log("Created invitation with ID:", invitation.id);

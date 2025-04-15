@@ -87,8 +87,7 @@ router.get("/", authenticateToken, async (req, res) => {
     if (!req.user?.uid) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const accounts = await controller.getSocialAccounts(req.user.uid);
-    res.json(accounts || []); // Ensure we always return an array
+    await controller.getSocialAccounts(req, res);
   } catch (error) {
     console.error("Error fetching social accounts:", error);
     res.status(500).json({ error: "Failed to fetch social accounts" });

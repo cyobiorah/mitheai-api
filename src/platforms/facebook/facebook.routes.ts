@@ -218,7 +218,9 @@ router.get(
         // Handle specific error for already linked account
         if (err.code === "ACCOUNT_ALREADY_LINKED") {
           return res.redirect(
-            `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
+            `${
+              process.env.FRONTEND_URL
+            }/account-setup?error=${encodeURIComponent(
               "This Facebook account is already connected to another user"
             )}`
           );
@@ -260,7 +262,9 @@ router.get(
       );
 
       // Redirect to the frontend with success
-      return res.redirect(`${process.env.FRONTEND_URL}/account-setup?success=true`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/account-setup?success=true`
+      );
     } catch (error) {
       console.error("Error in Facebook callback redirect:", error);
       return res.redirect(

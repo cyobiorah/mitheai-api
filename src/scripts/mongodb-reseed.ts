@@ -126,6 +126,11 @@ async function reseedMongoDB() {
       "teams",
       "socialAccounts",
       "invitations",
+      "content",
+      "scheduledPosts",
+      "sessions",
+      "socialPosts",
+      
     ];
     for (const collection of collections) {
       try {

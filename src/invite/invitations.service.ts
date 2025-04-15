@@ -7,6 +7,7 @@ export class InvitationService {
   private invitationRepository: any;
   private userRepository: any;
   private organizationRepository: any;
+  private teamRepository: any;
 
   constructor() {
     this.initialize();
@@ -18,6 +19,7 @@ export class InvitationService {
     this.userRepository = await RepositoryFactory.createUserRepository();
     this.organizationRepository =
       await RepositoryFactory.createOrganizationRepository();
+    this.teamRepository = await RepositoryFactory.createTeamRepository();
   }
 
   async findById(id: string): Promise<Invitation | null> {
@@ -119,13 +121,33 @@ export class InvitationService {
 
     console.log("Found existing users:", existingUsers.length);
 
+    // 1. Fetch the organization's default team
+    const org = await this.organizationRepository.findById(
+      invitation.organizationId
+    );
+    let defaultTeamId = "";
+    if (org?.organizationSettings?.defaultTeamId) {
+      defaultTeamId = org.organizationSettings.defaultTeamId;
+    } else {
+      // fallback: fetch first team in the org if explicit default is missing
+      const teams = (await this.organizationRepository.getTeams)
+        ? await this.organizationRepository.getTeams(invitation.organizationId)
+        : [];
+      if (teams?.length > 0) {
+        defaultTeamId = teams[0]._id?.toString() ?? "";
+      }
+    }
+
+    // Prepare teamIds for the user
+    const userTeamIds = defaultTeamId ? [defaultTeamId] : [];
+
     let user;
 
-    if (existingUsers && existingUsers.length > 0) {
+    if (existingUsers?.length > 0) {
       // If we have multiple users with the same email, find the one with status "pending"
       // or take the first one if none have "pending" status
       const pendingUser =
-        existingUsers.find((u: any) => u.status === "pending") ||
+        existingUsers.find((u: any) => u.status === "pending") ??
         existingUsers[0];
 
       console.log("Selected user to update:", pendingUser.id);
@@ -134,6 +156,7 @@ export class InvitationService {
       user = await this.userRepository.update(pendingUser.id, {
         status: "active",
         password: hashedPassword,
+        teamIds: userTeamIds,
         updatedAt: new Date(),
       });
 
@@ -156,7 +179,7 @@ export class InvitationService {
         lastName: invitation.lastName,
         role: invitation.role,
         organizationId: invitation.organizationId,
-        teamIds: invitation.teamIds,
+        teamIds: userTeamIds,
         userType: "organization",
         status: "active",
         settings: {
@@ -168,6 +191,28 @@ export class InvitationService {
       } as any);
 
       console.log("After create, user is:", user ? "created" : "null");
+    }
+
+    // 3. Add the user to the team's memberIds if not already present
+    if (defaultTeamId && user?._id) {
+      // You may need to adjust this if you have a dedicated TeamRepository
+      const team = (await this.organizationRepository.getTeamById)
+        ? await this.organizationRepository.getTeamById(defaultTeamId)
+        : null;
+      if (team && !team.memberIds.includes(user._id.toString())) {
+        team.memberIds = team.memberIds ?? [];
+        team.memberIds.push(user._id.toString());
+        if (this.organizationRepository.updateTeam) {
+          await this.organizationRepository.updateTeam(defaultTeamId, {
+            memberIds: team.memberIds,
+          });
+        } else if (this.teamRepository?.update) {
+          await this.teamRepository.update(defaultTeamId, {
+            memberIds: team.memberIds,
+          });
+        }
+        // If you update teams directly via Mongo, do so here.
+      }
     }
 
     // Mark invitation as accepted
@@ -199,7 +244,7 @@ export class InvitationService {
     return "inv_" + Math.random().toString(36).substr(2, 9);
   }
 
-  private generateUserId(): string {
-    return "user_" + Math.random().toString(36).substr(2, 9);
-  }
+  // private generateUserId(): string {
+  //   return "user_" + Math.random().toString(36).substr(2, 9);
+  // }
 }

@@ -93,6 +93,7 @@ export const inviteUser = async (req: Request, res: Response) => {
 
     // Generate invitation token
     const token = uuidv4();
+    const uid = uuidv4();
 
     // Create invitation
     const invitation = await invitationService.create({
@@ -110,6 +111,7 @@ export const inviteUser = async (req: Request, res: Response) => {
       firstName,
       lastName,
       role,
+      uid,
       userType: "organization",
       status: "pending",
       invitationToken: token,
@@ -123,7 +125,7 @@ export const inviteUser = async (req: Request, res: Response) => {
       organizationSettings: {
         defaultTeamId: "",
       },
-    } as Omit<OrganizationUser, "uid" | "createdAt" | "updatedAt">);
+    } as Omit<OrganizationUser, "createdAt" | "updatedAt">);
 
     // Send invitation email
     try {

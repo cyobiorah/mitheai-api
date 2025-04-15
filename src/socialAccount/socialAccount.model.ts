@@ -46,7 +46,7 @@
 import { ObjectId } from "mongodb";
 
 export interface SocialAccount {
-  _id: ObjectId; // Changed to ObjectId
+  _id: ObjectId;
   platform: "twitter" | "linkedin" | "instagram" | "facebook" | "threads";
   platformAccountId: string;
   accountType: "personal" | "business";
@@ -57,9 +57,9 @@ export interface SocialAccount {
   tokenExpiry: Date | null;
   lastRefreshed: Date;
   status: "active" | "expired" | "revoked" | "error";
-  organizationId?: ObjectId; // Changed to ObjectId if these are MongoDB IDs
-  teamId?: ObjectId; // Changed to ObjectId if these are MongoDB IDs
-  userId: string; // Keep as string if this is not a MongoDB ID
+  organizationId?: ObjectId;
+  teamId?: ObjectId;
+  userId: string;
   ownershipLevel: "user" | "team" | "organization";
   metadata: {
     email?: string;
@@ -82,6 +82,44 @@ export interface SocialAccount {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// export interface SocialAccount {
+//   _id: ObjectId; // Changed to ObjectId
+//   platform: "twitter" | "linkedin" | "instagram" | "facebook" | "threads";
+//   platformAccountId: string;
+//   accountType: "personal" | "business";
+//   accountName: string;
+//   accountId: string;
+//   accessToken: string;
+//   refreshToken: string;
+//   tokenExpiry: Date | null;
+//   lastRefreshed: Date;
+//   status: "active" | "expired" | "revoked" | "error";
+//   organizationId?: ObjectId; // Changed to ObjectId if these are MongoDB IDs
+//   teamId?: ObjectId; // Changed to ObjectId if these are MongoDB IDs
+//   userId: string; // Keep as string if this is not a MongoDB ID
+//   ownershipLevel: "user" | "team" | "organization";
+//   metadata: {
+//     email?: string;
+//     profileUrl?: string;
+//     followerCount?: number;
+//     followingCount?: number;
+//     lastChecked?: Date;
+//     tokenExpiresAt?: Date;
+//     profile?: any;
+//     lastError?: string;
+//     lastErrorTime?: Date;
+//     requiresReauth?: boolean;
+//   };
+//   permissions: {
+//     canPost?: boolean;
+//     canSchedule?: boolean;
+//     canAnalyze?: boolean;
+//   };
+//   welcomeTweetSent?: boolean;
+//   createdAt: Date;
+//   updatedAt: Date;
+// }
 
 // MongoDB unique compound index definition
 export const SOCIAL_ACCOUNT_INDEXES = [

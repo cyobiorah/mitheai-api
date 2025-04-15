@@ -103,13 +103,32 @@ export class SocialAccountController {
     }
   }
 
-  async getSocialAccounts(userId: string) {
+  // async getSocialAccounts(userId: string) {
+  //   try {
+  //     const accounts = await this.socialAccountService.findByUser(userId);
+  //     return accounts;
+  //   } catch (error) {
+  //     console.error("Error fetching social accounts:", error);
+  //     throw error;
+  //   }
+  // }
+
+  async getSocialAccounts(req: any, res: any) {
     try {
-      const accounts = await this.socialAccountService.findByUser(userId);
-      return accounts;
+      const { organizationId } = req.user;
+      if (!organizationId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Call repository with all possible ownership fields
+      const accounts = await this.socialAccountService.findAccessibleAccounts(
+        organizationId
+      );
+      console.log({ accounts });
+      res.json(accounts ?? []);
     } catch (error) {
       console.error("Error fetching social accounts:", error);
-      throw error;
+      res.status(500).json({ error: "Failed to fetch social accounts" });
     }
   }
 

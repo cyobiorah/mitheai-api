@@ -55,6 +55,11 @@ export class FacebookService {
     organizationId?: string,
     teamId?: string
   ): Promise<SocialAccount> {
+    // --- STRONG VALIDATION: userId must be present ---
+    if (!userId) {
+      console.error("Attempted to create SocialAccount with missing userId!");
+      throw new Error("Cannot create SocialAccount: userId is required.");
+    }
     try {
       console.log(
         `Checking for existing Facebook account for user ${userId} with Facebook ID ${profile.id}`
