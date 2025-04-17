@@ -2,7 +2,7 @@ import * as twitterService from "../../services/platforms/twitter.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 
-const rawCallbackUrl: string = process.env.TWITTER_CALLBACK_URL!;
+const rawCallbackUrl: string = process.env.TWITTER_CALLBACK_URL ?? "";
 
 if (!rawCallbackUrl) {
   throw new Error(
