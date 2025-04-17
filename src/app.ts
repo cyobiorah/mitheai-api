@@ -1,69 +1,34 @@
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
-import helmet from "helmet";
-import compression from "compression";
-import session from "express-session";
-import { validationResult } from "express-validator";
-import { config } from "dotenv";
-import { authenticateToken } from "./auth/auth.middleware";
-import passport from "./platforms/twitter/twitter.config";
-import { RedisStore } from "connect-redis";
-import Redis from "ioredis";
+import dotenv from "dotenv";
+import routes from "./routes";
+import { allowedOrigins } from "./utils";
 import rateLimit from "express-rate-limit";
-import { RedisStore as RateLimitRedisStore } from "rate-limit-redis";
+import RedisStore from "rate-limit-redis";
+import redisService, { redisClient } from "./utils/redisClient";
 
-import authRoutes from "./auth/auth.routes";
-import usersRouter from "./users/users.routes";
-import teamsRouter from "./teams/teams.routes";
-import invitationsRouter from "./invite/invitations.routes";
-import contentRouter from "./content/content.routes";
-import socialAccountRouter from "./socialAccount/socialAccount.routes";
-import socialPostRouter from "./socialPost/socialPost.routes";
-import scheduledPostRouter from "./scheduledPost/scheduledPost.routes";
-import manualCronRouter from "./shared/manualCron.router";
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
+    twitterOAuthState?: string;
+    user?: {
+      _id: string;
+      email: string;
+      organizationId: string;
+      currentTeamId: string;
+    };
+  }
+}
 
-config();
+dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3001",
-  "https://mitheai-app-git-kitchen-cyobiorahs-projects.vercel.app",
-  "https://mitheai-api-git-kitchen-cyobiorahs-projects.vercel.app",
-  "https://mitheai-app-git-dev-cyobiorahs-projects.vercel.app",
-  "https://mitheai-api-git-dev-cyobiorahs-projects.vercel.app",
-  "https://mitheai-app-git-staging-cyobiorahs-projects.vercel.app",
-  "https://mitheai-api-git-staging-cyobiorahs-projects.vercel.app",
-  // Add specific Vercel preview domains instead of wildcards
-  "https://mitheai-app.vercel.app",
-  "https://mitheai-api.vercel.app",
-  // Add production domains if different
-  "https://app.mitheai.com",
-  "https://api.mitheai.com",
-];
-
-// Middleware
-app.use(helmet());
 app.use(
   cors({
     origin: function (origin, callback) {
-      // For development/testing - allow requests with no origin (like mobile apps, curl, etc)
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      // Check if the origin is in our allowedOrigins list
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, origin); // Return the actual origin instead of true
-      }
-
-      // For Vercel preview deployments which have dynamic URLs
-      if (origin.includes("vercel.app")) {
-        return callback(null, origin); // Allow all vercel.app domains and return the specific origin
-      }
-
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, origin);
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -73,194 +38,28 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
-
-app.use(compression());
-app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const redisClient = new Redis(
-  process.env.REDIS_URL ?? "redis://localhost:6379"
-);
-
-// Configure session middleware
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET ?? "your-secret-key-change-this",
-    store: new RedisStore({ client: redisClient }),
-    resave: false,
-    saveUninitialized: false,
-    name: "mitheai.sid",
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    },
-  })
-);
-
-// Initialize passport
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Validation error handler
-app.use(
-  (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    next();
-  }
-);
-
-// Configure rate limiting
+// Rate limiting middleware
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: "Too many requests from this IP, please try again after 15 minutes",
-  store: new RateLimitRedisStore({
-    // @ts-ignore - Redis client types might not match exactly
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+  store: new RedisStore({
+    // @ts-ignore
     sendCommand: (...args: string[]) => redisClient.call(...args),
     prefix: "rate-limit:",
   }),
-  skip: (req: express.Request) => {
-    return process.env.NODE_ENV !== "production";
-  },
+  skip: (req: express.Request) => process.env.NODE_ENV !== "production",
 });
 
-// More restrictive limiter for authentication endpoints
-const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Limit each IP to 10 login/register attempts per hour
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: "Too many login attempts, please try again after an hour",
-  store: new RateLimitRedisStore({
-    // @ts-ignore - Redis client types might not match exactly
-    sendCommand: (...args: string[]) => redisClient.call(...args),
-    prefix: "auth-limit:",
-  }),
-  skip: (req: express.Request) => {
-    return process.env.NODE_ENV !== "production";
-  },
-});
-
-// Apply rate limiters to routes
-app.use("/api", apiLimiter); // Apply to all API routes
-app.use("/api/auth/login", authLimiter); // More restrictive for login
-app.use("/api/auth/register", authLimiter); // More restrictive for registration
+// API routes
+app.use("/api", apiLimiter, routes);
 
 // Health check endpoint
-app.get("/health", (req, res) => {
-  // console.log("[DEBUG] Health check endpoint hit");
-  // console.log("[DEBUG] Request headers:", req.headers);
-  // console.log("[DEBUG] Request method:", req.method);
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    headers: req.headers,
-    method: req.method,
-  });
-});
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-// Test endpoint at app level
-app.get("/test", (req, res) => {
-  // console.log("[DEBUG] App-level test endpoint hit");
-  res.json({ message: "App is working" });
-});
-
-// Test endpoint with explicit CORS
-app.options("/test-cors", cors());
-app.get("/test-cors", (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  res.json({
-    message: "CORS test successful",
-    timestamp: new Date().toISOString(),
-    headers: req.headers,
-  });
-});
-
-// Mount routes
-app.use("/api/auth", authRoutes);
-app.use("/api/users", authenticateToken, usersRouter);
-app.use("/api/teams", authenticateToken, teamsRouter);
-app.use("/api/invitations", invitationsRouter);
-app.use("/api/content", authenticateToken, contentRouter);
-app.use("/api/social-accounts", socialAccountRouter);
-app.use("/api/social-posts", socialPostRouter);
-app.use("/api/scheduled-posts", authenticateToken, scheduledPostRouter);
-app.use("/api/manual-cron", manualCronRouter);
-
-// Log all registered routes
-// console.log("\n[DEBUG] ====== All registered routes: ======");
-function listEndpoints(prefix: string, router: any) {
-  const routes: any[] = [];
-
-  if (!router?.stack) {
-    // console.log(`[DEBUG] No routes found for prefix: ${prefix}`);
-    return routes;
-  }
-
-  router.stack.forEach((middleware: any) => {
-    if (middleware.route) {
-      const path = prefix + middleware.route.path;
-      const methods = Object.keys(middleware.route.methods);
-      routes.push({
-        path,
-        methods: methods.join(","),
-      });
-    } else if (middleware.name === "router" && middleware.handle?.stack) {
-      try {
-        const childPrefix =
-          prefix +
-          (middleware.regexp.source === "^\\/?(?=\\/|$)"
-            ? ""
-            : middleware.regexp.source
-                .replace(/\\\//g, "/")
-                .replace(/\(\?:\\\/\)\?/g, "")
-                .replace(/\(\?=\\\/\|\$\)/g, ""));
-        routes.push(...listEndpoints(childPrefix, middleware.handle));
-      } catch (error) {
-        console.log(`[DEBUG] Error processing router middleware:`, error);
-      }
-    }
-  });
-
-  return routes;
-}
-
-// 404 handler
-app.use((req: express.Request, res: express.Response) => {
-  res.status(404).json({
-    error: "Not Found",
-    message: `Cannot ${req.method} ${req.url}`,
-  });
-});
-
-// Error handling middleware
-app.use(
-  (
-    err: any,
-    req: express.Request,
-    res: express.Response,
-    next: express.NextFunction
-  ) => {
-    console.error("[ERROR]", err.stack);
-    res.status(err.status || 500).json({
-      error: "Internal Server Error",
-      message: process.env.NODE_ENV === "development" ? err.message : undefined,
-      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-    });
-  }
-);
-
-// setupCronJobs();
-
-// Export the app for use in server.ts
 export default app;
