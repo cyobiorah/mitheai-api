@@ -3,9 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import routes from "./routes";
 import { allowedOrigins } from "./utils";
-import { RedisStore } from "connect-redis";
-import session from "express-session";
-import redisService from "./utils/redisClient";
 
 declare module "express-session" {
   interface SessionData {
@@ -23,22 +20,6 @@ declare module "express-session" {
 dotenv.config();
 
 const app = express();
-
-app.use(
-  session({
-    store: new RedisStore({ client: redisService.client }),
-    secret: process.env.SESSION_SECRET ?? "your-secret-key-change-this",
-    resave: false,
-    saveUninitialized: false,
-    name: "mitheai.sid",
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    },
-  })
-);
 
 app.use(
   cors({
