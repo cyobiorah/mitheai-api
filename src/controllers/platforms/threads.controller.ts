@@ -41,7 +41,79 @@ export const startDirectThreadsAuth = async (req: any, res: Response) => {
   }
 };
 
-// 2. Threads OAuth Callback
+//2. Start Threads Connect
+export const startThreadsConnect = async (req: any, res: Response) => {
+  // Check for state parameter
+  const { state } = req.query;
+
+  if (!state) {
+    console.error("No state parameter found in Threads connect request");
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
+        "Missing state parameter"
+      )}`
+    );
+  }
+
+  try {
+    // Retrieve state data from Redis
+    const stateData = await redisService.get(`threads:${state as string}`);
+
+    console.log(
+      `Threads connect: Retrieved state data for state ${state}:`,
+      stateData
+    );
+
+    if (!stateData) {
+      console.error("No state data found in Redis for Threads connect");
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
+          "Invalid or expired state"
+        )}`
+      );
+    }
+
+    // Check for timestamp expiration (10 minute window)
+    if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
+      await redisService.delete(`threads:${state as string}`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
+          "Authentication link expired"
+        )}`
+      );
+    }
+
+    // Set up Threads OAuth URL with proper scopes
+    const threadsAuthUrl = new URL("https://threads.net/oauth/authorize");
+    threadsAuthUrl.searchParams.append(
+      "client_id",
+      process.env.THREADS_APP_ID ?? ""
+    );
+    threadsAuthUrl.searchParams.append(
+      "redirect_uri",
+      process.env.THREADS_CALLBACK_URL ??
+        "http://localhost:3001/api/social-accounts/threads/callback"
+    );
+    threadsAuthUrl.searchParams.append("response_type", "code");
+    threadsAuthUrl.searchParams.append(
+      "scope",
+      "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
+    );
+    threadsAuthUrl.searchParams.append("state", state as string);
+
+    console.log("Redirecting to Threads OAuth:", threadsAuthUrl.toString());
+    res.redirect(threadsAuthUrl.toString());
+  } catch (error) {
+    console.error("Error in Threads connect:", error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/account-setup?error=${encodeURIComponent(
+        "Internal server error"
+      )}`
+    );
+  }
+};
+
+// 3. Threads OAuth Callback
 export const handleThreadsCallback = async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query;

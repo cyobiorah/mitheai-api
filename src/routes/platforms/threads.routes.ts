@@ -9,6 +9,7 @@ router.get(
   requireJwtAuth,
   threadsController.startDirectThreadsAuth
 );
+router.get("/connect", threadsController.startThreadsConnect);
 router.get("/callback", threadsController.handleThreadsCallback);
 
 export default router;
