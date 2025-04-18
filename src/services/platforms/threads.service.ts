@@ -1,5 +1,6 @@
 import axios from "axios";
-import SocialAccount from "../../models/socialAccount.model";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 let lastTokenExpirationDate: Date | null = null;
 
@@ -243,7 +244,8 @@ export async function createSocialAccount(
       `Checking for existing Threads account for user ${userId} with Threads ID ${profile.id}`
     );
 
-    const existingAccountForAnyUser = await SocialAccount.findOne({
+    const { socialAccounts } = await getCollections();
+    const existingAccountForAnyUser = await socialAccounts.findOne({
       platform: "threads",
       platformAccountId: profile.id,
     });
@@ -268,8 +270,8 @@ export async function createSocialAccount(
     // Create a new social account
     console.log(`Creating new Threads account for user ${userId}`);
 
-    const newAccount = new SocialAccount({
-      userId,
+    const newAccount = await socialAccounts.insertOne({
+      userId: new ObjectId(userId),
       platform: "threads",
       platformAccountId: profile.id,
       accountName: profile.username,
@@ -293,10 +295,11 @@ export async function createSocialAccount(
     });
 
     if (organizationId) {
-      newAccount.organizationId = organizationId;
+      await socialAccounts.updateOne(
+        { _id: newAccount.insertedId },
+        { $set: { organizationId: new ObjectId(organizationId) } }
+      );
     }
-
-    await newAccount.save();
 
     return newAccount;
   } catch (error) {

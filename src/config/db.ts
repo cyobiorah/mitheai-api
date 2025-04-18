@@ -93,5 +93,8 @@ export async function getCollections() {
     socialAccounts: db.collection("socialaccounts"),
     socialPosts: db.collection("socialposts"),
     contents: db.collection("contents"),
+    scheduledPosts: db.collection("scheduledposts"),
+    sessions: db.collection("sessions"),
+    socialaccounts: db.collection("socialaccounts"),
   };
 }

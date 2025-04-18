@@ -1,7 +1,7 @@
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
-import SocialAccount from "../../models/socialAccount.model";
-import mongoose from "mongoose";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 // These should be in your env/config
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID!;
@@ -63,7 +63,8 @@ export async function createSocialAccount(
 ): Promise<any> {
   try {
     // Check if this account is connected to ANY user
-    const anyExistingAccount = await SocialAccount.findOne({
+    const { socialAccounts } = await getCollections();
+    const anyExistingAccount = await socialAccounts.findOne({
       platform: "twitter",
       platformAccountId: profile.id,
     });
@@ -84,7 +85,7 @@ export async function createSocialAccount(
     }
 
     // Now check if this specific user has already connected this account
-    const userExistingAccount = await SocialAccount.findOne({
+    const userExistingAccount = await socialAccounts.findOne({
       platform: "twitter",
       platformAccountId: profile.id,
       userId,
@@ -115,7 +116,7 @@ export async function createSocialAccount(
       tokenExpiry: null, // or set expiry if available
       lastRefreshed: new Date(),
       status: "active",
-      userId: new mongoose.Types.ObjectId(userId),
+      userId: new ObjectId(userId),
       metadata: {
         profileUrl: `https://twitter.com/${profile.username}`,
         followerCount: profile.public_metrics?.followers_count,
@@ -132,16 +133,14 @@ export async function createSocialAccount(
     };
 
     if (organizationId) {
-      socialAccount.organizationId = new mongoose.Types.ObjectId(
-        organizationId
-      );
+      socialAccount.organizationId = new ObjectId(organizationId);
     }
     if (teamId) {
-      socialAccount.teamId = new mongoose.Types.ObjectId(teamId);
+      socialAccount.teamId = new ObjectId(teamId);
     }
 
     // Create the social account
-    const createdAccount = await SocialAccount.create(socialAccount);
+    const createdAccount = await socialAccounts.insertOne(socialAccount);
     return createdAccount;
   } catch (error: any) {
     if (

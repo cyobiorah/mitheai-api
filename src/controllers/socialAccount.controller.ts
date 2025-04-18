@@ -16,7 +16,7 @@ export const linkSocialAccount = async (
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const socialAccount = await socialAccountService.linkAccount({
       ...req.body,
       userId,
@@ -42,7 +42,7 @@ export const listSocialAccounts = async (
 ) => {
   try {
     const accounts = await socialAccountService.listAccounts({
-      userId: (req as any).user.userId!,
+      userId: (req as any).user.id!,
       organizationId: (req as any).user.organizationId!,
       teamId: req.query.teamId ? (req.query.teamId as string) : undefined,
     });
@@ -64,7 +64,7 @@ export const updateSocialAccount = async (
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const updated = await socialAccountService.updateAccount(
       id,
       req.body,
@@ -84,8 +84,10 @@ export const unlinkSocialAccount = async (
   next: NextFunction
 ) => {
   try {
+    console.log({ req });
     const { id } = req.params;
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
+    console.log({ userId });
     const deleted = await socialAccountService.unlinkAccount(id, userId);
     if (!deleted) return res.status(403).json({ message: "Forbidden" });
     res.json({ message: "Social account unlinked successfully" });
