@@ -5,9 +5,9 @@ import * as threadsController from "../../controllers/platforms/threads.controll
 const router = Router();
 
 router.get(
-  "/direct-auth",
+  "/connect",
   requireJwtAuth,
-  threadsController.startDirectThreadsAuth
+  threadsController.startThreadsConnect
 );
 router.get("/callback", threadsController.handleThreadsCallback);
 
