@@ -1,13 +1,17 @@
-import Organization from "../models/organization.model";
+import { ObjectId } from "mongodb";
+import { getCollections } from "../config/db";
 
 export const createOrganization = async (data: any) => {
-  // Assume data contains ownerId, name, type, description, settings, etc.
-  const org = new Organization({
+  const { organizations } = await getCollections();
+  // Add owner as first member
+  const orgData = {
     ...data,
-    members: [data.ownerId], // Optionally add owner as first member
-  });
-  await org.save();
-  return org;
+    members: [data.ownerId],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const result = await organizations.insertOne(orgData);
+  return { _id: result.insertedId, ...orgData };
 };
 
 export const updateOrganization = async (
@@ -15,23 +19,28 @@ export const updateOrganization = async (
   update: any,
   userId: string
 ) => {
-  const org = await Organization.findById(orgId);
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({ _id: new ObjectId(orgId) });
   if (!org) return null;
   // Only owner can update
   if (org.ownerId.toString() !== userId) return null;
-  Object.assign(org, update);
-  await org.save();
-  return org;
+  await organizations.updateOne(
+    { _id: new ObjectId(orgId) },
+    { $set: { ...update, updatedAt: new Date() } }
+  );
+  return organizations.findOne({ _id: new ObjectId(orgId) });
 };
 
 export const getOrganizationById = async (orgId: string) => {
-  return Organization.findById(orgId);
+  const { organizations } = await getCollections();
+  return organizations.findOne({ _id: new ObjectId(orgId) });
 };
 
 export const deleteOrganization = async (orgId: string, userId: string) => {
-  const org = await Organization.findById(orgId);
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({ _id: new ObjectId(orgId) });
   if (!org) return false;
   if (org.ownerId.toString() !== userId) return false;
-  await org.deleteOne();
+  await organizations.deleteOne({ _id: new ObjectId(orgId) });
   return true;
 };

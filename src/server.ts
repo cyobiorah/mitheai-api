@@ -1,9 +1,14 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
 import app from "./app";
-import { connectDB } from "./config/db";
+import { MongoDBConnection } from "./config/db";
 
 const PORT = process.env.PORT ?? 3001;
 
-connectDB()
+MongoDBConnection.getInstance()
+  .connect()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);

@@ -16,7 +16,7 @@ export const createTeam = async (
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const team = await teamsService.createTeam({
       ...req.body,
       creatorId: userId,
@@ -70,7 +70,7 @@ export const updateTeam = async (
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const updated = await teamsService.updateTeam(id, req.body, userId);
     if (!updated) return res.status(403).json({ message: "Forbidden" });
     res.json(updated);
@@ -87,7 +87,7 @@ export const deleteTeam = async (
 ) => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const deleted = await teamsService.deleteTeam(id, userId);
     if (!deleted) return res.status(403).json({ message: "Forbidden" });
     res.json({ message: "Team deleted successfully" });
