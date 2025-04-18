@@ -8,11 +8,9 @@ if (!JWT_SECRET) {
 }
 
 export function signJwt(payload: object) {
-  console.log("JWT_SECRET at sign/verify:", JWT_SECRET);
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
 export function verifyJwt(token: string) {
-  console.log("JWT_SECRET at verify:", JWT_SECRET);
   return jwt.verify(token, JWT_SECRET);
 }
