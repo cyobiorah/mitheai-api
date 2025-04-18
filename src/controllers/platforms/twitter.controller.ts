@@ -40,19 +40,6 @@ interface TwitterUserResponse {
 
 // GET /platforms/twitter/direct-auth
 export const startDirectTwitterOAuth = async (req: any, res: any) => {
-  console.log({ req });
-  //   try {
-  //     const { redirectUri } = req.query;
-  //     const { url, state } = await twitterService.getTwitterOAuthUrl(
-  //       redirectUri as string
-  //     );
-  //     // Store state in Redis for CSRF protection
-  //     await redisService.set(`twitter-oauth-state:${state}`, state);
-  //     res.json({ url });
-  //   } catch (err) {
-  //     next(err);
-  //   }
-
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -78,8 +65,6 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
     // Generate a unique state ID
     const stateId = crypto.randomBytes(16).toString("hex");
 
-    console.log({ user: req.user });
-
     // Create state data object
     const stateData = {
       userId: req.user.userId,
@@ -90,8 +75,6 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
       timestamp: Date.now(),
       codeVerifier,
     };
-
-    // console.log({ stateData });
 
     // Store in Redis with 10 minute expiration
     await redisService.set(`oauth:${stateId}`, stateData, 600);
@@ -109,11 +92,6 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
     authUrl.searchParams.append("code_challenge", codeChallenge);
     authUrl.searchParams.append("code_challenge_method", "S256");
 
-    console.log("Generated auth URL with PKCE and Redis state:", {
-      stateId,
-      url: authUrl.toString().substring(0, 100) + "...",
-    });
-
     res.send(authUrl.toString());
   } catch (error) {
     console.error("Error in direct-auth:", error);
@@ -127,15 +105,6 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
 // GET /platforms/twitter/callback
 export const handleTwitterCallback = async (req: any, res: any) => {
   try {
-    console.log("Twitter callback received:", {
-      query: {
-        state: req.query.state ?? "Missing",
-        code: req.query.code
-          ? req.query.code.substring(0, 30) + "..."
-          : "Missing",
-      },
-    });
-
     // Check for error in the callback
     if (req.query.error) {
       console.error("Twitter OAuth error:", req.query.error);
@@ -164,10 +133,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
     // Retrieve state data from Redis
     const stateData = await redisService.get(`oauth:${state}`);
 
-    console.log("OAuth stateData from Redis:", stateData);
-
     if (!stateData) {
-      console.error("No state data found in Redis");
       return res.redirect(
         `${
           process.env.FRONTEND_URL
@@ -190,86 +156,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
     }
 
     // Extract data from state
-    const { codeVerifier, userId, organizationId, currentTeamId, skipWelcome } =
-      stateData;
-
-    // // If no session data, try to get from state parameter
-    // if ((!codeVerifier || !userId) && state) {
-    //   try {
-    //     // Decrypt the state parameter
-    //     const stateData = JSON.parse(
-    //       Buffer.from(state as string, "base64").toString()
-    //     );
-    //     console.log("Parsed state data:", {
-    //       uid: stateData.uid,
-    //       hasCodeVerifier: !!stateData.codeVerifier,
-    //       timestamp: stateData.timestamp,
-    //     });
-
-    //     // Check for timestamp expiration (10 minute window)
-    //     if (
-    //       stateData.timestamp &&
-    //       Date.now() - stateData.timestamp > 10 * 60 * 1000
-    //     ) {
-    //       return res.redirect(
-    //         `${
-    //           process.env.FRONTEND_URL
-    //         }/account-setup?error=true&message=${encodeURIComponent(
-    //           "Authentication link expired"
-    //         )}`
-    //       );
-    //     }
-
-    //     // Extract data from state
-    //     // codeVerifier = stateData.codeVerifier;
-    //     // userId = stateData.uid;
-    //     // organizationId = stateData.organizationId;
-    //     // teamIds = stateData.teamIds;
-    //     // currentTeamId = stateData.currentTeamId;
-    //     // skipWelcome = stateData.skipWelcome;
-
-    //     // Restore session if possible
-    //     if (userId && !req.session.user) {
-    //       req.session.user = {
-    //         uid: userId,
-    //         email: stateData.email,
-    //         organizationId,
-    //         // teamIds,
-    //         currentTeamId,
-    //       };
-    //       req.session.skipWelcome = skipWelcome;
-    //       req.session.codeVerifier = codeVerifier;
-
-    //       // Save the session
-    //       await new Promise<void>((resolve, reject) => {
-    //         req.session.save((err: any) => {
-    //           if (err) {
-    //             console.error("Error saving session:", err);
-    //             reject(err as Error);
-    //           } else {
-    //             resolve();
-    //           }
-    //         });
-    //       });
-    //     }
-    //   } catch (error) {
-    //     console.error("Error in Twitter callback:", error);
-    //     return res.redirect(
-    //       `${
-    //         process.env.FRONTEND_URL
-    //       }/account-setup?error=true&message=${encodeURIComponent(
-    //         "Authentication failed: " +
-    //           (error instanceof Error ? error.message : "Unknown error")
-    //       )}`
-    //     );
-    //   }
-    // }
-
-    console.log("Proceeding with token exchange:", {
-      code: (code as string).substring(0, 10) + "...",
-      codeVerifier: codeVerifier.substring(0, 10) + "...",
-      redirect_uri: callbackUrl,
-    });
+    const { codeVerifier, userId, organizationId, currentTeamId } = stateData;
 
     // Exchange the authorization code for an access token
     const tokenResponse = await fetch(
@@ -351,13 +238,9 @@ export const handleTwitterCallback = async (req: any, res: any) => {
     }
 
     const profileData = (await profileResponse.json()) as TwitterUserResponse;
-    // console.log("Twitter user profile:", profileData);
 
     // Create or update the social account
     try {
-      // We need to use the controller's instance since it's already initialized
-      //   const twitterService = controller.getTwitterService();
-
       if (!twitterService) {
         throw new Error("Failed to get TwitterService instance");
       }

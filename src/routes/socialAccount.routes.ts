@@ -18,7 +18,7 @@ router.get(
   socialAccountController.getSocialAccountsByOrganizationId
 );
 router.post("/", requireJwtAuth, socialAccountController.linkSocialAccount);
-router.get("/", requireJwtAuth, socialAccountController.listSocialAccounts);
+// router.get("/", requireJwtAuth, socialAccountController.listSocialAccounts);
 router.patch(
   "/:id",
   requireJwtAuth,

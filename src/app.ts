@@ -1,11 +1,13 @@
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import routes from "./routes";
 import { allowedOrigins } from "./utils";
 import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
-import redisService, { redisClient } from "./utils/redisClient";
+import { redisClient } from "./utils/redisClient";
+
+dotenv.config();
 
 declare module "express-session" {
   interface SessionData {
@@ -19,8 +21,6 @@ declare module "express-session" {
     };
   }
 }
-
-dotenv.config();
 
 const app = express();
 

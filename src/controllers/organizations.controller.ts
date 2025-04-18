@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import * as organizationsService from "../services/organizations.service";
+import * as usersService from "../services/users.service";
 import {
   validateOrganizationCreate,
   validateOrganizationUpdate,
 } from "../validation/organization.validation";
-import User from "../models/user.model";
 
 export const createOrganization = async (
   req: Request,
@@ -40,7 +40,7 @@ export const updateOrganization = async (
       return res.status(400).json({ message: error.details[0].message });
 
     // Only owner/admin can update
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const updated = await organizationsService.updateOrganization(
       orgId,
       req.body,
@@ -65,9 +65,7 @@ export const getOrganization = async (
       return res.status(404).json({ message: "Organization not found" });
 
     // Fetch org members
-    const members = await User.find({ organizationId: orgId }).select(
-      "-password"
-    );
+    const members = await usersService.findUsersByOrganizationId(orgId);
     res.json({ organization: org, members });
   } catch (err) {
     next(err);
@@ -81,7 +79,7 @@ export const deleteOrganization = async (
 ) => {
   try {
     const orgId = req.params.id;
-    const userId = (req as any).user.userId!;
+    const userId = (req as any).user.id!;
     const deleted = await organizationsService.deleteOrganization(
       orgId,
       userId

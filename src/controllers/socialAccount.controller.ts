@@ -41,12 +41,10 @@ export const listSocialAccounts = async (
   next: NextFunction
 ) => {
   try {
-    const userId = (req as any).user.userId!;
-    const { organizationId, teamId } = req.query;
     const accounts = await socialAccountService.listAccounts({
-      userId,
-      organizationId,
-      teamId,
+      userId: (req as any).user.userId!,
+      organizationId: (req as any).user.organizationId!,
+      teamId: req.query.teamId ? (req.query.teamId as string) : undefined,
     });
     res.json(accounts);
   } catch (err) {
@@ -102,7 +100,6 @@ export const getSocialAccountsByOrganizationId = async (
   res: Response,
   next: NextFunction
 ) => {
-  console.log("Session User:", (req as any).user);
   try {
     const organizationId = (req as any).user?.organizationId;
     const accounts = await socialAccountService.listAccountsByOrganizationId(

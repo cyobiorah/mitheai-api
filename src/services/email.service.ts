@@ -120,11 +120,6 @@ export const sendWelcomeEmail = async ({
       sendSmtpEmail.templateId
     );
     const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    // console.log({ result });
-    // console.log(
-    //   "Welcome email sent successfully. Message ID:",
-    //   result.body.messageId
-    // );
     return result;
   } catch (error) {
     console.error("Error sending welcome email:", error);
