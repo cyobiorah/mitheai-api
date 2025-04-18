@@ -20,7 +20,7 @@ export const startDirectLinkedinAuth = async (req: any, res: Response) => {
 
     // Store user data in Redis with the state ID as key
     const stateData = {
-      uid: req.user.uid,
+      userId: req.user.id,
       email: req.user.email,
       organizationId: req.user.organizationId,
       teamIds: req.user.teamIds,
@@ -104,7 +104,7 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
 
     // Attach user data to request for the controller
     (req as any).user = {
-      uid: stateData.uid,
+      id: stateData.userId,
       email: stateData.email,
       organizationId: stateData.organizationId,
       teamIds: stateData.teamIds,

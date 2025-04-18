@@ -64,6 +64,7 @@ export const listAccountsByOrganizationId = async (organizationId: string) => {
 
 // Unlink (delete) a social account (ownership enforced)
 export const unlinkAccount = async (id: string, userId: string) => {
+  console.log("Unlinking social account:", id, userId);
   const { socialAccounts } = await getCollections();
   const account = await socialAccounts.findOne({ _id: new ObjectId(id) });
   if (!account || String(account.userId) !== userId) return false;

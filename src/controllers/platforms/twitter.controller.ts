@@ -67,7 +67,7 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
 
     // Create state data object
     const stateData = {
-      userId: req.user.userId,
+      userId: req.user.id,
       email: req.user.email,
       organizationId: req.user.organizationId,
       currentTeamId: req.user.currentTeamId,

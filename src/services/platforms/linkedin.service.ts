@@ -1,8 +1,7 @@
-// src/services/platforms/linkedin.service.ts
-
-import SocialAccount from "../../models/socialAccount.model";
 import * as crypto from "crypto";
 import axios from "axios";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 interface LinkedInProfile {
   sub: string;
@@ -37,7 +36,7 @@ export async function createSocialAccount(
   profile: LinkedInProfile,
   token: any
 ) {
-  const { userId, organizationId } = user;
+  const { id: userId, organizationId } = user;
   const { access_token, id_token, expires_in } = token;
   const platform = "linkedin";
   const accountName = profile.name;
@@ -45,7 +44,11 @@ export async function createSocialAccount(
   const email = profile?.email ?? "";
 
   // Prevent duplicate connection
-  const existing = await SocialAccount.findOne({ platform, platformAccountId });
+  const { socialAccounts } = await getCollections();
+  const existing = await socialAccounts.findOne({
+    platform,
+    platformAccountId,
+  });
   if (existing) {
     throw new Error(
       "This LinkedIn account is already connected to another user."
@@ -67,8 +70,8 @@ export async function createSocialAccount(
   };
 
   // Ownership model: user, team, organization
-  const socialAccount = new SocialAccount({
-    userId,
+  const socialAccount = await socialAccounts.insertOne({
+    userId: new ObjectId(userId),
     platform,
     platformAccountId,
     accountType: organizationId ? "business" : "personal",
@@ -90,10 +93,12 @@ export async function createSocialAccount(
   });
 
   if (organizationId) {
-    socialAccount.organizationId = organizationId;
+    await socialAccounts.updateOne(
+      { _id: socialAccount.insertedId },
+      { $set: { organizationId: new ObjectId(organizationId) } }
+    );
   }
 
-  await socialAccount.save();
   return socialAccount;
 }
 

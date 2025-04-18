@@ -1,9 +1,8 @@
 import { Request, Response } from "express";
 import * as invitationsService from "../services/invitations.service";
-import Organization from "../models/organization.model";
-import User from "../models/user.model";
 import { sendInvitationEmail } from "../services/email.service";
 import bcrypt from "bcrypt";
+import { getCollections } from "../config/db";
 
 export const createInvitation = async (req: Request, res: Response) => {
   const { email, firstName, lastName, role, organizationId, teamIds } =
@@ -12,7 +11,8 @@ export const createInvitation = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing required fields" });
 
   // Check if user already exists in org
-  const existing = await User.findOne({ email, organizationId });
+  const { users } = await getCollections();
+  const existing = await users.findOne({ email, organizationId });
   if (existing)
     return res.status(400).json({
       error: "User with this email already exists in the organization",
@@ -21,7 +21,7 @@ export const createInvitation = async (req: Request, res: Response) => {
   const password = await bcrypt.hash("Password@12", 10);
 
   // Create a pending user
-  await User.create({
+  await users.insertOne({
     email,
     firstName,
     lastName,
@@ -34,7 +34,8 @@ export const createInvitation = async (req: Request, res: Response) => {
   });
 
   // Get org for email
-  const org = await Organization.findById(organizationId);
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({ _id: organizationId });
   if (!org) return res.status(404).json({ error: "Organization not found" });
 
   // Create invitation
@@ -65,7 +66,8 @@ export const verifyInvitation = async (req: Request, res: Response) => {
   if (!invitation || invitation.status !== "pending")
     return res.status(404).json({ error: "Invalid or expired invitation" });
 
-  const org = await Organization.findById(invitation.organizationId);
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({ _id: invitation.organizationId });
   if (!org) return res.status(404).json({ error: "Organization not found" });
 
   res.json({
@@ -97,7 +99,8 @@ export const resendInvitation = async (req: Request, res: Response) => {
     return res.status(404).json({ error: "No pending invitation found" });
 
   // Fetch org for email content
-  const org = await Organization.findById(invitation.organizationId);
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({ _id: invitation.organizationId });
   if (!org) return res.status(404).json({ error: "Organization not found" });
 
   // Send invitation email again

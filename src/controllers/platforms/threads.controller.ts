@@ -15,7 +15,7 @@ export const startDirectThreadsAuth = async (req: any, res: Response) => {
 
     // Create state data object
     const stateData = {
-      userId: req.user.userId,
+      userId: req.user.id,
       email: req.user.email,
       organizationId: req.user.organizationId,
       currentTeamId: req.user.currentTeamId,
@@ -143,7 +143,7 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
       // Clean up Redis state
       await redisService.delete(`threads:${state as string}`);
 
-      console.log("Threads account connected successfully:", account._id);
+      console.log("Threads account connected successfully:", account);
 
       // Redirect to settings page with success
       return res.redirect(

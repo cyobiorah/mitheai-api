@@ -1,5 +1,4 @@
-import SocialPost from "../models/socialPost.model";
-import SocialAccount from "../models/socialAccount.model";
+import { getCollections } from "../config/db";
 import { publish } from "../services/platforms/twitter.service";
 // import other platform services as needed
 
@@ -7,16 +6,19 @@ export class SocialPostWorker {
   static async processScheduledPosts() {
     const now = new Date();
     // Find all scheduled posts due for publishing
-    const posts = await SocialPost.find({
+    const { socialPosts, socialAccounts } = await getCollections();
+    const posts = socialPosts.find({
       status: "scheduled",
       scheduledFor: { $lte: now },
     });
 
     const results = [];
-    for (const post of posts) {
+    for await (const post of posts) {
       try {
         // Fetch the social account
-        const account = await SocialAccount.findById(post.socialAccountId);
+        const account = await socialAccounts.findOne({
+          _id: post.socialAccountId,
+        });
         if (!account) throw new Error("Social account not found");
 
         // Choose the right service based on platform
@@ -30,14 +32,26 @@ export class SocialPostWorker {
         post.status = "published";
         post.publishedAt = new Date();
         post.publishResult = publishResult;
-        await post.save();
+        await socialPosts.updateOne(
+          { _id: post._id },
+          {
+            $set: {
+              status: "published",
+              publishedAt: new Date(),
+              publishResult,
+            },
+          }
+        );
 
         results.push({ postId: post._id, status: "published" });
       } catch (err: any) {
         // Mark post as failed
         post.status = "failed";
         post.publishResult = { error: err.message };
-        await post.save();
+        await socialPosts.updateOne(
+          { _id: post._id },
+          { $set: { status: "failed", publishResult: { error: err.message } } }
+        );
 
         results.push({
           postId: post._id,
