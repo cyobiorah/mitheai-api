@@ -5,10 +5,11 @@ import * as threadsController from "../../controllers/platforms/threads.controll
 const router = Router();
 
 router.get(
-  "/connect",
+  "/direct-auth",
   requireJwtAuth,
-  threadsController.startThreadsConnect
+  threadsController.startDirectThreadsAuth
 );
+router.get("/connect", requireJwtAuth, threadsController.startThreadsConnect);
 router.get("/callback", threadsController.handleThreadsCallback);
 
 export default router;

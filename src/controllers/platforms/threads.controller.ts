@@ -3,7 +3,45 @@ import * as threadsService from "../../services/platforms/threads.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 
-//1. Start Threads Connect
+// 1. Start Threads OAuth
+export const startDirectThreadsAuth = async (req: any, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Generate a unique state ID
+    const stateId = crypto.randomBytes(16).toString("hex");
+
+    // Create state data object
+    const stateData = {
+      userId: req.user.id,
+      email: req.user.email,
+      organizationId: req.user.organizationId,
+      currentTeamId: req.user.currentTeamId,
+      timestamp: Date.now(),
+    };
+
+    // Store in Redis with 10 minute expiration
+    await redisService.set(`threads:${stateId}`, stateData, 600);
+
+    // Return the full URL with state parameter
+    const baseUrl = process.env.API_URL ?? "http://localhost:3001";
+    const authUrl = `${baseUrl}/api/social-accounts/threads/connect?state=${stateId}`;
+
+    console.log(
+      `Threads direct-auth: Generated state ID ${stateId} for user ${req.user.uid}`
+    );
+    console.log(`Threads direct-auth: Redirecting to ${authUrl}`);
+
+    res.send(authUrl);
+  } catch (error) {
+    console.error("Error in Threads direct-auth:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+//2. Start Threads Connect
 export const startThreadsConnect = async (req: any, res: Response) => {
   // Check for state parameter
   const { state } = req.query;
@@ -75,45 +113,7 @@ export const startThreadsConnect = async (req: any, res: Response) => {
   }
 };
 
-// 1. Start Threads OAuth
-export const startDirectThreadsAuth = async (req: any, res: Response) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    // Generate a unique state ID
-    const stateId = crypto.randomBytes(16).toString("hex");
-
-    // Create state data object
-    const stateData = {
-      userId: req.user.id,
-      email: req.user.email,
-      organizationId: req.user.organizationId,
-      currentTeamId: req.user.currentTeamId,
-      timestamp: Date.now(),
-    };
-
-    // Store in Redis with 10 minute expiration
-    await redisService.set(`threads:${stateId}`, stateData, 600);
-
-    // Return the full URL with state parameter
-    const baseUrl = process.env.API_URL ?? "http://localhost:3001";
-    const authUrl = `${baseUrl}/api/social-accounts/threads/connect?state=${stateId}`;
-
-    console.log(
-      `Threads direct-auth: Generated state ID ${stateId} for user ${req.user.uid}`
-    );
-    console.log(`Threads direct-auth: Redirecting to ${authUrl}`);
-
-    res.send(authUrl);
-  } catch (error) {
-    console.error("Error in Threads direct-auth:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// 2. Threads OAuth Callback
+// 3. Threads OAuth Callback
 export const handleThreadsCallback = async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query;
