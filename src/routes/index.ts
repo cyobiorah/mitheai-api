@@ -6,6 +6,8 @@ import teamsRoutes from "./teams.routes";
 import socialAccountRoutes from "./socialAccount.routes";
 import manualCronRoutes from "./manualCron.routes";
 import invitationsRoutes from "./invitations.routes";
+import socialPostsRoutes from "./socialPosts.routes";
+import scheduledPostsRoutes from "./scheduledPosts.routes";
 
 const router = Router();
 
@@ -27,12 +29,18 @@ router.use("/teams", teamsRoutes);
 // Social accounts routes
 router.use("/social-accounts", socialAccountRoutes);
 
+// Social posts routes
+router.use("/social-posts", socialPostsRoutes);
+
+// Scheduled posts routes
+router.use("/scheduled-posts", scheduledPostsRoutes);
+
 // Example route
 router.get("/", (_req, res) => {
   res.json({ message: "Welcome to MitheAI API" });
 });
 
 // Manual cron routes
-router.use("/manualCron", manualCronRoutes);
+router.use("/manual-cron", manualCronRoutes);
 
 export default router;

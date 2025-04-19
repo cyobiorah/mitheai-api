@@ -1,3 +1,4 @@
+import { ObjectId } from "mongodb";
 import * as twitterService from "../../services/platforms/twitter.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
@@ -346,5 +347,40 @@ export const handleTwitterCallback = async (req: any, res: any) => {
         `Authentication error: ${error.message}`
       )}`
     );
+  }
+};
+
+export const post = async (req: any, res: any) => {
+  const twitterContentItem = {
+    type: "social_post",
+    content: req.body.content,
+    metadata: {
+      source: "webapp",
+      language: "en",
+      tags: req.body.tags ?? [],
+      customFields: req.body.customFields ?? {},
+      socialPost: {
+        platform: "twitter",
+        accountId: req.body.accountId,
+        platformAccountId: req.body.platformAccountId,
+        accountName: req.body.accountName,
+        accountType: req.body.accountType,
+        mediaType: req.body.mediaType,
+        scheduledTime: req.body.scheduledTime,
+      },
+    },
+    teamId: new ObjectId(req.user.teamId),
+    organizationId: new ObjectId(req.user.organizationId),
+    userId: new ObjectId(req.user.id),
+    createdBy: new ObjectId(req.user.id),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  try {
+    const result = await twitterService.post(twitterContentItem);
+    res.status(200).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 };

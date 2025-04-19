@@ -11,10 +11,10 @@ async function seed() {
     users,
     organizations,
     teams,
-    socialAccounts,
+    // socialAccounts,
     contents,
-    socialPosts,
-    scheduledPosts,
+    socialposts,
+    scheduledposts,
     invitations,
     sessions,
     socialaccounts,
@@ -25,10 +25,10 @@ async function seed() {
     users.deleteMany({}),
     organizations.deleteMany({}),
     teams.deleteMany({}),
-    socialAccounts.deleteMany({}),
+    // socialAccounts.deleteMany({}),
     contents.deleteMany({}),
-    socialPosts.deleteMany({}),
-    scheduledPosts.deleteMany({}),
+    socialposts.deleteMany({}),
+    scheduledposts.deleteMany({}),
     invitations.deleteMany({}),
     sessions.deleteMany({}),
     socialaccounts.deleteMany({}),
@@ -119,7 +119,7 @@ async function seed() {
   ]);
 
   // Seed social accounts
-  await socialAccounts.insertMany([
+  await socialaccounts.insertMany([
     {
       userId: orgOwnerId,
       organizationId: orgId,
@@ -149,7 +149,7 @@ async function seed() {
   ]);
 
   // Seed social post
-  await socialPosts.insertOne({
+  await socialposts.insertOne({
     userId: orgOwnerId,
     organizationId: orgId,
     teamId: teamId,
@@ -165,7 +165,7 @@ async function seed() {
   });
 
   // Seed scheduled post
-  await scheduledPosts.insertOne({
+  await scheduledposts.insertOne({
     userId: orgOwnerId,
     organizationId: orgId,
     teamId: teamId,
