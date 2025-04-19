@@ -1,65 +1,201 @@
 import { getCollections } from "../config/db";
-import { publish } from "../services/platforms/twitter.service";
+import * as twitterService from "../services/platforms/twitter.service";
+import * as threadsService from "../services/platforms/threads.service";
 // import other platform services as needed
 
 export class SocialPostWorker {
   static async processScheduledPosts() {
     const now = new Date();
-    // Find all scheduled posts due for publishing
-    const { socialposts, socialaccounts } = await getCollections();
-    const posts = socialposts.find({
-      status: "scheduled",
+    const { scheduledposts, socialposts, socialaccounts } =
+      await getCollections();
+    const postsCursor = scheduledposts.find({
+      status: { $in: ["scheduled", "processing"] },
       scheduledFor: { $lte: now },
     });
 
-    const results = [];
-    for await (const post of posts) {
+    for await (const post of postsCursor) {
       try {
-        // Fetch the social account
-        const account = await socialaccounts.findOne({
-          _id: post.socialAccountId,
-        });
-        if (!account) throw new Error("Social account not found");
+        await scheduledposts.updateOne(
+          { _id: post._id },
+          { $set: { status: "processing", updatedAt: new Date() } }
+        );
 
-        // Choose the right service based on platform
-        let publishResult;
-        if (account.platform === "twitter") {
-          publishResult = await publish(post, account);
+        let allSuccessful = true;
+        let allFailed = true;
+
+        for (const platform of post.platforms) {
+          try {
+            const account = await socialaccounts.findOne({
+              _id: platform.accountId,
+            });
+            if (!account)
+              throw new Error(`Account not found: ${platform.accountId}`);
+
+            let publishResult: any;
+            switch (account.platform) {
+              case "twitter": {
+                // --- Construct ContentItem as in legacy codebase ---
+                const contentItem = {
+                  id: post._id?.toString(),
+                  type: "social_post",
+                  content: post.content,
+                  mediaUrls: post.mediaUrls ?? [],
+                  metadata: {
+                    source: "scheduled_post",
+                    language: "en",
+                    tags: post.tags ?? [],
+                    customFields: post.customFields ?? {},
+                    socialPost: {
+                      platform: account.platform,
+                      scheduledTime: post.scheduledFor,
+                      accountId: platform.accountId,
+                      // Add any additional fields as needed
+                    },
+                  },
+                  status: "pending",
+                  teamId: post.teamId ?? null,
+                  organizationId: post.organizationId ?? null,
+                  createdBy: post.createdBy,
+                  createdAt: post.createdAt,
+                  updatedAt: new Date(),
+                  mediaType: post.mediaType,
+                  timezone: post.timezone,
+                };
+
+                publishResult = await twitterService.post(contentItem);
+                break;
+              }
+              case "threads": {
+                // try {
+                //   // We'll skip the explicit token check here since postContent will handle it internally
+                //   // This prevents redundant API calls and reduces the chance of timeouts
+
+                //   // Post the content directly - token refresh will happen inside postContent if needed
+                //   publishResult = await threadsService.postContent(
+                //     account._id.toString(),
+                //     post.content,
+                //     post.mediaType
+                //       ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
+                //       : "TEXT",
+                //     post.mediaUrls?.[0]
+                //   );
+                // } catch (tokenError: any) {
+                //   // If token is expired, mark the account as needing reauthorization
+                //   if (tokenError.code === "TOKEN_EXPIRED") {
+                //     await socialAccountRepository.update(
+                //       account._id.toString(),
+                //       {
+                //         status: "expired",
+                //         metadata: {
+                //           ...account.metadata,
+                //           requiresReauth: true,
+                //           lastError: tokenError.message,
+                //           lastErrorTime: new Date(),
+                //         },
+                //         updatedAt: new Date(),
+                //       }
+                //     );
+                //     throw new Error(
+                //       `Threads account token has expired and requires reconnection: ${tokenError.message}`
+                //     );
+                //   }
+                //   throw tokenError;
+                // }
+                // TODO: Implement Threads postContent
+                console.log("Publishing to Threads:", publishResult);
+                break;
+              }
+              // Add other platforms as needed
+              default:
+                throw new Error(`Unsupported platform: ${account.platform}`);
+            }
+
+            // Defensive: Ensure publishResult has id
+            if (!publishResult?.id) {
+              throw new Error("Publish result missing id");
+            }
+
+            // Update platform status
+            platform.status = "published";
+            platform.publishedAt = new Date();
+
+            // Extract the post ID based on the platform's response format
+            let postId: string;
+            let postUrl: string;
+
+            if ("success" in publishResult) {
+              // LinkedIn or Threads service format
+              if (!publishResult.success) {
+                throw new Error(
+                  publishResult.error ?? `Failed to post to ${account.platform}`
+                );
+              }
+              postId = publishResult.id ?? `${account.platform}-${Date.now()}`;
+
+              // Generate platform-specific URLs
+              if (account.platform === "linkedin") {
+                postUrl = `https://www.linkedin.com/feed/update/${postId}`;
+              } else if (account.platform === "threads") {
+                postUrl = `https://threads.net/t/${postId}`;
+              } else {
+                postUrl = `https://${account.platform}.com/posts/${postId}`;
+              }
+            } else {
+              // Twitter/other services format
+              postId = publishResult.id;
+              postUrl =
+                "url" in publishResult
+                  ? publishResult.url
+                  : `https://${account.platform}.com/status/${postId}`;
+            }
+
+            await socialposts.insertOne({
+              ...publishResult,
+              platform: account.platform,
+              socialAccountId: account._id,
+              postId,
+              postUrl,
+              publishedDate: new Date(),
+              status: "published",
+              scheduledPostId: post._id,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+
+            allFailed = false;
+          } catch (err: any) {
+            platform.status = "failed";
+            platform.errorMessage = err.message || "Failed to publish";
+            allSuccessful = false;
+          }
         }
-        // Add logic for other platforms...
 
-        // Mark post as published
-        post.status = "published";
-        post.publishedAt = new Date();
-        post.publishResult = publishResult;
-        await socialposts.updateOne(
+        await scheduledposts.updateOne(
           { _id: post._id },
           {
             $set: {
-              status: "published",
-              publishedAt: new Date(),
-              publishResult,
+              status: allSuccessful
+                ? "completed"
+                : allFailed
+                ? "failed"
+                : "partial",
+              platforms: post.platforms,
+              updatedAt: new Date(),
             },
           }
         );
-
-        results.push({ postId: post._id, status: "published" });
       } catch (err: any) {
-        // Mark post as failed
-        post.status = "failed";
-        post.publishResult = { error: err.message };
-        await socialposts.updateOne(
+        await scheduledposts.updateOne(
           { _id: post._id },
-          { $set: { status: "failed", publishResult: { error: err.message } } }
+          {
+            $set: {
+              status: "failed",
+              errorMessage: err.message,
+              updatedAt: new Date(),
+            },
+          }
         );
-
-        results.push({
-          postId: post._id,
-          status: "failed",
-          error: err.message,
-        });
       }
     }
-    return results;
   }
 }
