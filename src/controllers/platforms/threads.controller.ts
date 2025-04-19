@@ -29,11 +29,6 @@ export const startDirectThreadsAuth = async (req: any, res: Response) => {
     const baseUrl = process.env.API_URL ?? "http://localhost:3001";
     const authUrl = `${baseUrl}/api/social-accounts/threads/connect?state=${stateId}`;
 
-    console.log(
-      `Threads direct-auth: Generated state ID ${stateId} for user ${req.user.uid}`
-    );
-    console.log(`Threads direct-auth: Redirecting to ${authUrl}`);
-
     res.send(authUrl);
   } catch (error) {
     console.error("Error in Threads direct-auth:", error);
@@ -58,11 +53,6 @@ export const startThreadsConnect = async (req: any, res: Response) => {
   try {
     // Retrieve state data from Redis
     const stateData = await redisService.get(`threads:${state as string}`);
-
-    console.log(
-      `Threads connect: Retrieved state data for state ${state}:`,
-      stateData
-    );
 
     if (!stateData) {
       console.error("No state data found in Redis for Threads connect");
@@ -101,7 +91,6 @@ export const startThreadsConnect = async (req: any, res: Response) => {
     );
     threadsAuthUrl.searchParams.append("state", state as string);
 
-    console.log("Redirecting to Threads OAuth:", threadsAuthUrl.toString());
     res.redirect(threadsAuthUrl.toString());
   } catch (error) {
     console.error("Error in Threads connect:", error);
@@ -141,11 +130,6 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
     // Try to retrieve state data from Redis
     const stateData = await redisService.get(`threads:${state as string}`);
 
-    console.log(
-      `Threads callback: Retrieved state data for state ${state as string}:`,
-      stateData
-    );
-
     if (!stateData) {
       console.error(
         `No state data found in Redis for state: ${state as string}`
@@ -170,10 +154,6 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
         )}`
       );
     }
-
-    console.log(
-      `Threads callback: Using user ID ${userId} from Redis state data`
-    );
 
     try {
       // Exchange the code for an access token
@@ -214,8 +194,6 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
 
       // Clean up Redis state
       await redisService.delete(`threads:${state as string}`);
-
-      console.log("Threads account connected successfully:", account);
 
       // Redirect to settings page with success
       return res.redirect(
