@@ -207,9 +207,7 @@ export async function post(content: any): Promise<{ id: string }> {
 
     await socialposts.insertOne(postRecord);
 
-    return {
-      id: response.data.id,
-    };
+    return postRecord;
   } catch (error) {
     console.error("Error posting tweet:", error);
     throw error;
