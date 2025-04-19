@@ -44,8 +44,8 @@ export async function createSocialAccount(
   const email = profile?.email ?? "";
 
   // Prevent duplicate connection
-  const { socialAccounts } = await getCollections();
-  const existing = await socialAccounts.findOne({
+  const { socialaccounts } = await getCollections();
+  const existing = await socialaccounts.findOne({
     platform,
     platformAccountId,
   });
@@ -70,7 +70,7 @@ export async function createSocialAccount(
   };
 
   // Ownership model: user, team, organization
-  const socialAccount = await socialAccounts.insertOne({
+  const socialAccount = await socialaccounts.insertOne({
     userId: new ObjectId(userId),
     platform,
     platformAccountId,
@@ -93,7 +93,7 @@ export async function createSocialAccount(
   });
 
   if (organizationId) {
-    await socialAccounts.updateOne(
+    await socialaccounts.updateOne(
       { _id: socialAccount.insertedId },
       { $set: { organizationId: new ObjectId(organizationId) } }
     );

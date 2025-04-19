@@ -244,8 +244,8 @@ export async function createSocialAccount(
       `Checking for existing Threads account for user ${userId} with Threads ID ${profile.id}`
     );
 
-    const { socialAccounts } = await getCollections();
-    const existingAccountForAnyUser = await socialAccounts.findOne({
+    const { socialaccounts } = await getCollections();
+    const existingAccountForAnyUser = await socialaccounts.findOne({
       platform: "threads",
       platformAccountId: profile.id,
     });
@@ -270,7 +270,7 @@ export async function createSocialAccount(
     // Create a new social account
     console.log(`Creating new Threads account for user ${userId}`);
 
-    const newAccount = await socialAccounts.insertOne({
+    const newAccount = await socialaccounts.insertOne({
       userId: new ObjectId(userId),
       platform: "threads",
       platformAccountId: profile.id,
@@ -295,7 +295,7 @@ export async function createSocialAccount(
     });
 
     if (organizationId) {
-      await socialAccounts.updateOne(
+      await socialaccounts.updateOne(
         { _id: newAccount.insertedId },
         { $set: { organizationId: new ObjectId(organizationId) } }
       );

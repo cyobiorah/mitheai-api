@@ -90,10 +90,10 @@ export async function getCollections() {
     organizations: db.collection("organizations"),
     teams: db.collection("teams"),
     invitations: db.collection("invitations"),
-    socialAccounts: db.collection("socialaccounts"),
-    socialPosts: db.collection("socialposts"),
+    // socialAccounts: db.collection("socialaccounts"),
+    socialposts: db.collection("socialposts"),
     contents: db.collection("contents"),
-    scheduledPosts: db.collection("scheduledposts"),
+    scheduledposts: db.collection("scheduledposts"),
     sessions: db.collection("sessions"),
     socialaccounts: db.collection("socialaccounts"),
   };
