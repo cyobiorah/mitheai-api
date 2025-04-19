@@ -1,21 +1,20 @@
-import app from "./app";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const port = process.env.PORT ?? 3001;
+import app from "./app";
+import { MongoDBConnection } from "./config/db";
 
-if (process.env.NODE_ENV === "development") {
-  try {
-    app.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
+const PORT = process.env.PORT ?? 3001;
+
+MongoDBConnection.getInstance()
+  .connect()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
     });
-  } catch (error) {
-    console.error("Failed to start server:", error);
+  })
+  .catch((err: any) => {
+    console.error("Failed to connect to database:", err);
     process.exit(1);
-  }
-} else {
-  app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
   });
-}
