@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import * as threadsService from "../../services/platforms/threads.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
+import { getCollections } from "../../config/db";
 
 // 1. Start Threads OAuth
 export const startDirectThreadsAuth = async (req: any, res: Response) => {
@@ -233,6 +234,7 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
 };
 
 export const post = async (req: any, res: any) => {
+  console.log({ req });
   try {
     const { id: accountId } = req.params;
     const { content, mediaUrls, mediaType = "TEXT" } = req.body;
@@ -344,7 +346,7 @@ export const post = async (req: any, res: any) => {
 
     // Save the post to the database for analytics and tracking
     try {
-      const { socialposts } = await require("../../config/db").getCollections();
+      const { socialposts } = await getCollections();
       await socialposts.insertOne({
         userId: account.userId,
         teamId: account.teamId ?? undefined,
@@ -360,7 +362,6 @@ export const post = async (req: any, res: any) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      console.log(`Saved Threads post to database for analytics tracking`);
     } catch (saveError) {
       // Don't fail the post if saving to the database fails
       console.error("Error saving Threads post to database:", saveError);

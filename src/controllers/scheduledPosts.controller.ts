@@ -98,3 +98,17 @@ export const deleteScheduledPost = async (req: any, res: any) => {
   await scheduledposts.deleteOne({ _id: new ObjectId(id) });
   res.json({ success: true });
 };
+
+// Get single scheduled post
+export const getSingleScheduledPost = async (req: any, res: any) => {
+  const { scheduledposts } = await getCollections();
+  const { id } = req.params;
+  const post = await scheduledposts.findOne({ _id: new ObjectId(id) });
+  if (!post) {
+    return res.status(404).json({
+      status: "error",
+      message: "Scheduled post not found",
+    });
+  }
+  res.json({ success: true, data: post });
+};

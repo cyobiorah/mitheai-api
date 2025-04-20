@@ -464,7 +464,7 @@ export async function getAccountWithValidToken(
 
     const existingAccountForAnyUser = await socialaccounts.findOne({
       platform: "threads",
-      platformAccountId: accountId,
+      _id: new ObjectId(accountId),
     });
 
     if (!existingAccountForAnyUser) {
@@ -489,7 +489,7 @@ export async function getAccountWithValidToken(
     // Get the updated account
     const updatedAccount = await socialaccounts.findOne({
       platform: "threads",
-      platformAccountId: accountId,
+      _id: new ObjectId(accountId),
     });
     if (!updatedAccount) {
       throw new Error(`Social account not found after refresh: ${accountId}`);
