@@ -497,10 +497,7 @@ export async function getAccountWithValidToken(
 
     return updatedAccount;
   } catch (error) {
-    console.error(
-      `Error getting account with valid token ${accountId}:`,
-      error
-    );
+    console.error(`Error getting account with valid token`, error);
     throw error;
   }
 }
