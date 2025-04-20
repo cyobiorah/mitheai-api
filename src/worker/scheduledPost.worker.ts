@@ -65,46 +65,44 @@ export class SocialPostWorker {
                 publishResult = await twitterService.post(contentItem);
                 break;
               }
-              case "threads": {
-                // try {
-                //   // We'll skip the explicit token check here since postContent will handle it internally
-                //   // This prevents redundant API calls and reduces the chance of timeouts
+              case "threads":
+                console.log(
+                  `Attempting to post to Threads with account ${account._id.toString()}`
+                );
 
-                //   // Post the content directly - token refresh will happen inside postContent if needed
-                //   publishResult = await threadsService.postContent(
-                //     account._id.toString(),
-                //     post.content,
-                //     post.mediaType
-                //       ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
-                //       : "TEXT",
-                //     post.mediaUrls?.[0]
-                //   );
-                // } catch (tokenError: any) {
-                //   // If token is expired, mark the account as needing reauthorization
-                //   if (tokenError.code === "TOKEN_EXPIRED") {
-                //     await socialAccountRepository.update(
-                //       account._id.toString(),
-                //       {
-                //         status: "expired",
-                //         metadata: {
-                //           ...account.metadata,
-                //           requiresReauth: true,
-                //           lastError: tokenError.message,
-                //           lastErrorTime: new Date(),
-                //         },
-                //         updatedAt: new Date(),
-                //       }
-                //     );
-                //     throw new Error(
-                //       `Threads account token has expired and requires reconnection: ${tokenError.message}`
-                //     );
-                //   }
-                //   throw tokenError;
-                // }
-                // TODO: Implement Threads postContent
-                console.log("Publishing to Threads:", publishResult);
+                try {
+                  // Post the content directly - token refresh will happen inside postContent if needed
+                  publishResult = await threadsService.postContent(
+                    account._id.toString(),
+                    post.content,
+                    post.mediaType
+                      ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
+                      : "TEXT",
+                    post.mediaUrls?.[0]
+                  );
+                } catch (tokenError: any) {
+                  // If token is expired, mark the account as needing reauthorization
+                  if (tokenError.code === "TOKEN_EXPIRED") {
+                    const { socialaccounts } = await getCollections();
+                    await socialaccounts.updateOne(
+                      { _id: account._id },
+                      {
+                        $set: {
+                          status: "expired",
+                          "metadata.requiresReauth": true,
+                          "metadata.lastError": tokenError.message,
+                          "metadata.lastErrorTime": new Date(),
+                          updatedAt: new Date(),
+                        },
+                      }
+                    );
+                    throw new Error(
+                      `Threads account token has expired and requires reconnection: ${tokenError.message}`
+                    );
+                  }
+                  throw tokenError;
+                }
                 break;
-              }
               // Add other platforms as needed
               default:
                 throw new Error(`Unsupported platform: ${account.platform}`);

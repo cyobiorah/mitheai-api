@@ -312,3 +312,354 @@ export async function createSocialAccount(
     );
   }
 }
+
+/**
+ * Post content to Threads via Threads API
+ * [https://developers.facebook.com/docs/threads/create-posts](https://developers.facebook.com/docs/threads/create-posts)
+ */
+export async function postContent(
+  accountId: string,
+  content: string,
+  mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" = "TEXT",
+  mediaUrl?: string
+): Promise<{ success: boolean; postId?: string; error?: string }> {
+  try {
+    const { socialaccounts } = await getCollections();
+    const account = await socialaccounts.findOne({
+      _id: new ObjectId(accountId),
+    });
+
+    if (!account) {
+      return {
+        success: false,
+        error: `Social account not found: ${accountId}`,
+      };
+    }
+
+    // Check/refresh token if needed (implement your refresh logic if required)
+    // For now, we assume token is valid
+
+    // Post the content based on the media type
+    if (mediaType === "TEXT") {
+      return await createTextPost(account, content);
+    } else if (mediaType === "IMAGE" && mediaUrl) {
+      return await createImagePost(account, content, mediaUrl);
+    } else if (mediaType === "VIDEO" && mediaUrl) {
+      return await createVideoPost(account, content, mediaUrl);
+    } else if (mediaType === "CAROUSEL") {
+      return {
+        success: false,
+        error: "Carousel posting is not yet supported for Threads",
+      };
+    } else {
+      return {
+        success: false,
+        error: `Invalid media type or missing media URL: ${mediaType}`,
+      };
+    }
+  } catch (error: any) {
+    // Handle OAuth/token errors
+    if (error.response?.data?.error?.type === "OAuthException") {
+      const errorCode = error.response?.data?.error?.code;
+      const errorMessage =
+        error.response?.data?.error?.message || "Unknown OAuth error";
+
+      // Update account status directly in MongoDB
+      try {
+        const { socialaccounts } = await getCollections();
+        await socialaccounts.updateOne(
+          { _id: new ObjectId(accountId) },
+          {
+            $set: {
+              status: "error",
+              "metadata.lastError": errorMessage,
+              "metadata.lastErrorTime": new Date(),
+              "metadata.requiresReauth": errorCode === 190,
+              updatedAt: new Date(),
+            },
+          }
+        );
+      } catch (updateError) {
+        console.error(
+          "Failed to update account status after OAuth error:",
+          updateError
+        );
+      }
+
+      if (errorCode === 190) {
+        return {
+          success: false,
+          error:
+            "Your Threads account token has expired. Please reconnect your account to continue posting.",
+        };
+      }
+
+      return {
+        success: false,
+        error: `Authentication error with Threads: ${errorMessage}`,
+      };
+    }
+
+    // Handle all other errors
+    console.error("Error posting to Threads:", error);
+    return {
+      success: false,
+      error: error.message || "Unknown error posting to Threads",
+    };
+  }
+}
+
+// --- Helper functions below (implement as in your codebase or import if already present) ---
+
+async function createTextPost(
+  account: any,
+  content: string
+): Promise<{ success: boolean; postId?: string; error?: string }> {
+  try {
+    const containerResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads`,
+      {
+        text: content,
+        media_type: "TEXT",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!containerResponse?.data?.id) {
+      throw new Error("Failed to create Threads media container");
+    }
+
+    const containerId = containerResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await delay(30000); // 30 seconds delay
+
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads_publish`,
+      {
+        creation_id: containerId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!publishResponse?.data?.id) {
+      throw new Error("Failed to publish Threads post");
+    }
+
+    return {
+      success: true,
+      postId: publishResponse.data.id,
+    };
+  } catch (error: any) {
+    console.error("Error creating text post on Threads:", error);
+    return {
+      success: false,
+      error: error.message || "Unknown error creating text post on Threads",
+    };
+  }
+}
+
+// Placeholder for image/video post helpers (implement as needed)
+async function createImagePost(
+  account: any,
+  content: string,
+  mediaUrl: string
+) {
+  // Implement Threads image post logic
+  return { success: false, error: "Image posting not implemented yet" };
+}
+
+async function createVideoPost(
+  account: any,
+  content: string,
+  mediaUrl: string
+) {
+  // Implement Threads video post logic
+  return { success: false, error: "Video posting not implemented yet" };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Get a Threads account with a valid token
+ */
+export async function getAccountWithValidToken(
+  accountId: string
+): Promise<any> {
+  try {
+    const { socialaccounts } = await getCollections();
+
+    const existingAccountForAnyUser = await socialaccounts.findOne({
+      platform: "threads",
+      platformAccountId: accountId,
+    });
+
+    if (!existingAccountForAnyUser) {
+      throw new Error(`Social account not found: ${accountId}`);
+    }
+
+    // Check if token refresh is needed
+    const tokenExpiresAt =
+      existingAccountForAnyUser.metadata?.tokenExpiresAt ?? null;
+
+    const shouldRefresh =
+      !tokenExpiresAt ||
+      tokenExpiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // Less than 7 days remaining
+
+    if (!shouldRefresh) {
+      console.log(`Token refresh not needed yet for account ${accountId}`);
+      return existingAccountForAnyUser;
+    }
+
+    console.log(`Refreshing token for Threads account ${accountId}`);
+
+    // Refresh the token
+    await checkAndRefreshToken(accountId);
+
+    // Get the updated account
+    const updatedAccount = await socialaccounts.findOne({
+      platform: "threads",
+      platformAccountId: accountId,
+    });
+    if (!updatedAccount) {
+      throw new Error(`Social account not found after refresh: ${accountId}`);
+    }
+
+    return updatedAccount;
+  } catch (error) {
+    console.error(
+      `Error getting account with valid token ${accountId}:`,
+      error
+    );
+    throw error;
+  }
+}
+
+/**
+ * Check if token needs to be refreshed and refresh it if necessary
+ */
+export async function checkAndRefreshToken(
+  accountId: string
+): Promise<boolean> {
+  try {
+    const { socialaccounts } = await getCollections();
+    const socialAccount = await socialaccounts.findOne({
+      _id: new ObjectId(accountId),
+    });
+
+    if (!socialAccount) {
+      throw new Error(`Social account not found: ${accountId}`);
+    }
+
+    // Check if token refresh is needed
+    const tokenExpiresAt = socialAccount.metadata?.tokenExpiresAt
+      ? new Date(socialAccount.metadata.tokenExpiresAt)
+      : null;
+
+    const now = new Date();
+    const thirtyMinutesInMs = 30 * 60 * 1000;
+    const shouldRefresh =
+      !tokenExpiresAt ||
+      tokenExpiresAt.getTime() - now.getTime() <= thirtyMinutesInMs;
+
+    if (!shouldRefresh) {
+      console.log(`Token refresh not needed yet for account ${accountId}`);
+      return true; // Token is still valid and not close to expiration
+    }
+
+    console.log(
+      `Token is expiring soon or has expired for account ${accountId}, verifying with API`
+    );
+
+    // For Threads, verify the token is still valid by making a simple API call
+    try {
+      const response = await axios.get(
+        `https://graph.threads.net/v1.0/me?fields=id&access_token=${socialAccount.accessToken}`,
+        {
+          validateStatus: (status) => status < 500,
+          timeout: 10000,
+        }
+      );
+
+      // If we got a 401, the token is invalid/expired
+      if (response.status === 401) {
+        console.log(`Token is expired (401 response) for account ${accountId}`);
+        throw new Error("TOKEN_EXPIRED");
+      }
+
+      if (!response.data?.id) {
+        console.log(
+          `Token verification failed for account ${accountId}: No user ID in response`
+        );
+        throw new Error(
+          "Failed to verify Threads token: No user ID in response"
+        );
+      }
+
+      // Token is still valid, update the expiration date (Meta long-lived tokens typically last 60 days)
+      const newExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
+
+      console.log(
+        `Token is valid for account ${accountId}, updating expiration to ${newExpiresAt.toISOString()}`
+      );
+
+      await socialaccounts.updateOne(
+        { _id: new ObjectId(accountId) },
+        {
+          $set: {
+            lastRefreshed: now,
+            "metadata.tokenExpiresAt": newExpiresAt,
+            "metadata.lastChecked": now,
+            updatedAt: now,
+          },
+        }
+      );
+
+      return true;
+    } catch (verifyError: any) {
+      // If we get a 401 or other error during verification, handle it as a refresh error
+      const isExpiredToken =
+        verifyError.message === "TOKEN_EXPIRED" ||
+        verifyError.response?.status === 401 ||
+        (verifyError.response?.data?.error?.type === "OAuthException" &&
+          verifyError.response?.data?.error?.code === 190);
+
+      await socialaccounts.updateOne(
+        { _id: new ObjectId(accountId) },
+        {
+          $set: {
+            status: isExpiredToken ? "expired" : "error",
+            "metadata.lastError":
+              verifyError.response?.data?.error?.message || verifyError.message,
+            "metadata.lastErrorTime": now,
+            "metadata.requiresReauth": isExpiredToken,
+            updatedAt: now,
+          },
+        }
+      );
+
+      if (isExpiredToken) {
+        throw new Error("TOKEN_EXPIRED");
+      } else {
+        throw new Error(
+          `Failed to verify token for Threads account: ${verifyError.message}`
+        );
+      }
+    }
+  } catch (error) {
+    console.error(`Error checking token for account ${accountId}:`, error);
+    throw error;
+  }
+}
