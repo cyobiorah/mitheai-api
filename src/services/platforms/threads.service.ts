@@ -601,7 +601,7 @@ export async function checkAndRefreshToken(
       }
     }
   } catch (error) {
-    console.error(`Error checking token for account ${accountId}:`, error);
+    console.error(`Error checking token for account:`, error);
     throw error;
   }
 }
