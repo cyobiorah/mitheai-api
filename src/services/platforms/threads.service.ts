@@ -60,12 +60,6 @@ export async function exchangeCodeForToken(
     params.append("redirect_uri", redirectUri);
 
     // Make the token exchange request to Threads
-    console.log("Exchanging code for Threads token with params:", {
-      clientId: process.env.THREADS_APP_ID ?? "",
-      hasClientSecret: !!(process.env.THREADS_APP_SECRET ?? ""),
-      redirectUri,
-      code: code.substring(0, 10) + "...", // Log partial code for debugging without exposing full code
-    });
 
     // Use the Threads-specific endpoint as per the official documentation
     const response = await axios.post(
@@ -84,12 +78,6 @@ export async function exchangeCodeForToken(
       }
     );
 
-    console.log("Threads token exchange response:", {
-      status: response.status,
-      hasAccessToken: !!response.data.access_token,
-      data: response.data,
-    });
-
     // If we have a short-lived token, exchange it for a long-lived token
     if (response.data.access_token) {
       const longLivedToken = await exchangeForLongLivedToken(
@@ -97,12 +85,8 @@ export async function exchangeCodeForToken(
       );
 
       if (longLivedToken) {
-        console.log("Successfully exchanged for long-lived Threads token");
         return longLivedToken;
       } else {
-        console.warn(
-          "Failed to get long-lived token, using short-lived token instead"
-        );
         return response.data.access_token;
       }
     }
@@ -110,11 +94,6 @@ export async function exchangeCodeForToken(
     // Return the access token
     return response.data.access_token ?? null;
   } catch (error: any) {
-    console.error(
-      "Error exchanging code for Threads token:",
-      error.response?.data ?? error.message
-    );
-
     // Log more detailed error information
     if (error.response) {
       console.error("Response status:", error.response.status);
@@ -134,8 +113,6 @@ export async function exchangeForLongLivedToken(
   shortLivedToken: string
 ): Promise<string | null> {
   try {
-    console.log("Exchanging short-lived token for long-lived Threads token");
-
     // According to Meta documentation, we need to use th_exchange_token for Threads
     // https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
     const params = new URLSearchParams();
@@ -152,18 +129,10 @@ export async function exchangeForLongLivedToken(
     });
 
     if (response.data.access_token) {
-      console.log("Long-lived token exchange successful:", {
-        hasToken: !!response.data.access_token,
-        expiresIn: response.data.expires_in ?? "unknown",
-        tokenType: response.data.token_type ?? "unknown",
-      });
-
       // Calculate token expiration date based on expires_in (in seconds)
       const expiresInSeconds = response.data.expires_in ?? 5184000; // Default to 60 days if not provided
       const expirationDate = new Date();
       expirationDate.setSeconds(expirationDate.getSeconds() + expiresInSeconds);
-
-      console.log(`Token will expire at: ${expirationDate.toISOString()}`);
 
       // Store the token expiration date for later use in checkAndRefreshToken
       lastTokenExpirationDate = expirationDate;
@@ -204,11 +173,8 @@ export async function getUserProfile(accessToken: string) {
     );
 
     if (!response.data?.id) {
-      console.error("Invalid user profile data:", response.data);
       throw new Error("Failed to fetch valid Threads user profile");
     }
-
-    console.log("Fetched Threads user profile:", response.data);
 
     // Store the token in the result
     return {
@@ -240,10 +206,6 @@ export async function createSocialAccount(
       throw new Error("Invalid profile data");
     }
 
-    console.log(
-      `Checking for existing Threads account for user ${userId} with Threads ID ${profile.id}`
-    );
-
     const { socialaccounts } = await getCollections();
     const existingAccountForAnyUser = await socialaccounts.findOne({
       platform: "threads",
@@ -268,7 +230,6 @@ export async function createSocialAccount(
       new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
     // Create a new social account
-    console.log(`Creating new Threads account for user ${userId}`);
 
     const newAccount = await socialaccounts.insertOne({
       userId: new ObjectId(userId),
@@ -362,7 +323,7 @@ export async function postContent(
     if (error.response?.data?.error?.type === "OAuthException") {
       const errorCode = error.response?.data?.error?.code;
       const errorMessage =
-        error.response?.data?.error?.message || "Unknown OAuth error";
+        error.response?.data?.error?.message ?? "Unknown OAuth error";
 
       // Update account status directly in MongoDB
       try {
@@ -404,7 +365,7 @@ export async function postContent(
     console.error("Error posting to Threads:", error);
     return {
       success: false,
-      error: error.message || "Unknown error posting to Threads",
+      error: error.message ?? "Unknown error posting to Threads",
     };
   }
 }
@@ -464,7 +425,7 @@ async function createTextPost(
     console.error("Error creating text post on Threads:", error);
     return {
       success: false,
-      error: error.message || "Unknown error creating text post on Threads",
+      error: error.message ?? "Unknown error creating text post on Threads",
     };
   }
 }
@@ -519,11 +480,8 @@ export async function getAccountWithValidToken(
       tokenExpiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // Less than 7 days remaining
 
     if (!shouldRefresh) {
-      console.log(`Token refresh not needed yet for account ${accountId}`);
       return existingAccountForAnyUser;
     }
-
-    console.log(`Refreshing token for Threads account ${accountId}`);
 
     // Refresh the token
     await checkAndRefreshToken(accountId);
@@ -575,13 +533,8 @@ export async function checkAndRefreshToken(
       tokenExpiresAt.getTime() - now.getTime() <= thirtyMinutesInMs;
 
     if (!shouldRefresh) {
-      console.log(`Token refresh not needed yet for account ${accountId}`);
       return true; // Token is still valid and not close to expiration
     }
-
-    console.log(
-      `Token is expiring soon or has expired for account ${accountId}, verifying with API`
-    );
 
     // For Threads, verify the token is still valid by making a simple API call
     try {
@@ -595,14 +548,10 @@ export async function checkAndRefreshToken(
 
       // If we got a 401, the token is invalid/expired
       if (response.status === 401) {
-        console.log(`Token is expired (401 response) for account ${accountId}`);
         throw new Error("TOKEN_EXPIRED");
       }
 
       if (!response.data?.id) {
-        console.log(
-          `Token verification failed for account ${accountId}: No user ID in response`
-        );
         throw new Error(
           "Failed to verify Threads token: No user ID in response"
         );
@@ -610,10 +559,6 @@ export async function checkAndRefreshToken(
 
       // Token is still valid, update the expiration date (Meta long-lived tokens typically last 60 days)
       const newExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
-
-      console.log(
-        `Token is valid for account ${accountId}, updating expiration to ${newExpiresAt.toISOString()}`
-      );
 
       await socialaccounts.updateOne(
         { _id: new ObjectId(accountId) },
@@ -642,7 +587,7 @@ export async function checkAndRefreshToken(
           $set: {
             status: isExpiredToken ? "expired" : "error",
             "metadata.lastError":
-              verifyError.response?.data?.error?.message || verifyError.message,
+              verifyError.response?.data?.error?.message ?? verifyError.message,
             "metadata.lastErrorTime": now,
             "metadata.requiresReauth": isExpiredToken,
             updatedAt: now,

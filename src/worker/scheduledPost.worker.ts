@@ -163,7 +163,7 @@ export class SocialPostWorker {
             allFailed = false;
           } catch (err: any) {
             platform.status = "failed";
-            platform.errorMessage = err.message || "Failed to publish";
+            platform.errorMessage = err.message ?? "Failed to publish";
             allSuccessful = false;
           }
         }
@@ -188,7 +188,7 @@ export class SocialPostWorker {
           {
             $set: {
               status: "failed",
-              errorMessage: err.message,
+              errorMessage: err.message ?? "Failed to process scheduled post",
               updatedAt: new Date(),
             },
           }
