@@ -48,17 +48,6 @@ export const startDirectLinkedinAuth = async (req: any, res: Response) => {
 // 2. LinkedIn OAuth Callback
 export const handleLinkedinCallback = async (req: Request, res: Response) => {
   try {
-    console.log("LinkedIn callback received:", {
-      query: {
-        state: req.query.state || "Missing",
-        code: req.query.code ? "Present" : "Missing",
-        error: req.query.error || "None",
-      },
-      session: req.session ? "Present" : "None",
-      user: req.session?.user ? "Present" : "None",
-      cookies: req.headers.cookie ? "Present" : "None",
-    });
-
     // Check for error in the callback
     if (req.query.error) {
       console.error("LinkedIn OAuth error:", req.query);

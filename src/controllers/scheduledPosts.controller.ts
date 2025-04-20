@@ -31,7 +31,6 @@ export const createScheduledPost = async (req: any, res: any) => {
       mediaType,
       timezone,
     } = req.body;
-    console.log({ user: req.user });
     const userId = req.user?.id;
 
     if (!userId) {
@@ -86,7 +85,11 @@ export const createScheduledPost = async (req: any, res: any) => {
 export const updateScheduledPost = async (req: any, res: any) => {
   const { scheduledposts } = await getCollections();
   const { id } = req.params;
-  const updates = { ...req.body, updatedAt: new Date() };
+  const updates = {
+    ...req.body,
+    updatedAt: new Date(),
+    scheduledFor: toUTC(new Date(req.body.scheduledFor)),
+  };
   await scheduledposts.updateOne({ _id: new ObjectId(id) }, { $set: updates });
   res.json({ success: true });
 };
@@ -97,4 +100,18 @@ export const deleteScheduledPost = async (req: any, res: any) => {
   const { id } = req.params;
   await scheduledposts.deleteOne({ _id: new ObjectId(id) });
   res.json({ success: true });
+};
+
+// Get single scheduled post
+export const getSingleScheduledPost = async (req: any, res: any) => {
+  const { scheduledposts } = await getCollections();
+  const { id } = req.params;
+  const post = await scheduledposts.findOne({ _id: new ObjectId(id) });
+  if (!post) {
+    return res.status(404).json({
+      status: "error",
+      message: "Scheduled post not found",
+    });
+  }
+  res.json({ success: true, data: post });
 };

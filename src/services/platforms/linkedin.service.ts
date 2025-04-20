@@ -153,9 +153,6 @@ export async function handleLinkedInCallback(req: any, res: any) {
     // Get the user profile from LinkedIn
     const profile = await getUserProfile(tokenData.access_token);
 
-    console.log({ profile });
-    console.log({ tokenData });
-
     try {
       // Create the social account
       await createSocialAccount(req.user, profile, tokenData);
