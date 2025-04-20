@@ -24,6 +24,9 @@ declare module "express-session" {
 
 const app = express();
 
+// Trust first proxy (Vercel)
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: function (origin, callback) {

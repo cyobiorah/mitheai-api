@@ -5,6 +5,11 @@ import { requireJwtAuth } from "../middlewares/auth";
 const router = Router();
 
 router.get("/", requireJwtAuth, scheduledPostsController.listScheduledPosts);
+router.get(
+  "/:id",
+  requireJwtAuth,
+  scheduledPostsController.getSingleScheduledPost
+);
 router.post("/", requireJwtAuth, scheduledPostsController.createScheduledPost);
 router.put(
   "/:id",
