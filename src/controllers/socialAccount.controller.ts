@@ -84,10 +84,8 @@ export const unlinkSocialAccount = async (
   next: NextFunction
 ) => {
   try {
-    console.log({ req });
     const { id } = req.params;
     const userId = (req as any).user.id!;
-    console.log({ userId });
     const deleted = await socialAccountService.unlinkAccount(id, userId);
     if (!deleted) return res.status(403).json({ message: "Forbidden" });
     res.json({ message: "Social account unlinked successfully" });

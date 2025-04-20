@@ -234,7 +234,6 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
 };
 
 export const post = async (req: any, res: any) => {
-  console.log({ req });
   try {
     const { id: accountId } = req.params;
     const { content, mediaUrls, mediaType = "TEXT" } = req.body;
@@ -356,7 +355,7 @@ export const post = async (req: any, res: any) => {
         content,
         mediaType: mediaType ?? "TEXT",
         mediaUrls,
-        postId: postResult.postId,
+        postId: postResult.id,
         status: "published",
         publishedDate: new Date(),
         createdAt: new Date(),
@@ -370,7 +369,7 @@ export const post = async (req: any, res: any) => {
     // Return the post details
     return res.status(200).json({
       status: "success",
-      data: postResult.postId,
+      data: postResult.id,
     });
   } catch (error: any) {
     console.error("Unexpected error in Threads post:", error);

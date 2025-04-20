@@ -7,8 +7,6 @@ const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
 // Debug: Log API key (first 10 chars only for security)
 const apiKey = process.env.BREVO_API_KEY ?? "";
-console.log("Using Brevo API Key (first 10 chars):", apiKey.substring(0, 10));
-console.log("Template ID:", process.env.BREVO_INVITATION_TEMPLATE_ID);
 
 apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, apiKey);
 
@@ -33,19 +31,10 @@ export const sendInvitationEmail = async ({
   invitationToken,
   organizationName,
 }: SendInvitationEmailParams) => {
-  console.log("Preparing to send invitation email to:", to);
-
   // Remove trailing slash from WEBAPP_URL if present
   const baseUrl =
     process.env.WEBAPP_URL?.replace(/\/$/, "") ?? "http://localhost:5173";
   const invitationLink = `${baseUrl}/accept-invitation?token=${invitationToken}`;
-
-  console.log("Email parameters:", {
-    firstName,
-    lastName,
-    organizationName,
-    invitationLink,
-  });
 
   const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
@@ -60,9 +49,7 @@ export const sendInvitationEmail = async ({
   };
 
   try {
-    console.log("Sending email with template ID:", sendSmtpEmail.templateId);
     const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log("Email sent successfully. Message ID:", result.body.messageId);
     return result;
   } catch (error) {
     console.error("Error sending email:", error);
@@ -85,20 +72,10 @@ export const sendWelcomeEmail = async ({
   userType,
   organizationName,
 }: SendWelcomeEmailParams) => {
-  console.log("Preparing to send welcome email to:", to);
-
   // Remove trailing slash from WEBAPP_URL if present
   const baseUrl =
     process.env.WEBAPP_URL?.replace(/\/$/, "") ?? "http://localhost:5173";
   const loginLink = `${baseUrl}/login`;
-
-  console.log("Welcome email parameters:", {
-    firstName,
-    lastName,
-    userType,
-    organizationName,
-    loginLink,
-  });
 
   const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
@@ -115,10 +92,6 @@ export const sendWelcomeEmail = async ({
   };
 
   try {
-    console.log(
-      "Sending welcome email with template ID:",
-      sendSmtpEmail.templateId
-    );
     const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
     return result;
   } catch (error) {
