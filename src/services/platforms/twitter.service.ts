@@ -50,11 +50,6 @@ export const exchangeCodeForTokensAndProfile = async (code: string) => {
   };
 };
 
-export const publish = async (post: any, account: any) => {
-  // Placeholder for future publishing logic
-  console.log("publish initiated");
-};
-
 export async function createSocialAccount(
   userId: string,
   profile: any,
@@ -158,7 +153,6 @@ export async function createSocialAccount(
 }
 
 export async function post(content: any): Promise<{ id: string }> {
-  console.log({ content });
   if (
     !content.metadata.socialPost?.platform ||
     content.metadata.socialPost.platform !== "twitter"

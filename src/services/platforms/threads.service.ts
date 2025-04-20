@@ -283,7 +283,7 @@ export async function postContent(
   content: string,
   mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" = "TEXT",
   mediaUrl?: string
-): Promise<{ success: boolean; postId?: string; error?: string }> {
+): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const { socialaccounts } = await getCollections();
     const account = await socialaccounts.findOne({
@@ -296,9 +296,6 @@ export async function postContent(
         error: `Social account not found: ${accountId}`,
       };
     }
-
-    // Check/refresh token if needed (implement your refresh logic if required)
-    // For now, we assume token is valid
 
     // Post the content based on the media type
     if (mediaType === "TEXT") {
@@ -375,7 +372,7 @@ export async function postContent(
 async function createTextPost(
   account: any,
   content: string
-): Promise<{ success: boolean; postId?: string; error?: string }> {
+): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const containerResponse = await axios.post(
       `https://graph.threads.net/v1.0/${account.platformAccountId}/threads`,
@@ -419,7 +416,7 @@ async function createTextPost(
 
     return {
       success: true,
-      postId: publishResponse.data.id,
+      id: publishResponse.data.id,
     };
   } catch (error: any) {
     console.error("Error creating text post on Threads:", error);

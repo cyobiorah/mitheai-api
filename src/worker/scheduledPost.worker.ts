@@ -1,6 +1,7 @@
 import { getCollections } from "../config/db";
 import * as twitterService from "../services/platforms/twitter.service";
 import * as threadsService from "../services/platforms/threads.service";
+import { ObjectId } from "mongodb";
 // import other platform services as needed
 
 export class SocialPostWorker {
@@ -8,10 +9,12 @@ export class SocialPostWorker {
     const now = new Date();
     const { scheduledposts, socialposts, socialaccounts } =
       await getCollections();
-    const postsCursor = scheduledposts.find({
-      status: { $in: ["scheduled", "processing"] },
+
+    const filter = {
+      status: { $in: ["scheduled"] },
       scheduledFor: { $lte: now },
-    });
+    };
+    const postsCursor = scheduledposts.find(filter);
 
     for await (const post of postsCursor) {
       try {
@@ -26,10 +29,15 @@ export class SocialPostWorker {
         for (const platform of post.platforms) {
           try {
             const account = await socialaccounts.findOne({
-              _id: platform.accountId,
+              _id: new ObjectId(platform.accountId),
             });
-            if (!account)
+            if (!account) {
+              console.error(`Account not found in socialaccounts collection:`, {
+                accountId: platform.accountId,
+                postId: post._id,
+              });
               throw new Error(`Account not found: ${platform.accountId}`);
+            }
 
             let publishResult: any;
             switch (account.platform) {
@@ -49,7 +57,6 @@ export class SocialPostWorker {
                       platform: account.platform,
                       scheduledTime: post.scheduledFor,
                       accountId: platform.accountId,
-                      // Add any additional fields as needed
                     },
                   },
                   status: "pending",
@@ -66,10 +73,6 @@ export class SocialPostWorker {
                 break;
               }
               case "threads":
-                console.log(
-                  `Attempting to post to Threads with account ${account._id.toString()}`
-                );
-
                 try {
                   // Post the content directly - token refresh will happen inside postContent if needed
                   publishResult = await threadsService.postContent(
@@ -149,12 +152,19 @@ export class SocialPostWorker {
 
             await socialposts.insertOne({
               ...publishResult,
+              content: post.content,
+              mediaType: post.mediaType,
               platform: account.platform,
               socialAccountId: account._id,
               postId,
               postUrl,
               publishedDate: new Date(),
               status: "published",
+              userId: post.createdBy,
+              teamId: post.teamId ? new ObjectId(post.teamId) : undefined,
+              organizationId: post.organizationId
+                ? new ObjectId(post.organizationId)
+                : undefined,
               scheduledPostId: post._id,
               createdAt: new Date(),
               updatedAt: new Date(),
