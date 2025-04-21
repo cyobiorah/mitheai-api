@@ -18,7 +18,11 @@ router.get(
   socialAccountController.getSocialAccountsByOrganizationId
 );
 router.post("/", requireJwtAuth, socialAccountController.linkSocialAccount);
-// router.get("/", requireJwtAuth, socialAccountController.listSocialAccounts);
+router.get(
+  "/:userId",
+  requireJwtAuth,
+  socialAccountController.listSocialAccounts
+);
 router.patch(
   "/:id",
   requireJwtAuth,
@@ -28,6 +32,13 @@ router.delete(
   "/disconnect/:id",
   requireJwtAuth,
   socialAccountController.unlinkSocialAccount
+);
+
+// Personal Account
+router.get(
+  "/:accountId",
+  requireJwtAuth,
+  socialAccountController.getPersonalAccount
 );
 
 export default router;

@@ -26,3 +26,15 @@ export const deletePost = async (req: any, res: any) => {
   const result = await socialposts.deleteOne({ _id: new ObjectId(id) });
   res.json({ data: result });
 };
+
+// Get personal posts
+export const getPersonalPosts = async (req: any, res: any) => {
+  const { accountId } = req.params;
+  const { socialposts } = await getCollections();
+  const posts = await socialposts
+    .find({ accountId: new ObjectId(accountId) })
+    .sort({ createdAt: -1 })
+    .toArray();
+  res.json({ data: posts, total: posts.length });
+};
+
