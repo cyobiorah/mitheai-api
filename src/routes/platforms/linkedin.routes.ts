@@ -12,4 +12,6 @@ router.get(
 
 router.get("/callback", linkedinController.handleLinkedinCallback);
 
+router.post("/:accountId/post", requireJwtAuth, linkedinController.post);
+
 export default router;
