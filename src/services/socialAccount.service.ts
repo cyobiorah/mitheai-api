@@ -71,19 +71,8 @@ export const unlinkAccount = async (id: string, userId: string) => {
   return true;
 };
 
-// Declare Content Payload
-export interface ContentPayload {
-  userId: string;
-  organizationId?: string;
-  teamId?: string;
-  platform: string;
-  platformAccountId: string;
-  accountName: string;
-  accountId: string;
-  accountType: string;
-  content: string;
-  mediaType: string;
-  scheduledFor?: Date;
-}
-
-
+// Get personal account
+export const getPersonalAccount = async (accountId: string) => {
+  const { socialaccounts } = await getCollections();
+  return socialaccounts.findOne({ _id: new ObjectId(accountId) });
+};
