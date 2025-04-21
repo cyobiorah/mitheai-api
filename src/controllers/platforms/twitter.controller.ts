@@ -204,14 +204,6 @@ export const handleTwitterCallback = async (req: any, res: any) => {
     }
 
     const tokenData = (await tokenResponse.json()) as TwitterTokenResponse;
-    console.log("Token exchange successful:", {
-      accessToken: tokenData.access_token
-        ? tokenData.access_token.substring(0, 10) + "..."
-        : "none",
-      refreshToken: tokenData.refresh_token
-        ? tokenData.refresh_token.substring(0, 10) + "..."
-        : "none",
-    });
 
     // Get Twitter profile
     const profileResponse = await fetch(
@@ -254,50 +246,6 @@ export const handleTwitterCallback = async (req: any, res: any) => {
         organizationId,
         currentTeamId
       );
-
-      // Post welcome tweet if needed
-      //   if (!skipWelcome && !account.welcomeTweetSent) {
-      //     try {
-      //       console.log("Posting welcome tweet...");
-      //       // await twitterService.postWelcomeTweet(
-      //       //   account._id,
-      //       //   profileData.data.name
-      //       // );
-
-      //       // Use the controller's social account service
-      //       const socialAccountService = controller.getSocialAccountService();
-      //       if (!socialAccountService) {
-      //         throw new Error("Failed to get SocialAccountService instance");
-      //       }
-
-      //       // Mark that we've sent the welcome tweet
-      //       await socialAccountService.update(account._id.toString(), {
-      //         welcomeTweetSent: true,
-      //       });
-
-      //       console.log("Welcome tweet posted successfully");
-      //     } catch (tweetError: any) {
-      //       // Handle duplicate content errors
-      //       if (
-      //         tweetError.message &&
-      //         (tweetError.message.includes("duplicate content") ||
-      //           tweetError.message.includes("duplicate status") ||
-      //           tweetError.message.includes("already tweeted"))
-      //       ) {
-      //         console.log("Welcome tweet already posted (duplicate content)");
-
-      //         // Still mark the account as having sent a welcome tweet
-      //         const socialAccountService = controller.getSocialAccountService();
-      //         if (socialAccountService) {
-      //           await socialAccountService.update(account._id.toString(), {
-      //             welcomeTweetSent: true,
-      //           });
-      //         }
-      //       } else {
-      //         console.error("Failed to post welcome tweet:", tweetError);
-      //       }
-      //     }
-      //   }
 
       // Clear the code verifier from session as it's no longer needed
       if (req.user) {

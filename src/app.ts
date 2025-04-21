@@ -24,11 +24,15 @@ declare module "express-session" {
 
 const app = express();
 
+// Trust first proxy (Vercel)
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, origin);
+      if (origin.includes("vercel.app")) return callback(null, origin);
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

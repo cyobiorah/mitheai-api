@@ -11,5 +11,6 @@ router.get(
 );
 router.get("/connect", threadsController.startThreadsConnect);
 router.get("/callback", threadsController.handleThreadsCallback);
+router.post("/:id/post", requireJwtAuth, threadsController.post);
 
 export default router;

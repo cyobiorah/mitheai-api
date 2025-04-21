@@ -64,7 +64,6 @@ export const listAccountsByOrganizationId = async (organizationId: string) => {
 
 // Unlink (delete) a social account (ownership enforced)
 export const unlinkAccount = async (id: string, userId: string) => {
-  console.log("Unlinking social account:", id, userId);
   const { socialaccounts } = await getCollections();
   const account = await socialaccounts.findOne({ _id: new ObjectId(id) });
   if (!account || String(account.userId) !== userId) return false;
@@ -72,19 +71,8 @@ export const unlinkAccount = async (id: string, userId: string) => {
   return true;
 };
 
-// Declare Content Payload
-export interface ContentPayload {
-  userId: string;
-  organizationId?: string;
-  teamId?: string;
-  platform: string;
-  platformAccountId: string;
-  accountName: string;
-  accountId: string;
-  accountType: string;
-  content: string;
-  mediaType: string;
-  scheduledFor?: Date;
-}
-
-
+// Get personal account
+export const getPersonalAccount = async (accountId: string) => {
+  const { socialaccounts } = await getCollections();
+  return socialaccounts.findOne({ _id: new ObjectId(accountId) });
+};

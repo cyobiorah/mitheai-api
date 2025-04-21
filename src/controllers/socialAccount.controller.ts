@@ -40,11 +40,10 @@ export const listSocialAccounts = async (
   res: Response,
   next: NextFunction
 ) => {
+  const { userId } = req.params;
   try {
     const accounts = await socialAccountService.listAccounts({
-      userId: (req as any).user.id!,
-      organizationId: (req as any).user.organizationId!,
-      teamId: req.query.teamId ? (req.query.teamId as string) : undefined,
+      userId,
     });
     res.json(accounts);
   } catch (err) {
@@ -84,10 +83,8 @@ export const unlinkSocialAccount = async (
   next: NextFunction
 ) => {
   try {
-    console.log({ req });
     const { id } = req.params;
     const userId = (req as any).user.id!;
-    console.log({ userId });
     const deleted = await socialAccountService.unlinkAccount(id, userId);
     if (!deleted) return res.status(403).json({ message: "Forbidden" });
     res.json({ message: "Social account unlinked successfully" });
@@ -108,6 +105,22 @@ export const getSocialAccountsByOrganizationId = async (
       organizationId
     );
     res.json(accounts);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get personal account
+export const getPersonalAccount = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { accountId } = req.params;
+    const account = await socialAccountService.getPersonalAccount(accountId);
+    if (!account) return res.status(404).json({ message: "Account not found" });
+    res.json(account);
   } catch (err) {
     next(err);
   }

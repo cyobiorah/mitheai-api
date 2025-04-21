@@ -153,9 +153,6 @@ export async function handleLinkedInCallback(req: any, res: any) {
     // Get the user profile from LinkedIn
     const profile = await getUserProfile(tokenData.access_token);
 
-    console.log({ profile });
-    console.log({ tokenData });
-
     try {
       // Create the social account
       await createSocialAccount(req.user, profile, tokenData);
@@ -264,4 +261,120 @@ export async function getUserProfile(accessToken: string): Promise<any> {
       { originalError: error.response?.data }
     );
   }
+}
+
+export async function postContent(
+  accountId: string,
+  message: string
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const { socialaccounts, socialposts } = await getCollections();
+
+  // Get the LinkedIn account
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(accountId),
+  });
+  if (!account) {
+    return { success: false, error: "LinkedIn account not found" };
+  }
+
+  // Check token expiry
+  if (account.tokenExpiry && new Date(account.tokenExpiry) < new Date()) {
+    return {
+      success: false,
+      error: "LinkedIn access token has expired and needs to be reconnected",
+    };
+  }
+
+  // Determine author URN
+  const authorUrn =
+    account.accountType === "business"
+      ? `urn:li:organization:${account.platformAccountId}`
+      : `urn:li:person:${account.platformAccountId}`;
+
+  // Prepare payload
+  const postPayload = {
+    author: authorUrn,
+    commentary: message,
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: [],
+    },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false,
+  };
+
+  // Make API request
+  let response;
+  try {
+    response = await axios.post(
+      "https://api.linkedin.com/rest/posts",
+      postPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+          "LinkedIn-Version": "202405",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error: any) {
+    // Handle LinkedIn API errors
+    if (error.response) {
+      if (error.response.status === 401) {
+        return {
+          success: false,
+          error:
+            "LinkedIn authentication failed. Please reconnect your account.",
+        };
+      }
+      if (error.response.status === 403) {
+        return {
+          success: false,
+          error: "Not authorized to post to this LinkedIn account.",
+        };
+      }
+      return {
+        success: false,
+        error: `LinkedIn API error: ${JSON.stringify(error.response.data)}`,
+      };
+    }
+    return {
+      success: false,
+      error: error.message || "Unknown error posting to LinkedIn",
+    };
+  }
+
+  // Get post ID from LinkedIn response
+  const postId = response.headers["x-restli-id"];
+
+  // Save post to socialposts collection
+  try {
+    await socialposts.insertOne({
+      userId: account.userId,
+      teamId: account.teamId ? new ObjectId(account.teamId) : undefined,
+      organizationId: account.organizationId
+        ? new ObjectId(account.organizationId)
+        : undefined,
+      socialAccountId: account._id,
+      platform: "linkedin",
+      content: message,
+      mediaType: "TEXT",
+      postId,
+      status: "published",
+      publishedDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  } catch (saveError) {
+    // Log error but do not fail the post
+    console.error("Error saving LinkedIn post to database:", saveError);
+  }
+
+  return {
+    success: true,
+    id: postId,
+  };
 }

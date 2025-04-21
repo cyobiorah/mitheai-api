@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import * as linkedinService from "../../services/platforms/linkedin.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID!;
 const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET!;
@@ -48,17 +50,6 @@ export const startDirectLinkedinAuth = async (req: any, res: Response) => {
 // 2. LinkedIn OAuth Callback
 export const handleLinkedinCallback = async (req: Request, res: Response) => {
   try {
-    console.log("LinkedIn callback received:", {
-      query: {
-        state: req.query.state || "Missing",
-        code: req.query.code ? "Present" : "Missing",
-        error: req.query.error || "None",
-      },
-      session: req.session ? "Present" : "None",
-      user: req.session?.user ? "Present" : "None",
-      cookies: req.headers.cookie ? "Present" : "None",
-    });
-
     // Check for error in the callback
     if (req.query.error) {
       console.error("LinkedIn OAuth error:", req.query);
@@ -121,5 +112,95 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
         error.message ?? "unknown_error"
       }`
     );
+  }
+};
+
+export const post = async (req: Request, res: Response) => {
+  try {
+    const { accountId } = req.params;
+    const { content } = req.body;
+    const userId = (req as any).user?.id;
+
+    // Validate request
+    if (!accountId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Account ID is required",
+      });
+    }
+
+    if (!content) {
+      return res.status(400).json({
+        status: "error",
+        message: "Content is required",
+      });
+    }
+
+    // Validate user
+    if (!userId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
+      });
+    }
+
+    // Validate account
+
+    try {
+      const { socialaccounts } = await getCollections();
+      const account = await socialaccounts.findOne({
+        _id: new ObjectId(accountId),
+      });
+      if (!account) {
+        return res.status(404).json({
+          status: "error",
+          message: "Account not found",
+        });
+      }
+
+      if (account.userId.toString() !== userId) {
+        return res.status(401).json({
+          status: "error",
+          message: "Unauthorized to post to this account",
+        });
+      }
+
+      const result = await linkedinService.postContent(accountId, content);
+
+      return res.status(200).json({
+        status: "success",
+        message: "Successfully posted to LinkedIn",
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error posting to LinkedIn:", error);
+
+      // Handle specific error types
+      if (error.code === "TOKEN_EXPIRED") {
+        return res.status(401).json({
+          status: "error",
+          message:
+            "LinkedIn access token has expired. Please reconnect your account.",
+        });
+      }
+
+      if (error.code === "ACCOUNT_NOT_FOUND") {
+        return res.status(404).json({
+          status: "error",
+          message: "LinkedIn account not found",
+        });
+      }
+
+      return res.status(500).json({
+        status: "error",
+        message: error.message ?? "Failed to post to LinkedIn",
+      });
+    }
+  } catch (error) {
+    console.error("Unexpected error in LinkedIn post route:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "An unexpected error occurred",
+    });
   }
 };
