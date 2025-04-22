@@ -1,26 +1,29 @@
-import express from 'express';
-import {
-  createTeam,
-  getTeams,
-  getTeam,
-  updateTeam,
-  deleteTeam,
-  addTeamMember,
-  removeTeamMember,
-} from '../controllers/teams.controller';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { Router } from "express";
+import * as teamsController from "../controllers/teams.controller";
+import { requireJwtAuth } from "../middlewares/auth";
 
-const router = express.Router();
+const router = Router();
 
-// Team routes
-router.post('/', authenticateToken, createTeam);
-router.get('/organization/:organizationId', authenticateToken, getTeams);
-router.get('/:teamId', authenticateToken, getTeam);
-router.put('/:teamId', authenticateToken, updateTeam);
-router.delete('/:teamId', authenticateToken, deleteTeam);
+router.post("/", requireJwtAuth, teamsController.createTeam);
+router.get(
+  "/organization/:organizationId",
+  requireJwtAuth,
+  teamsController.getTeams
+);
+router.get("/:id", requireJwtAuth, teamsController.getTeam);
+router.patch("/:id", requireJwtAuth, teamsController.updateTeam);
+router.delete("/:id", requireJwtAuth, teamsController.deleteTeam);
 
-// Team member routes
-router.post('/:teamId/members/:userId', authenticateToken, addTeamMember);
-router.delete('/:teamId/members/:userId', authenticateToken, removeTeamMember);
+// Member management
+router.post(
+  "/:id/members/:userId",
+  requireJwtAuth,
+  teamsController.addTeamMember
+);
+router.delete(
+  "/:id/members/:userId",
+  requireJwtAuth,
+  teamsController.removeTeamMember
+);
 
 export default router;

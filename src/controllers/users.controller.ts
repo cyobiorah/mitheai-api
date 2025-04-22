@@ -1,196 +1,85 @@
-import { Request, Response } from "express";
-import { collections } from "../config/firebase";
-import { Organization } from "../types";
-import type { User } from "../types"; // Keep this import for now
-import { sendInvitationEmail } from "../services/email.service";
-import { v4 as uuidv4 } from "uuid";
+import { Request, Response, NextFunction } from "express";
+import * as usersService from "../services/users.service";
+import {
+  validateUpdateProfile,
+  validateChangePassword,
+} from "../validation/user.validation";
+import { getCollections } from "../config/db";
+import { ObjectId } from "mongodb";
 
-export const getUsers = async (req: Request, res: Response) => {
+export const getMe = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { organizationId } = req.params;
+    const userId = (req as any).user.id!;
+    const user = await usersService.getUserById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (!organizationId) {
-      return res.status(400).json({
-        error: "Missing required parameter: organizationId",
+    // Fetch org and teams if they exist
+    const { organizations, teams } = await getCollections();
+    let organization = null;
+    let userTeams: any[] = [];
+
+    if (user.organizationId) {
+      organization = await organizations.findOne({
+        _id: new ObjectId(user.organizationId),
       });
     }
 
-    const usersSnapshot = await collections.users
-      .where("organizationId", "==", organizationId)
-      .get();
+    if (
+      user.teamIds &&
+      Array.isArray(user.teamIds) &&
+      user.teamIds.length > 0
+    ) {
+      userTeams = await teams
+        .find({ _id: { $in: user.teamIds.map((id: any) => new ObjectId(id)) } })
+        .toArray();
+    }
 
-    const users = usersSnapshot.docs.map((doc) => ({
-      uid: doc.id,
-      ...doc.data(),
-    }));
-
-    res.json(users);
-  } catch (error) {
-    console.error("Error getting users:", error);
-    res.status(500).json({ error: "Failed to get users" });
+    res.json({ user, organization, teams: userTeams });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getUser = async (req: Request, res: Response) => {
+export const updateMe = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { uid } = req.params;
+    const userId = (req as any).user.id!;
+    const { error } = validateUpdateProfile(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    if (!uid) {
-      return res.status(400).json({
-        error: "Missing required parameter: uid",
-      });
-    }
-
-    const userDoc = await collections.users.doc(uid).get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({
-      uid: userDoc.id,  
-      ...userDoc.data(),
-    });
-  } catch (error) {
-    console.error("Error getting user:", error);
-    res.status(500).json({ error: "Failed to get user" });
+    const updatedUser = await usersService.updateUserProfile(userId, req.body);
+    res.json(updatedUser);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const inviteUser = async (req: Request, res: Response) => {
+export const changePassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { email, firstName, lastName, role, organizationId } = req.body;
+    const userId = (req as any).user.id!;
+    const { error } = validateChangePassword(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    if (!email || !firstName || !lastName || !role || !organizationId) {
-      return res.status(400).json({
-        error:
-          "Missing required fields: email, firstName, lastName, role, organizationId",
-      });
-    }
-
-    // Check if user already exists
-    const existingUsers = await collections.users
-      .where("email", "==", email)
-      .where("organizationId", "==", organizationId)
-      .get();
-
-    if (!existingUsers.empty) {
-      return res.status(400).json({
-        error: "User with this email already exists in the organization",
-      });
-    }
-
-    // Get organization for email
-    console.log("Fetching organization:", organizationId);
-    const orgDoc = await collections.organizations.doc(organizationId).get();
-    if (!orgDoc.exists) {
-      console.error("Organization not found:", organizationId);
-      return res.status(404).json({ error: "Organization not found" });
-    }
-    const organization = orgDoc.data() as Organization;
-    console.log("Found organization:", organization);
-
-    // Generate invitation token
-    const token = uuidv4();
-
-    // Create new user
-    const newUser: User = {
-      uid: email, // Using email as temporary uid until user accepts invitation
-      email,
-      firstName,
-      lastName,
-      role,
-      organizationId,
-      teamIds: [],
-      status: "pending",
-      invitationToken: token,
-      settings: {
-        permissions: [],
-        theme: "light",
-        notifications: [],
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Add user to database
-    await collections.users.doc(newUser.uid).set(newUser);
-
-    // Send invitation email
-    console.log(
-      "Sending invitation email with organization:",
-      organization.name
+    await usersService.changeUserPassword(
+      userId,
+      req.body.currentPassword,
+      req.body.newPassword
     );
-    try {
-      await sendInvitationEmail({
-        to: email,
-        firstName,
-        lastName,
-        invitationToken: token,
-        organizationName: organization.name,
-      });
-      console.log("Invitation email sent successfully");
-    } catch (emailError) {
-      console.error("Error sending invitation email:", emailError);
-      // Continue since user is created
-    }
-
-    res.status(201).json(newUser);
-  } catch (error) {
-    console.error("Error inviting user:", error);
-    res.status(500).json({ error: "Failed to invite user" });
-  }
-};
-
-export const updateUser = async (req: Request, res: Response) => {
-  try {
-    const { uid } = req.params;
-
-    if (!uid) {
-      return res.status(400).json({
-        error: "Missing required parameter: uid",
-      });
-    }
-
-    const userRef = collections.users.doc(uid);
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    await userRef.update(req.body);
-
-    const updatedUser = await userRef.get();
-    res.json({
-      uid: updatedUser.id,  
-      ...updatedUser.data(),
-    });
-  } catch (error) {
-    console.error("Error updating user:", error);
-    res.status(500).json({ error: "Failed to update user" });
-  }
-};
-
-export const deleteUser = async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({
-        error: "Missing required parameter: userId",
-      });
-    }
-
-    const userDoc = await collections.users.doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    await collections.users.doc(userId).delete();
-    res.json({ message: "User deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    res.status(500).json({ error: "Failed to delete user" });
+    res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    next(err);
   }
 };

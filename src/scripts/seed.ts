@@ -1,171 +1,193 @@
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
-import * as admin from "firebase-admin";
-import {
-  organizations,
-  teams,
-  users,
-  roles,
-  permissions,
-  features,
-} from "./seedData";
-import * as dotenv from "dotenv";
+import { getCollections } from "../config/db";
+import dotenv from "dotenv";
+import bcrypt from "bcrypt";
+import { ObjectId } from "mongodb";
 
 dotenv.config();
 
-// Initialize Firebase Admin
-const app = admin.initializeApp({
-  credential: admin.credential.cert({
-    type: process.env.FIREBASE_TYPE,
-    project_id: process.env.FIREBASE_PROJECT_ID,
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: process.env.FIREBASE_AUTH_URI,
-    token_uri: process.env.FIREBASE_TOKEN_URI,
-    auth_provider_x509_cert_url: process.env.FIREBASE_AUTH_PROVIDER_CERT_URL,
-    client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL,
-  } as admin.ServiceAccount),
-  projectId: process.env.FIREBASE_PROJECT_ID,
-});
+async function seed() {
+  // Get all collections
+  const {
+    users,
+    organizations,
+    teams,
+    // socialAccounts,
+    contents,
+    socialposts,
+    scheduledposts,
+    invitations,
+    sessions,
+    socialaccounts,
+  } = await getCollections();
 
-const auth = getAuth(app);
-const db = getFirestore(app);
+  // Clear existing data
+  await Promise.all([
+    users.deleteMany({}),
+    organizations.deleteMany({}),
+    teams.deleteMany({}),
+    // socialAccounts.deleteMany({}),
+    contents.deleteMany({}),
+    socialposts.deleteMany({}),
+    scheduledposts.deleteMany({}),
+    invitations.deleteMany({}),
+    sessions.deleteMany({}),
+    socialaccounts.deleteMany({}),
+  ]);
+  console.log("🧹 Cleared existing data");
 
-async function seedData() {
-  try {
-    console.log("Starting seed process...");
+  // Common password for all users
+  const password = await bcrypt.hash("Password@12", 10);
 
-    // Create collections in batch
-    const batch = db.batch();
+  // Seed admin user
+  const adminUserId = new ObjectId();
+  const orgOwnerId = new ObjectId();
+  const individualUserId = new ObjectId();
 
-    // Seed organizations
-    console.log("Seeding organizations...");
-    for (const [id, org] of Object.entries(organizations)) {
-      const ref = db.collection("organizations").doc(id);
-      batch.set(ref, {
-        ...org,
-        settings: {
-          ...org.settings,
-          permissions: org.settings.permissions || [], // Ensure permissions exist
-        },
-      });
-    }
+  await users.insertMany([
+    {
+      _id: adminUserId,
+      email: "admin@mitheai.com",
+      password,
+      firstName: "Admin",
+      lastName: "User",
+      role: "super_admin",
+      status: "active",
+      userType: "organization",
+    },
+    {
+      _id: orgOwnerId,
+      email: "owner@mitheai.com",
+      password,
+      firstName: "Org",
+      lastName: "Owner",
+      role: "org_owner",
+      status: "active",
+      userType: "organization",
+    },
+    {
+      _id: individualUserId,
+      email: "individual@mitheai.com",
+      password,
+      firstName: "Indi",
+      lastName: "Vidual",
+      role: "user",
+      status: "active",
+      userType: "individual",
+    },
+  ]);
 
-    // Seed teams
-    console.log("Seeding teams...");
-    for (const [id, team] of Object.entries(teams)) {
-      const ref = db.collection("teams").doc(id);
-      batch.set(ref, {
-        ...team,
-        memberIds: team.memberIds || [], // Ensure memberIds exist
-        settings: {
-          ...team.settings,
-          permissions: team.settings.permissions || [], // Ensure permissions exist
-        },
-      });
-    }
+  // Seed organization
+  const orgId = new ObjectId();
+  await organizations.insertOne({
+    _id: orgId,
+    name: "TestOrg",
+    ownerId: orgOwnerId,
+    memberIds: [orgOwnerId, adminUserId],
+  });
 
-    // Seed roles
-    console.log("Seeding roles...");
-    for (const [id, role] of Object.entries(roles)) {
-      const ref = db.collection("roles").doc(id);
-      batch.set(ref, role);
-    }
+  // Seed team
+  const teamId = new ObjectId();
+  await teams.insertOne({
+    _id: teamId,
+    name: "TestTeam",
+    organizationId: orgId,
+    memberIds: [orgOwnerId, adminUserId],
+  });
 
-    // Seed permissions
-    console.log("Seeding permissions...");
-    for (const [id, permission] of Object.entries(permissions)) {
-      const ref = db.collection("permissions").doc(id);
-      batch.set(ref, permission);
-    }
+  // Update users with org/team references
+  await users.updateMany(
+    { _id: { $in: [orgOwnerId, adminUserId] } },
+    { $set: { organizationId: orgId, teamIds: [teamId] } }
+  );
 
-    // Seed features
-    console.log("Seeding features...");
-    for (const [id, feature] of Object.entries(features)) {
-      const ref = db.collection("features").doc(id);
-      batch.set(ref, feature);
-    }
+  // Seed content
+  await contents.insertMany([
+    {
+      userId: orgOwnerId,
+      organizationId: orgId,
+      teamId: teamId,
+      title: "Welcome to MitheAI",
+      body: "This is a sample content item.",
+      status: "draft",
+    },
+    {
+      userId: individualUserId,
+      title: "Individual's First Content",
+      body: "This is content created by an individual user.",
+      status: "draft",
+    },
+  ]);
 
-    // Commit the batch
-    await batch.commit();
+  // Seed social accounts
+  await socialaccounts.insertMany([
+    {
+      userId: orgOwnerId,
+      organizationId: orgId,
+      teamId: teamId,
+      platform: "twitter",
+      platformAccountId: "123456789",
+      accountType: "personal",
+      accountName: "Test Twitter",
+      accountId: "test-twitter-id",
+      accessToken: "fake-access-token",
+      lastRefreshed: new Date(),
+      status: "active",
+      ownershipLevel: "user",
+    },
+    {
+      userId: individualUserId,
+      platform: "twitter",
+      platformAccountId: "indiv-twitter-123",
+      accountType: "personal",
+      accountName: "Indi Twitter",
+      accountId: "indiv-twitter-id",
+      accessToken: "fake-access-token",
+      lastRefreshed: new Date(),
+      status: "active",
+      ownershipLevel: "user",
+    },
+  ]);
 
-    // Create users in Firebase Auth and Firestore
-    console.log("Seeding users...");
-    for (const [id, user] of Object.entries(users)) {
-      try {
-        // Create user in Firebase Auth
-        await auth.createUser({
-          uid: user.uid, // Use uid instead of id
-          email: user.email,
-          password: "password123", // Default password for testing
-          displayName: `${user.firstName} ${user.lastName}`,
-        });
+  // Seed social post
+  await socialposts.insertOne({
+    userId: orgOwnerId,
+    organizationId: orgId,
+    teamId: teamId,
+    content: "Hello world! #mitheai",
+    platforms: [
+      {
+        platform: "twitter",
+        accountId: "test-twitter-id",
+        status: "pending",
+      },
+    ],
+    status: "draft",
+  });
 
-        // Create user document in Firestore
-        await db
-          .collection("users")
-          .doc(user.uid)
-          .set({
-            // Use uid for document ID
-            ...user,
-            settings: {
-              ...user.settings,
-              notifications: user.settings.notifications || [], // Ensure notifications array exists
-            },
-            status: user.status || "active", // Ensure status exists
-          });
+  // Seed scheduled post
+  await scheduledposts.insertOne({
+    userId: orgOwnerId,
+    organizationId: orgId,
+    teamId: teamId,
+    content: "Scheduled post content",
+    scheduledFor: new Date(Date.now() + 3600 * 1000),
+    timezone: "UTC",
+    status: "scheduled",
+    mediaType: "text",
+    platforms: [
+      {
+        platformId: "twitter",
+        accountId: "test-twitter-id",
+        status: "pending",
+      },
+    ],
+  });
 
-        console.log(`Created user: ${user.email}`);
-      } catch (error: any) {
-        if (error.code === "auth/email-already-exists") {
-          console.log(`User ${user.email} already exists, updating...`);
-          await db
-            .collection("users")
-            .doc(user.uid)
-            .set({
-              // Use uid for document ID
-              ...user,
-              settings: {
-                ...user.settings,
-                notifications: user.settings.notifications || [],
-              },
-              status: user.status || "active",
-            });
-        } else {
-          console.error(`Error creating user ${user.email}:`, error);
-        }
-      }
-    }
-
-    console.log("Seed completed successfully!");
-    console.log("\nTest account credentials:");
-    console.log("Super Admin:", {
-      email: "admin@mitheia.com",
-      password: "password123",
-    });
-    console.log("Org Owner:", {
-      email: "owner@test.com",
-      password: "password123",
-    });
-    console.log("Team Manager:", {
-      email: "manager@test.com",
-      password: "password123",
-    });
-    console.log("Regular User:", {
-      email: "user@test.com",
-      password: "password123",
-    });
-    console.log("Small Org Owner:", {
-      email: "owner@small.com",
-      password: "password123",
-    });
-  } catch (error) {
-    console.error("Error seeding data:", error);
-    process.exit(1);
-  }
+  console.log("🌱 Seeding complete!");
+  process.exit(0);
 }
 
-// Run the seed function
-seedData().then(() => process.exit(0));
+seed().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

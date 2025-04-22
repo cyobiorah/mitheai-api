@@ -1,275 +1,141 @@
-import { Request, Response } from 'express';
-import { collections, db } from '../config/firebase';
-import { Team, User } from '../types';
-import { DocumentData } from 'firebase-admin/firestore';
+import { Request, Response, NextFunction } from "express";
+import * as teamsService from "../services/teams.service";
+import {
+  validateTeamCreate,
+  validateTeamUpdate,
+} from "../validation/team.validation";
 
-export const createTeam = async (req: Request, res: Response) => {
+// Create a new team
+export const createTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { name, organizationId } = req.body;
+    const { error } = validateTeamCreate(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    // Validate required fields
-    if (!name || !organizationId) {
-      return res.status(400).json({
-        error: 'Missing required fields: name, organizationId',
-      });
-    }
-
-    // Create new team
-    const newTeam: Team = {
-      id: '', // Will be set after creation
-      name,
-      organizationId,
-      memberIds: [],
-      settings: {
-        permissions: ['basic'],
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const teamRef = await collections.teams.add(newTeam);
-    newTeam.id = teamRef.id;
-    await teamRef.update({ id: teamRef.id });
-
-    res.status(201).json(newTeam);
-  } catch (error) {
-    console.error('Error creating team:', error);
-    res.status(500).json({ error: 'Failed to create team' });
+    const userId = (req as any).user.id!;
+    const team = await teamsService.createTeam({
+      ...req.body,
+      creatorId: userId,
+    });
+    res.status(201).json(team);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getTeams = async (req: Request, res: Response) => {
+// Get all teams for an organization
+export const getTeams = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { organizationId } = req.params;
-
-    if (!organizationId) {
-      return res.status(400).json({
-        error: 'Missing required parameter: organizationId',
-      });
-    }
-
-    const teamsSnapshot = await collections.teams
-      .where('organizationId', '==', organizationId)
-      .get();
-
-    const teams = teamsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
+    const teams = await teamsService.getTeamsByOrganization(organizationId);
     res.json(teams);
-  } catch (error) {
-    console.error('Error getting teams:', error);
-    res.status(500).json({ error: 'Failed to get teams' });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getTeam = async (req: Request, res: Response) => {
+// Get a single team by ID
+export const getTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
-
-    if (!id) {
-      return res.status(400).json({
-        error: 'Missing required parameter: id',
-      });
-    }
-
-    const team = await collections.teams.doc(id).get();
-
-    if (!team.exists) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-
-    res.json({
-      id: team.id,
-      ...team.data(),
-    });
-  } catch (error) {
-    console.error('Error getting team:', error);
-    res.status(500).json({ error: 'Failed to get team' });
+    const team = await teamsService.getTeamById(id);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+    res.json(team);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updateTeam = async (req: Request, res: Response) => {
+// Update a team
+export const updateTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { error } = validateTeamUpdate(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    if (!id) {
-      return res.status(400).json({
-        error: 'Missing required parameter: id',
-      });
-    }
-
-    await collections.teams.doc(id).update({
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    });
-
-    const updatedTeam = await collections.teams.doc(id).get();
-
-    res.json({
-      id: updatedTeam.id,
-      ...updatedTeam.data(),
-    });
-  } catch (error) {
-    console.error('Error updating team:', error);
-    res.status(500).json({ error: 'Failed to update team' });
+    const userId = (req as any).user.id!;
+    const updated = await teamsService.updateTeam(id, req.body, userId);
+    if (!updated) return res.status(403).json({ message: "Forbidden" });
+    res.json(updated);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const deleteTeam = async (req: Request, res: Response) => {
+// Delete a team
+export const deleteTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
-
-    if (!id) {
-      return res.status(400).json({
-        error: 'Missing required parameter: id',
-      });
-    }
-
-    const team = await collections.teams.doc(id).get();
-
-    if (!team.exists) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-
-    const teamData = team.data() as Team;
-
-    // Remove team from all members
-    const batch = db.batch();
-    const membersSnapshot = await collections.users
-      .where('teamIds', 'array-contains', id)
-      .get();
-
-    membersSnapshot.docs.forEach(doc => {
-      const user = doc.data() as User;
-      const updatedTeamIds = user.teamIds?.filter(teamId => teamId !== id) || [];
-      batch.update(doc.ref, { teamIds: updatedTeamIds });
-    });
-
-    // Delete the team
-    batch.delete(team.ref);
-
-    await batch.commit();
-
-    res.json({ message: 'Team deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting team:', error);
-    res.status(500).json({ error: 'Failed to delete team' });
+    const userId = (req as any).user.id!;
+    const deleted = await teamsService.deleteTeam(id, userId);
+    if (!deleted) return res.status(403).json({ message: "Forbidden" });
+    res.json({ message: "Team deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const addTeamMember = async (req: Request, res: Response) => {
+// Add a member to a team
+export const addTeamMember = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { teamId, userId } = req.params;
-
-    if (!teamId || !userId) {
-      return res.status(400).json({
-        error: 'Missing required parameters: teamId, userId',
-      });
-    }
-
-    // First try to find user by uid (Firebase Auth ID)
-    const usersSnapshot = await collections.users
-      .where('uid', '==', userId)
-      .limit(1)
-      .get();
-
-    if (usersSnapshot.empty) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const userDoc = usersSnapshot.docs[0];
-    const teamRef = collections.teams.doc(teamId);
-    const team = await teamRef.get();
-
-    if (!team.exists) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-
-    const teamData = team.data() as Team;
-    const userData = userDoc.data() as User;
-
-    if (teamData.memberIds.includes(userId)) {
-      return res.status(400).json({ error: 'User is already a member of this team' });
-    }
-
-    const batch = db.batch();
-
-    // Add user to team using uid
-    batch.update(teamRef, {
-      memberIds: [...teamData.memberIds, userId],
-      updatedAt: new Date().toISOString(),
-    });
-
-    // Add team to user
-    batch.update(userDoc.ref, {
-      teamIds: [...(userData.teamIds || []), teamId],
-      updatedAt: new Date().toISOString(),
-    });
-
-    await batch.commit();
-
-    res.json({ message: 'Member added successfully' });
-  } catch (error) {
-    console.error('Error adding team member:', error);
-    res.status(500).json({ error: 'Failed to add team member' });
+    const { id, userId } = req.params;
+    const actingUserId = (req as any).user.userId!;
+    const updatedTeam = await teamsService.addTeamMember(
+      id,
+      userId,
+      actingUserId
+    );
+    if (!updatedTeam)
+      return res.status(403).json({ message: "Forbidden or already a member" });
+    res.json(updatedTeam);
+  } catch (err) {
+    next(err);
   }
 };
 
-export const removeTeamMember = async (req: Request, res: Response) => {
+// Remove a member from a team
+export const removeTeamMember = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { teamId, userId } = req.params;
-
-    if (!teamId || !userId) {
-      return res.status(400).json({
-        error: 'Missing required parameters: teamId, userId',
-      });
-    }
-
-    const teamRef = collections.teams.doc(teamId);
-    const userRef = collections.users.doc(userId);
-
-    const [team, user] = await Promise.all([
-      teamRef.get(),
-      userRef.get(),
-    ]);
-
-    if (!team.exists) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-
-    if (!user.exists) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const teamData = team.data() as Team;
-    const userData = user.data() as User;
-
-    if (!teamData.memberIds.includes(userId)) {
-      return res.status(400).json({ error: 'User is not a member of this team' });
-    }
-
-    const batch = db.batch();
-
-    // Remove user from team
-    batch.update(teamRef, {
-      memberIds: teamData.memberIds.filter(id => id !== userId),
-      updatedAt: new Date().toISOString(),
-    });
-
-    // Remove team from user
-    batch.update(userRef, {
-      teamIds: (userData.teamIds || []).filter(id => id !== teamId),
-      updatedAt: new Date().toISOString(),
-    });
-
-    await batch.commit();
-
-    res.json({ message: 'Member removed successfully' });
-  } catch (error) {
-    console.error('Error removing team member:', error);
-    res.status(500).json({ error: 'Failed to remove team member' });
+    const { id, userId } = req.params;
+    const actingUserId = (req as any).user.userId!;
+    const updatedTeam = await teamsService.removeTeamMember(
+      id,
+      userId,
+      actingUserId
+    );
+    if (!updatedTeam)
+      return res.status(403).json({ message: "Forbidden or not a member" });
+    res.json(updatedTeam);
+  } catch (err) {
+    next(err);
   }
 };

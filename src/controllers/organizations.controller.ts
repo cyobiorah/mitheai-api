@@ -1,45 +1,92 @@
-import { Request, Response } from 'express';
-import { collections } from '../config/firebase';
-import { Organization } from '../types';
+import { Request, Response, NextFunction } from "express";
+import * as organizationsService from "../services/organizations.service";
+import * as usersService from "../services/users.service";
+import {
+  validateOrganizationCreate,
+  validateOrganizationUpdate,
+} from "../validation/organization.validation";
 
-export const createOrUpdateOrganization = async (req: Request, res: Response) => {
+export const createOrganization = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { id, name, description, type } = req.body;
+    const { error } = validateOrganizationCreate(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    if (!id || !name || !type) {
-      return res.status(400).json({
-        error: 'Missing required fields: id, name, type',
-      });
-    }
+    // Only authenticated users can create organizations
+    const ownerId = (req as any).user.userId!;
+    const org = await organizationsService.createOrganization({
+      ...req.body,
+      ownerId,
+    });
+    res.status(201).json(org);
+  } catch (err) {
+    next(err);
+  }
+};
 
-    // Validate organization type
-    if (!['enterprise', 'business', 'startup'].includes(type)) {
-      return res.status(400).json({
-        error: 'Invalid organization type. Must be one of: enterprise, business, startup',
-      });
-    }
+export const updateOrganization = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const orgId = req.params.id;
+    const { error } = validateOrganizationUpdate(req.body);
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
-    const organization: Organization = {
-      id,
-      name,
-      description: description || undefined,  // Only set if provided
-      type,
-      settings: {
-        permissions: [],
-        maxTeams: type === 'enterprise' ? 999 : type === 'business' ? 10 : 3,
-        maxUsers: type === 'enterprise' ? 999 : type === 'business' ? 50 : 10,
-        features: [],
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Only owner/admin can update
+    const userId = (req as any).user.id!;
+    const updated = await organizationsService.updateOrganization(
+      orgId,
+      req.body,
+      userId
+    );
+    if (!updated) return res.status(403).json({ message: "Forbidden" });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
 
-    // Use set with merge to update if exists, create if doesn't
-    await collections.organizations.doc(id).set(organization, { merge: true });
+export const getOrganization = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const orgId = req.params.id;
+    const org = await organizationsService.getOrganizationById(orgId);
+    if (!org)
+      return res.status(404).json({ message: "Organization not found" });
 
-    res.status(201).json(organization);
-  } catch (error) {
-    console.error('Error creating/updating organization:', error);
-    res.status(500).json({ error: 'Failed to create/update organization' });
+    // Fetch org members
+    const members = await usersService.findUsersByOrganizationId(orgId);
+    res.json({ organization: org, members });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteOrganization = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const orgId = req.params.id;
+    const userId = (req as any).user.id!;
+    const deleted = await organizationsService.deleteOrganization(
+      orgId,
+      userId
+    );
+    if (!deleted) return res.status(403).json({ message: "Forbidden" });
+    res.json({ message: "Organization deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };

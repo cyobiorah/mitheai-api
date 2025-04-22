@@ -1,187 +1,140 @@
-import { Request, Response } from 'express';
-import { LoginRequest, RegisterRequest } from '../types/auth';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
-import { db, auth, collections } from '../config/firebase';
+import { Request, Response } from "express";
+import * as AuthService from "../services/auth.service";
+import * as UsersService from "../services/users.service";
+import * as OrgsService from "../services/organizations.service";
+import * as TeamsService from "../services/teams.service";
+import { validationError } from "../validation/validationError";
 
-// TODO: Replace with database
-const users: any[] = [];
-const organizations: any[] = [];
-
-export const login = async (req: Request<{}, {}, LoginRequest>, res: Response) => {
+// REGISTER
+export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-
-    // Find user in Firestore
-    const userSnapshot = await collections.users
-      .where('email', '==', email)
-      .limit(1)
-      .get();
-
-    if (userSnapshot.empty) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
-    const userDoc = userSnapshot.docs[0];
-    const userData = userDoc.data();
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, userData.password);
-    if (!isValidPassword) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
-    // Create Firebase custom token
-    const customToken = await auth.createCustomToken(userDoc.id);
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: userDoc.id, email: userData.email },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = userData;
-
-    res.json({
-      token,
-      firebaseToken: customToken,
-      user: {
-        id: userDoc.id,
-        ...userWithoutPassword,
-      },
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-export const register = async (req: Request<{}, {}, RegisterRequest>, res: Response) => {
-  try {
-    const { firstName, lastName, email, password, organizationName } = req.body;
-
-    // Check if user already exists
-    const existingUser = await collections.users
-      .where('email', '==', email)
-      .limit(1)
-      .get();
-
-    if (!existingUser.empty) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create organization in Firestore
-    const organizationRef = collections.organizations.doc();
-    const organizationData = {
-      name: organizationName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Create user in Firestore
-    const userRef = collections.users.doc();
-    const userData = {
-      email,
+    const {
       firstName,
       lastName,
-      password: hashedPassword,
-      organizationId: organizationRef.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Create default team
-    const teamRef = collections.teams.doc();
-    const teamData = {
-      name: 'Default Team',
-      organizationId: organizationRef.id,
-      createdBy: userRef.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      members: [{
-        userId: userRef.id,
-        role: 'owner',
-        joinedAt: new Date().toISOString()
-      }],
-      settings: {
-        isDefault: true,
-        canDelete: false
-      }
-    };
-
-    // Create Firebase Auth user
-    const firebaseUser = await auth.createUser({
       email,
       password,
-      displayName: `${firstName} ${lastName}`,
-    });
+      userType,
+      role,
+      organizationName,
+    } = req.body;
 
-    // Batch write to Firestore
-    const batch = db.batch();
-    batch.set(organizationRef, {
-      ...organizationData,
-      ownerId: userRef.id,
-    });
-    batch.set(userRef, userData);
-    batch.set(teamRef, teamData);
-    await batch.commit();
+    // Check if user already exists
+    const existingUser = await UsersService.findUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
 
-    // Create Firebase custom token
-    const customToken = await auth.createCustomToken(userRef.id);
+    // Organization user registration
+    if (userType === "organization") {
+      if (!organizationName) {
+        return res
+          .status(400)
+          .json({ message: "Organization name is required" });
+      }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: userRef.id, email },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
+      // Create user
+      const orgUser = await AuthService.registerUser({
+        firstName,
+        lastName,
+        email,
+        password,
+        role: role ?? "org_owner",
+        userType: "organization",
+        status: "active",
+      });
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = userData;
+      // Create organization
+      const organization = await OrgsService.createOrganization({
+        name: organizationName,
+        ownerId: orgUser._id,
+        memberIds: [orgUser._id],
+      });
 
-    res.status(201).json({
-      token,
-      firebaseToken: customToken,
-      user: {
-        id: userRef.id,
-        ...userWithoutPassword,
-      },
-      organization: organizationData,
-      team: teamData,
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+      // Create default team
+      const team = await TeamsService.createTeam({
+        name: "Default Team",
+        organizationId: organization._id,
+        creatorId: orgUser._id,
+      });
+
+      // Update user with org/team IDs
+      await UsersService.updateUser(orgUser._id, {
+        organizationId: organization._id,
+        teamIds: [team._id],
+      });
+
+      // Remove password before sending
+      const { password: _, ...userWithoutPassword } = {
+        ...orgUser,
+        organizationId: organization._id,
+        teamIds: [team._id],
+      };
+
+      // Generate JWT
+      const token = AuthService.generateJWT(userWithoutPassword);
+
+      return res.status(201).json({
+        token,
+        user: userWithoutPassword,
+        organization,
+        team,
+      });
+    } else {
+      // Individual user registration
+      const individualUser = await AuthService.registerUser({
+        firstName,
+        lastName,
+        email,
+        password,
+        role: role ?? "user",
+        userType: "individual",
+        status: "active",
+      });
+
+      const { password: _, ...userWithoutPassword } = individualUser;
+      const token = AuthService.generateJWT(userWithoutPassword);
+
+      return res.status(201).json({
+        token,
+        user: userWithoutPassword,
+      });
+    }
+  } catch (error: any) {
+    if (error.name === "ValidationError") {
+      const errors = validationError(error);
+      return res.status(400).json({ errors, message: "Validation error" });
+    }
+    console.error("Registration error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const me = async (req: Request, res: Response) => {
+// LOGIN
+export const login = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const user = await AuthService.authenticateUser(
+      req.body.email,
+      req.body.password
+    );
 
-    // Get user from Firestore
-    const userDoc = await collections.users.doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(401).json({ message: 'User not found' });
+    // Remove password before sending
+    const { password: _, ...userWithoutPassword } = user;
+    const token = AuthService.generateJWT(userWithoutPassword);
+
+    // Fetch org and teams if they exist
+    let organization = null;
+    let teams: any[] = [];
+
+    if (user.organizationId) {
+      organization = await OrgsService.getOrganizationById(user.organizationId);
     }
 
-    const userData = userDoc.data()!;
+    if (user.teamIds && user.teamIds.length > 0) {
+      teams = await TeamsService.getTeamsByIds(user.teamIds);
+    }
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = userData;
-
-    res.json({
-      id: userDoc.id,
-      ...userWithoutPassword,
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.json({ user: userWithoutPassword, token, organization, teams });
+  } catch (err: any) {
+    res.status(401).json({ message: err.message });
   }
 };

@@ -1,0 +1,396 @@
+{
+    "info": {
+      "name": "MitheAI API",
+      "_postman_id": "mitheai-api-collection-uuid",
+      "description": "Comprehensive collection for MitheAI API. Update as endpoints evolve.",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "name": "Auth",
+        "item": [
+          {
+            "name": "Register (Individual)",
+            "request": {
+              "method": "POST",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"email\": \"user@mitheai.com\",\n  \"password\": \"Password@12\",\n  \"userType\": \"individual\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+            }
+          },
+          {
+            "name": "Register (Organization)",
+            "request": {
+              "method": "POST",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"firstName\": \"Org\",\n  \"lastName\": \"Owner\",\n  \"email\": \"owner@mitheai.com\",\n  \"password\": \"Password@12\",\n  \"userType\": \"organization\",\n  \"organizationName\": \"TestOrg\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+            }
+          },
+          {
+            "name": "Login",
+            "request": {
+              "method": "POST",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"email\": \"user@mitheai.com\",\n  \"password\": \"Password@12\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Users",
+        "item": [
+          {
+            "name": "Get Me (Profile)",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] }
+            }
+          },
+          {
+            "name": "Update Profile",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"User\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] }
+            }
+          },
+          {
+            "name": "Change Password",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"currentPassword\": \"Password@12\",\n  \"newPassword\": \"NewPassword@12\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/users/change-password", "host": ["{{base_url}}"], "path": ["users", "change-password"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Organizations",
+        "item": [
+          {
+            "name": "Get Organization",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/organizations/{{organizationId}}", "host": ["{{base_url}}"], "path": ["organizations", "{{organizationId}}"] }
+            }
+          },
+          {
+            "name": "Update Organization",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"name\": \"Updated Org Name\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/organizations/{{organizationId}}", "host": ["{{base_url}}"], "path": ["organizations", "{{organizationId}}"] }
+            }
+          },
+          {
+            "name": "Invite Member",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"email\": \"newmember@mitheai.com\",\n  \"role\": \"user\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/organizations/{{organizationId}}/invite", "host": ["{{base_url}}"], "path": ["organizations", "{{organizationId}}", "invite"] }
+            }
+          },
+          {
+            "name": "Remove Member",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/organizations/{{organizationId}}/members/{{userId}}", "host": ["{{base_url}}"], "path": ["organizations", "{{organizationId}}", "members", "{{userId}}"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Teams",
+        "item": [
+          {
+            "name": "Create Team",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"name\": \"Marketing Team\",\n  \"organizationId\": \"{{organizationId}}\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/teams", "host": ["{{base_url}}"], "path": ["teams"] }
+            }
+          },
+          {
+            "name": "List Teams",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/teams?organizationId={{organizationId}}", "host": ["{{base_url}}"], "path": ["teams"], "query": [{ "key": "organizationId", "value": "{{organizationId}}" }] }
+            }
+          },
+          {
+            "name": "Add Member to Team",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"userId\": \"{{userId}}\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/teams/{{teamId}}/members", "host": ["{{base_url}}"], "path": ["teams", "{{teamId}}", "members"] }
+            }
+          },
+          {
+            "name": "Remove Member from Team",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/teams/{{teamId}}/members/{{userId}}", "host": ["{{base_url}}"], "path": ["teams", "{{teamId}}", "members", "{{userId}}"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Social Accounts",
+        "item": [
+          {
+            "name": "Link Social Account",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"platform\": \"twitter\",\n  \"platformAccountId\": \"123456789\",\n  \"accountType\": \"personal\",\n  \"accountName\": \"Test Twitter\",\n  \"accessToken\": \"fake-access-token\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/socialAccounts", "host": ["{{base_url}}"], "path": ["socialAccounts"] }
+            }
+          },
+          {
+            "name": "Unlink Social Account",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/socialAccounts/{{socialAccountId}}", "host": ["{{base_url}}"], "path": ["socialAccounts", "{{socialAccountId}}"] }
+            }
+          },
+          {
+            "name": "List Social Accounts",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/socialAccounts", "host": ["{{base_url}}"], "path": ["socialAccounts"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Content",
+        "item": [
+          {
+            "name": "Create Content",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"title\": \"Sample Content\",\n  \"body\": \"This is a sample content item.\",\n  \"status\": \"draft\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/content", "host": ["{{base_url}}"], "path": ["content"] }
+            }
+          },
+          {
+            "name": "Get My Content",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/content", "host": ["{{base_url}}"], "path": ["content"] }
+            }
+          },
+          {
+            "name": "Update Content",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"title\": \"Updated Title\",\n  \"body\": \"Updated content body.\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/content/{{contentId}}", "host": ["{{base_url}}"], "path": ["content", "{{contentId}}"] }
+            }
+          },
+          {
+            "name": "Delete Content",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/content/{{contentId}}", "host": ["{{base_url}}"], "path": ["content", "{{contentId}}"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Social Posts",
+        "item": [
+          {
+            "name": "Create Social Post",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"content\": \"Hello world! #mitheai\",\n  \"platforms\": [\n    { \"platform\": \"twitter\", \"accountId\": \"test-twitter-id\" }\n  ],\n  \"status\": \"draft\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/socialPosts", "host": ["{{base_url}}"], "path": ["socialPosts"] }
+            }
+          },
+          {
+            "name": "List Social Posts",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/socialPosts", "host": ["{{base_url}}"], "path": ["socialPosts"] }
+            }
+          },
+          {
+            "name": "Update Social Post",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"content\": \"Updated social post content.\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/socialPosts/{{socialPostId}}", "host": ["{{base_url}}"], "path": ["socialPosts", "{{socialPostId}}"] }
+            }
+          },
+          {
+            "name": "Delete Social Post",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/socialPosts/{{socialPostId}}", "host": ["{{base_url}}"], "path": ["socialPosts", "{{socialPostId}}"] }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Scheduled Posts",
+        "item": [
+          {
+            "name": "Create Scheduled Post",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"content\": \"Scheduled post content\",\n  \"scheduledFor\": \"2025-04-17T10:00:00Z\",\n  \"timezone\": \"UTC\",\n  \"status\": \"scheduled\",\n  \"mediaType\": \"text\",\n  \"platforms\": [\n    { \"platformId\": \"twitter\", \"accountId\": \"test-twitter-id\", \"status\": \"pending\" }\n  ]\n}"
+              },
+              "url": { "raw": "{{base_url}}/scheduledPosts", "host": ["{{base_url}}"], "path": ["scheduledPosts"] }
+            }
+          },
+          {
+            "name": "List Scheduled Posts",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/scheduledPosts", "host": ["{{base_url}}"], "path": ["scheduledPosts"] }
+            }
+          },
+          {
+            "name": "Update Scheduled Post",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{token}}" },
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"status\": \"cancelled\"\n}"
+              },
+              "url": { "raw": "{{base_url}}/scheduledPosts/{{scheduledPostId}}", "host": ["{{base_url}}"], "path": ["scheduledPosts", "{{scheduledPostId}}"] }
+            }
+          },
+          {
+            "name": "Delete Scheduled Post",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+              "url": { "raw": "{{base_url}}/scheduledPosts/{{scheduledPostId}}", "host": ["{{base_url}}"], "path": ["scheduledPosts", "{{scheduledPostId}}"] }
+            }
+          }
+        ]
+      }
+    ],
+    "variable": [
+      { "key": "base_url", "value": "http://localhost:3001/api" },
+      { "key": "token", "value": "" },
+      { "key": "organizationId", "value": "" },
+      { "key": "teamId", "value": "" },
+      { "key": "userId", "value": "" },
+      { "key": "socialAccountId", "value": "" },
+      { "key": "contentId", "value": "" },
+      { "key": "socialPostId", "value": "" },
+      { "key": "scheduledPostId", "value": "" }
+    ]
+  }
