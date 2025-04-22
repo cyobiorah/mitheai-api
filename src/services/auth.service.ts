@@ -46,6 +46,6 @@ export const generateJWT: (user: any) => string = (user: any) => {
       ...(user.userType === "organization" && { teamIds: user.teamIds }),
     },
     process.env.JWT_SECRET!,
-    { expiresIn: "7d" }
+    { expiresIn: "90d" }
   );
 };
