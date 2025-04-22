@@ -3,6 +3,7 @@ import * as invitationsService from "../services/invitations.service";
 import { sendInvitationEmail } from "../services/email.service";
 import bcrypt from "bcrypt";
 import { getCollections } from "../config/db";
+import { ObjectId } from "mongodb";
 
 export const createInvitation = async (req: Request, res: Response) => {
   const { email, firstName, lastName, role, organizationId, teamIds } =
@@ -20,6 +21,13 @@ export const createInvitation = async (req: Request, res: Response) => {
 
   const password = await bcrypt.hash("Password@12", 10);
 
+  // Get org for email
+  const { organizations } = await getCollections();
+  const org = await organizations.findOne({
+    _id: new ObjectId(organizationId),
+  });
+  if (!org) return res.status(404).json({ error: "Organization not found" });
+
   // Create a pending user
   await users.insertOne({
     email,
@@ -32,11 +40,6 @@ export const createInvitation = async (req: Request, res: Response) => {
     userType: "organization",
     password, // Password will be set during invitation acceptance
   });
-
-  // Get org for email
-  const { organizations } = await getCollections();
-  const org = await organizations.findOne({ _id: organizationId });
-  if (!org) return res.status(404).json({ error: "Organization not found" });
 
   // Create invitation
   const invitation = await invitationsService.create({
