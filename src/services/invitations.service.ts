@@ -64,32 +64,13 @@ export const accept = async (
     throw new Error("Invitation has expired");
   }
 
-  //   // Check if user already exists
-  //   const existing = await User.findOne({
-  //     email: invitation.email,
-  //     organizationId: invitation.organizationId,
-  //   });
-  //   if (existing) throw new Error("User already exists");
+  console.log({ invitation });
 
-  //   // Create user
-  //   const hashedPassword = await bcrypt.hash(password, 10);
-  //   const user = await User.create({
-  //     email: invitation.email,
-  //     firstName: invitation.firstName,
-  //     lastName: invitation.lastName,
-  //     role: invitation.role,
-  //     organizationId: invitation.organizationId,
-  //     teamIds: invitation.teamIds,
-  //     password: hashedPassword,
-  //     status: "active",
-  //     userType: "organization",
-  //   });
-
-  //   Find the invited user in the organization
+  // Find the invited user in the organization
   const { users } = await getCollections();
   const user = await users.findOne({
     email: invitation.email,
-    organizationId: invitation.organizationId,
+    organizationId: new ObjectId(invitation.organizationId),
     status: "pending",
   });
 
