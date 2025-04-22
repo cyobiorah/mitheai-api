@@ -12,33 +12,56 @@ router.use("/twitter", twitterRoutes);
 router.use("/linkedin", linkedinRoutes);
 router.use("/threads", threadsRoutes);
 
+// Get Social Accounts by Organization
 router.get(
   "/",
   requireJwtAuth,
   socialAccountController.getSocialAccountsByOrganizationId
 );
+
+// Link Social Account
 router.post("/", requireJwtAuth, socialAccountController.linkSocialAccount);
+
+// List Social Accounts
 router.get(
   "/:userId",
   requireJwtAuth,
   socialAccountController.listSocialAccounts
 );
+
+// Update Social Account
 router.patch(
   "/:id",
   requireJwtAuth,
   socialAccountController.updateSocialAccount
 );
+
+// Unlink Social Account
 router.delete(
   "/disconnect/:id",
   requireJwtAuth,
   socialAccountController.unlinkSocialAccount
 );
 
-// Personal Account
+// Get Personal Account (userType: "personal")
 router.get(
   "/:accountId",
   requireJwtAuth,
   socialAccountController.getPersonalAccount
+);
+
+// Assign/Unassign Social Account to Team
+router.patch(
+  "/:id/assign",
+  requireJwtAuth,
+  socialAccountController.assignSocialAccountToTeam
+);
+
+// List social accounts by team
+router.get(
+  "/team/:teamId",
+  requireJwtAuth,
+  socialAccountController.listSocialAccountsByTeam
 );
 
 export default router;

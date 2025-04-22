@@ -35,16 +35,51 @@ export const linkSocialAccount = async (
 };
 
 // List all social accounts for the current user (optionally filter by org/team)
+// export const listSocialAccounts = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ) => {
+//   const { userId } = req.params;
+//   try {
+//     const accounts = await socialAccountService.listAccounts({
+//       userId,
+//     });
+//     res.json(accounts);
+//   } catch (err) {
+//     next(err);
+//   }
+// };
 export const listSocialAccounts = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   const { userId } = req.params;
+  const user = (req as any).user;
+
   try {
-    const accounts = await socialAccountService.listAccounts({
-      userId,
-    });
+    // Only allow users to list their own accounts, or org admins to list org accounts
+    const isOrgAdmin = ["super_admin", "org_owner"].includes(user.role);
+    const isSelf = userId === user.id;
+
+    if (!isSelf && !isOrgAdmin) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    // Fetch all accounts for the user
+    let accounts = await socialAccountService.listAccounts({ userId });
+
+    // For org users (not admin), filter to only accounts assigned to teams the user is in
+    if (!isOrgAdmin) {
+      const userTeamIds = (user.teamIds ?? []).map(String);
+      accounts = accounts.filter(
+        (acc: any) =>
+          !acc.organizationId || // not org-linked
+          (acc.teamId && userTeamIds.includes(String(acc.teamId)))
+      );
+    }
+
     res.json(accounts);
   } catch (err) {
     next(err);
@@ -121,6 +156,67 @@ export const getPersonalAccount = async (
     const account = await socialAccountService.getPersonalAccount(accountId);
     if (!account) return res.status(404).json({ message: "Account not found" });
     res.json(account);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Assign/Unassign Social Account to Team
+export const assignSocialAccountToTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { teamId } = req.body; // teamId can be string or null
+    const user = (req as any).user;
+
+    // Only org super_admin or org_owner can assign/unassign
+    if (!["super_admin", "org_owner"].includes(user.role)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const result = await socialAccountService.assignToTeam({
+      accountId: id,
+      teamId,
+      organizationId: user.organizationId,
+    });
+
+    if (!result) {
+      return res.status(400).json({ message: "Invalid account or team" });
+    }
+
+    res.json({ message: "Social account assignment updated", account: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// List social accounts by team
+export const listSocialAccountsByTeam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { teamId } = req.params;
+    const user = (req as any).user;
+
+    // Fetch user's teams and role
+    // (Assume a helper function getUserTeamsAndRole(user) returns { teams: [], role: "" })
+    // For MVP, check if user is in team or is org admin
+    const isOrgAdmin = ["super_admin", "org_owner"].includes(user.role);
+
+    // Check if user is in the team (assume user.teamIds is an array of ObjectId strings)
+    const isTeamMember = user.teamIds?.map(String).includes(teamId);
+
+    if (!isOrgAdmin && !isTeamMember) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const accounts = await socialAccountService.listAccountsByTeamId(teamId);
+    res.json(accounts);
   } catch (err) {
     next(err);
   }
