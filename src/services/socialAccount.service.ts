@@ -76,3 +76,50 @@ export const getPersonalAccount = async (accountId: string) => {
   const { socialaccounts } = await getCollections();
   return socialaccounts.findOne({ _id: new ObjectId(accountId) });
 };
+
+// Assign/Unassign Social Account to Team
+export const assignToTeam = async ({
+  accountId,
+  teamId,
+  organizationId,
+}: {
+  accountId: string;
+  teamId: string | null;
+  organizationId: string;
+}) => {
+  const { socialaccounts, teams } = await getCollections();
+
+  // Ensure the account belongs to this org
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(accountId),
+    organizationId: new ObjectId(organizationId),
+  });
+  if (!account) return null;
+
+  // If assigning, validate team belongs to org
+  if (teamId) {
+    const team = await teams.findOne({
+      _id: new ObjectId(teamId),
+      organizationId: new ObjectId(organizationId),
+    });
+    if (!team) return null;
+  }
+
+  await socialaccounts.updateOne(
+    { _id: new ObjectId(accountId) },
+    {
+      $set: {
+        teamId: teamId ? new ObjectId(teamId) : null,
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return socialaccounts.findOne({ _id: new ObjectId(accountId) });
+};
+
+// List social accounts by team
+export const listAccountsByTeamId = async (teamId: string) => {
+  const { socialaccounts } = await getCollections();
+  return socialaccounts.find({ teamId: new ObjectId(teamId) }).toArray();
+};
