@@ -90,11 +90,11 @@ export async function getCollections() {
     organizations: db.collection("organizations"),
     teams: db.collection("teams"),
     invitations: db.collection("invitations"),
-    // socialAccounts: db.collection("socialaccounts"),
     socialposts: db.collection("socialposts"),
     contents: db.collection("contents"),
     scheduledposts: db.collection("scheduledposts"),
     sessions: db.collection("sessions"),
     socialaccounts: db.collection("socialaccounts"),
+    collections: db.collection("collections"),
   };
 }
