@@ -11,13 +11,13 @@ async function seed() {
     users,
     organizations,
     teams,
-    // socialAccounts,
     contents,
     socialposts,
     scheduledposts,
     invitations,
     sessions,
     socialaccounts,
+    collections,
   } = await getCollections();
 
   // Clear existing data
@@ -25,13 +25,13 @@ async function seed() {
     users.deleteMany({}),
     organizations.deleteMany({}),
     teams.deleteMany({}),
-    // socialAccounts.deleteMany({}),
     contents.deleteMany({}),
     socialposts.deleteMany({}),
     scheduledposts.deleteMany({}),
     invitations.deleteMany({}),
     sessions.deleteMany({}),
     socialaccounts.deleteMany({}),
+    collections.deleteMany({}),
   ]);
   console.log("🧹 Cleared existing data");
 

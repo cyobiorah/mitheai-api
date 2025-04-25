@@ -6,7 +6,7 @@ import { getCollections } from "../config/db";
 import { ObjectId } from "mongodb";
 
 export const createInvitation = async (req: Request, res: Response) => {
-  const { email, firstName, lastName, role, organizationId, teamIds } =
+  const { email, firstName, lastName, role, organizationId } =
     req.body;
   if (!email || !firstName || !lastName || !role || !organizationId)
     return res.status(400).json({ error: "Missing required fields" });
@@ -34,8 +34,8 @@ export const createInvitation = async (req: Request, res: Response) => {
     firstName,
     lastName,
     role,
-    organizationId,
-    teamIds,
+    organizationId: new ObjectId(organizationId),
+    teamIds: [],
     status: "pending",
     userType: "organization",
     password, // Password will be set during invitation acceptance
@@ -48,7 +48,7 @@ export const createInvitation = async (req: Request, res: Response) => {
     lastName,
     role,
     organizationId,
-    teamIds,
+    teamIds: [],
   });
 
   // Send invitation email

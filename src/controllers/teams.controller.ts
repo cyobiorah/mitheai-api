@@ -104,7 +104,16 @@ export const addTeamMember = async (
 ) => {
   try {
     const { id, userId } = req.params;
-    const actingUserId = (req as any).user.userId!;
+    const actingUserId = (req as any).user.id!;
+
+    // console.log({
+    //   id,
+    //   userId,
+    //   actingUserId,
+    // });
+
+    console.log({ user: (req as any).user });
+
     const updatedTeam = await teamsService.addTeamMember(
       id,
       userId,
@@ -126,7 +135,7 @@ export const removeTeamMember = async (
 ) => {
   try {
     const { id, userId } = req.params;
-    const actingUserId = (req as any).user.userId!;
+    const actingUserId = (req as any).user.id!;
     const updatedTeam = await teamsService.removeTeamMember(
       id,
       userId,
