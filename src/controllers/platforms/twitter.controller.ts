@@ -301,7 +301,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
 export const post = async (req: any, res: any) => {
   const twitterContentItem = {
     type: "social_post",
-    content: req.body.content,
+    content: req.body.data.content,
     metadata: {
       source: "webapp",
       language: "en",
@@ -309,16 +309,16 @@ export const post = async (req: any, res: any) => {
       customFields: req.body.customFields ?? {},
       socialPost: {
         platform: "twitter",
-        accountId: req.body.accountId,
-        platformAccountId: req.body.platformAccountId,
-        accountName: req.body.accountName,
-        accountType: req.body.accountType,
-        mediaType: req.body.mediaType,
-        scheduledTime: req.body.scheduledTime,
+        accountId: req.body.data.accountId,
+        platformAccountId: req.body.data.platformAccountId,
+        accountName: req.body.data.accountName,
+        accountType: req.body.data.accountType,
+        mediaType: req.body.data.mediaType,
+        scheduledTime: req.body.data.scheduledTime,
       },
     },
-    teamId: new ObjectId(req.user.teamId),
-    organizationId: new ObjectId(req.user.organizationId),
+    teamId: new ObjectId(req.body.data.teamId),
+    organizationId: new ObjectId(req.body.data.organizationId),
     userId: new ObjectId(req.user.id),
     createdBy: new ObjectId(req.user.id),
     createdAt: new Date(),

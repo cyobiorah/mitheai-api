@@ -29,8 +29,18 @@ export class SocialPostWorker {
         for (const platform of post.platforms) {
           try {
             const account = await socialaccounts.findOne({
-              _id: new ObjectId(platform.accountId),
+              // _id: new ObjectId(platform.accountId),
+              accountId: platform.accountId,
             });
+
+            // find account by accountId inside platforms array
+            // const account = await socialaccounts.findOne({
+            //   platforms: {
+            //     $elemMatch: {
+            //       accountId: platform.accountId,
+            //     },
+            //   },
+            // });
             if (!account) {
               console.error(`Account not found in socialaccounts collection:`, {
                 accountId: platform.accountId,
@@ -72,17 +82,19 @@ export class SocialPostWorker {
                 publishResult = await twitterService.post(contentItem);
                 break;
               }
-              case "threads":
+              case "threads": {
+                console.log({ account });
                 try {
                   // Post the content directly - token refresh will happen inside postContent if needed
                   publishResult = await threadsService.postContent(
-                    account._id.toString(),
+                    account.accountId,
                     post.content,
                     post.mediaType
                       ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
                       : "TEXT",
                     post.mediaUrls?.[0]
                   );
+                  console.log({ publishResult });
                 } catch (tokenError: any) {
                   // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {
@@ -106,6 +118,7 @@ export class SocialPostWorker {
                   throw tokenError;
                 }
                 break;
+              }
               // Add other platforms as needed
               default:
                 throw new Error(`Unsupported platform: ${account.platform}`);
@@ -150,7 +163,7 @@ export class SocialPostWorker {
                   : `https://${account.platform}.com/status/${postId}`;
             }
 
-            await socialposts.insertOne({
+            const insertDoc = {
               ...publishResult,
               content: post.content,
               mediaType: post.mediaType,
@@ -168,7 +181,12 @@ export class SocialPostWorker {
               scheduledPostId: post._id,
               createdAt: new Date(),
               updatedAt: new Date(),
-            });
+            };
+
+            // Remove _id if present
+            delete insertDoc._id;
+
+            await socialposts.insertOne(insertDoc);
 
             allFailed = false;
           } catch (err: any) {

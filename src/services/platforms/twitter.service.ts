@@ -166,7 +166,8 @@ export async function post(content: any): Promise<{ id: string }> {
   // First try to find by accountId if it's in the metadata
   if (content.metadata.socialPost.accountId) {
     account = await socialaccounts.findOne({
-      _id: new ObjectId(content.metadata.socialPost.accountId),
+      // _id: new ObjectId(content.metadata.socialPost.accountId),
+      accountId: content.metadata.socialPost.accountId,
     });
   }
 

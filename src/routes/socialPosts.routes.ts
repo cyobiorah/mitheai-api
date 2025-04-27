@@ -4,10 +4,24 @@ import { requireJwtAuth } from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/", requireJwtAuth, socialPostController.getPosts);
+// router.get("/", requireJwtAuth, socialPostController.getPosts);
 router.delete("/:id", requireJwtAuth, socialPostController.deletePost);
 
-// Personal Account
-router.get("/:accountId", requireJwtAuth, socialPostController.getPersonalPosts);
+// Personal Posts
+router.get("/:userId", requireJwtAuth, socialPostController.getPostsByUserId);
+
+// Team Posts
+router.get(
+  "/team/:teamId",
+  requireJwtAuth,
+  socialPostController.getPostsByTeamId
+);
+
+// Organization Posts
+router.get(
+  "/organization/:organizationId",
+  requireJwtAuth,
+  socialPostController.getPostsByOrganizationId
+);
 
 export default router;

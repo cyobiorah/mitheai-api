@@ -33,10 +33,17 @@ export const getTeams = async (
   res: Response,
   next: NextFunction
 ) => {
+  const { user } = req as any;
   try {
-    const { organizationId } = req.params;
-    const teams = await teamsService.getTeamsByOrganization(organizationId);
-    res.json(teams);
+    if (user.role === "user") {
+      const teams = await teamsService.getTeamsByIds(user.teamIds);
+      res.json(teams);
+      return;
+    } else {
+      const { organizationId } = req.params;
+      const teams = await teamsService.getTeamsByOrganization(organizationId);
+      res.json(teams);
+    }
   } catch (err) {
     next(err);
   }
@@ -105,14 +112,6 @@ export const addTeamMember = async (
   try {
     const { id, userId } = req.params;
     const actingUserId = (req as any).user.id!;
-
-    // console.log({
-    //   id,
-    //   userId,
-    //   actingUserId,
-    // });
-
-    console.log({ user: (req as any).user });
 
     const updatedTeam = await teamsService.addTeamMember(
       id,

@@ -89,10 +89,6 @@ export const addTeamMember = async (
   const team = await teams.findOne({ _id: new ObjectId(teamId) });
   if (!team) return null;
 
-  // Only team member or org owner can add
-  // if (!team.memberIds.map((id: ObjectId) => String(id)).includes(actingUserId))
-  //   return null;
-
   const actingUser = await users.findOne({ _id: new ObjectId(actingUserId) });
 
   const isTeamMember = team.memberIds
@@ -102,17 +98,6 @@ export const addTeamMember = async (
     actingUser?.role === "org_owner" &&
     String(actingUser.organizationId) === String(team.organizationId);
   const isSuperAdmin = actingUser?.role === "super_admin";
-
-  // console.log({
-  //   actingUserId,
-  //   actingUser: actingUser?._id,
-  //   actingUserRole: actingUser?.role,
-  //   actingUserOrg: actingUser?.organizationId,
-  //   teamOrg: team.organizationId,
-  //   isTeamMember,
-  //   isOrgOwner,
-  //   isSuperAdmin,
-  // });
 
   if (!(isTeamMember || isOrgOwner || isSuperAdmin)) return null;
 

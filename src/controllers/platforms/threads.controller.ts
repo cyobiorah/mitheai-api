@@ -235,8 +235,8 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
 
 export const post = async (req: any, res: any) => {
   try {
-    const { id: accountId } = req.params;
-    const { content, mediaUrls, mediaType = "TEXT" } = req.body;
+    const { accountId } = req.params;
+    const { content, mediaUrls, mediaType = "TEXT" } = req.body.data;
 
     // Validate request
     if (!accountId) {
@@ -246,12 +246,12 @@ export const post = async (req: any, res: any) => {
       });
     }
 
-    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Content or media is required",
-      });
-    }
+    // if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+    //   return res.status(400).json({
+    //     status: "error",
+    //     message: "Content or media is required",
+    //   });
+    // }
 
     // Validate mediaType
     if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
