@@ -128,7 +128,7 @@ export async function handleLinkedInCallback(req: any, res: any) {
     if (req.query.error) {
       console.error("LinkedIn OAuth error:", req.query);
       return res.redirect(
-        `${FRONTEND_URL}/account-setup?error=${req.query.error}`
+        `${FRONTEND_URL}/dashboard/accounts?error=${req.query.error}`
       );
     }
 
@@ -136,7 +136,7 @@ export async function handleLinkedInCallback(req: any, res: any) {
 
     if (!code) {
       console.error("No authorization code in LinkedIn callback");
-      return res.redirect(`${FRONTEND_URL}/account-setup?error=no_code`);
+      return res.redirect(`${FRONTEND_URL}/dashboard/accounts?error=no_code`);
     }
 
     if (!req.user) {
@@ -158,7 +158,7 @@ export async function handleLinkedInCallback(req: any, res: any) {
       await createSocialAccount(req.user, profile, tokenData);
 
       // Redirect to the frontend settings page with success
-      res.redirect(`${FRONTEND_URL}/account-setup?success=true`);
+      res.redirect(`${FRONTEND_URL}/dashboard/accounts?success=true`);
     } catch (error: any) {
       // Handle the case where the account is already connected
       if (error.code === "ACCOUNT_ALREADY_LINKED") {
@@ -177,14 +177,14 @@ export async function handleLinkedInCallback(req: any, res: any) {
         );
 
         return res.redirect(
-          `${FRONTEND_URL}/account-setup?error=account_already_connected&details=${errorDetails}`
+          `${FRONTEND_URL}/dashboard/accounts?error=account_already_connected&details=${errorDetails}`
         );
       }
 
       // Handle other errors
       console.error("Failed to create LinkedIn social account:", error);
       return res.redirect(
-        `${FRONTEND_URL}/account-setup?error=account_creation_failed&message=${encodeURIComponent(
+        `${FRONTEND_URL}/dashboard/accounts?error=account_creation_failed&message=${encodeURIComponent(
           error.message ?? "Unknown error"
         )}`
       );
@@ -192,7 +192,7 @@ export async function handleLinkedInCallback(req: any, res: any) {
   } catch (error: any) {
     console.error("Failed to handle LinkedIn callback:", error);
     res.redirect(
-      `${FRONTEND_URL}/account-setup?error=callback_failed&message=${encodeURIComponent(
+      `${FRONTEND_URL}/dashboard/accounts?error=callback_failed&message=${encodeURIComponent(
         error.message ?? "Unknown error"
       )}`
     );

@@ -153,6 +153,7 @@ export async function createSocialAccount(
 }
 
 export async function post(content: any): Promise<{ id: string }> {
+  console.log({ content });
   if (
     !content.metadata.socialPost?.platform ||
     content.metadata.socialPost.platform !== "twitter"
@@ -166,16 +167,19 @@ export async function post(content: any): Promise<{ id: string }> {
   // First try to find by accountId if it's in the metadata
   if (content.metadata.socialPost.accountId) {
     account = await socialaccounts.findOne({
-      _id: new ObjectId(content.metadata.socialPost.accountId),
+      // _id: new ObjectId(content.metadata.socialPost.accountId),
+      accountId: content.metadata.socialPost.accountId,
     });
   }
 
+  console.log({ account });
+
   // If no account found by ID, try to find by userId
-  account ??= await socialaccounts.findOne({
-    userId: new ObjectId(content.createdBy),
-    platform: "twitter",
-    status: "active",
-  });
+  // account ??= await socialaccounts.findOne({
+  //   userId: new ObjectId(content.createdBy),
+  //   platform: "twitter",
+  //   status: "active",
+  // });
 
   if (!account) {
     throw new Error("No active Twitter account found");

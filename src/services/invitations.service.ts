@@ -64,8 +64,6 @@ export const accept = async (
     throw new Error("Invitation has expired");
   }
 
-  console.log({ invitation });
-
   // Find the invited user in the organization
   const { users } = await getCollections();
   const user = await users.findOne({

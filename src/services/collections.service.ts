@@ -1,11 +1,6 @@
 import { ObjectId } from "mongodb";
 import { getCollections } from "../config/db";
 
-// export interface CollectionContentRef {
-//   _id: ObjectId;
-//   type: "socialposts" | "scheduledposts";
-// }
-
 export interface Collection {
   _id?: ObjectId;
   name: string;
@@ -36,6 +31,12 @@ export async function listCollections(ownerId: string, ownerType: string) {
     .toArray();
 }
 
+// List individual collections
+export async function listIndividualCollections(ownerId: string) {
+  const { collections } = await getCollections();
+  return collections.find({ ownerId: new ObjectId(ownerId) }).toArray();
+}
+
 // Get a single collection (with content)
 export async function getCollection(id: string) {
   const { collections, socialposts, scheduledposts } = await getCollections();
@@ -43,10 +44,14 @@ export async function getCollection(id: string) {
   if (!collection) return null;
 
   const socialIds = (collection.contentRefs ?? [])
-    .filter((ref: { type: string; _id: ObjectId }) => ref.type === "socialposts")
+    .filter(
+      (ref: { type: string; _id: ObjectId }) => ref.type === "socialposts"
+    )
     .map((ref: { type: string; _id: ObjectId }) => ref._id);
   const scheduledIds = (collection.contentRefs ?? [])
-    .filter((ref: { type: string; _id: ObjectId }) => ref.type === "scheduledposts")
+    .filter(
+      (ref: { type: string; _id: ObjectId }) => ref.type === "scheduledposts"
+    )
     .map((ref: { type: string; _id: ObjectId }) => ref._id);
 
   const socialItems = socialIds.length
@@ -70,7 +75,7 @@ export async function createCollection(req: any) {
   const now = new Date();
   const doc = {
     ...body,
-    ownerId: new ObjectId(user.userId),
+    ownerId: new ObjectId(user.id),
     ownerType: user.organizationId ? "org" : "user",
     contentIds: [],
     createdAt: now,
@@ -107,23 +112,6 @@ export async function addContentToCollection(
   type: "socialposts" | "scheduledposts"
 ) {
   const { collections, socialposts, scheduledposts } = await getCollections();
-  //   Add to collection
-  //   await collections.updateOne(
-  //     { _id: new ObjectId(id) },
-  //     {
-  //       $addToSet: { contentRefs: { _id: new ObjectId(contentId), type } },
-  //       $set: { updatedAt: new Date() },
-  //     }
-  //   );
-  //   //   Add collectionId to post
-  //   const postCollection = type === "socialposts" ? socialposts : scheduledposts;
-  //   await postCollection.updateOne(
-  //     { _id: new ObjectId(contentId) },
-  //     {
-  //       $addToSet: { collectionsId: new ObjectId(id) },
-  //       $set: { updatedAt: new Date() },
-  //     }
-  //   );
 
   // Update post to reference the collection
   const postCollection = type === "socialposts" ? socialposts : scheduledposts;
@@ -149,14 +137,6 @@ export async function removeContentFromCollection(
   type: "socialposts" | "scheduledposts"
 ) {
   const { collections, socialposts, scheduledposts } = await getCollections();
-  //   Remove from collection
-  //   await collections.updateOne(
-  //     { _id: new ObjectId(id) },
-  //     {
-  //       $pull: { contentRefs: { _id: new ObjectId(contentId), type } },
-  //       $set: { updatedAt: new Date() },
-  //     }
-  //   );
   //   Remove collectionId from post
   const postCollection = type === "socialposts" ? socialposts : scheduledposts;
   await postCollection.updateOne(

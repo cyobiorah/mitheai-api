@@ -42,6 +42,7 @@ async function seed() {
   const adminUserId = new ObjectId();
   const orgOwnerId = new ObjectId();
   const individualUserId = new ObjectId();
+  const date = new Date();
 
   await users.insertMany([
     {
@@ -53,6 +54,8 @@ async function seed() {
       role: "super_admin",
       status: "active",
       userType: "organization",
+      createdAt: date,
+      updatedAt: date,
     },
     {
       _id: orgOwnerId,
@@ -63,6 +66,8 @@ async function seed() {
       role: "org_owner",
       status: "active",
       userType: "organization",
+      createdAt: date,
+      updatedAt: date,
     },
     {
       _id: individualUserId,
@@ -73,6 +78,8 @@ async function seed() {
       role: "user",
       status: "active",
       userType: "individual",
+      createdAt: date,
+      updatedAt: date,
     },
   ]);
 
@@ -83,6 +90,8 @@ async function seed() {
     name: "TestOrg",
     ownerId: orgOwnerId,
     memberIds: [orgOwnerId, adminUserId],
+    createdAt: date,
+    updatedAt: date,
   });
 
   // Seed team
@@ -92,6 +101,8 @@ async function seed() {
     name: "TestTeam",
     organizationId: orgId,
     memberIds: [orgOwnerId, adminUserId],
+    createdAt: date,
+    updatedAt: date,
   });
 
   // Update users with org/team references
@@ -109,12 +120,16 @@ async function seed() {
       title: "Welcome to MitheAI",
       body: "This is a sample content item.",
       status: "draft",
+      createdAt: date,
+      updatedAt: date,
     },
     {
       userId: individualUserId,
       title: "Individual's First Content",
       body: "This is content created by an individual user.",
       status: "draft",
+      createdAt: date,
+      updatedAt: date,
     },
   ]);
 
@@ -133,6 +148,8 @@ async function seed() {
       lastRefreshed: new Date(),
       status: "active",
       ownershipLevel: "user",
+      createdAt: date,
+      updatedAt: date,
     },
     {
       userId: individualUserId,
@@ -145,6 +162,8 @@ async function seed() {
       lastRefreshed: new Date(),
       status: "active",
       ownershipLevel: "user",
+      createdAt: date,
+      updatedAt: date,
     },
   ]);
 
@@ -162,6 +181,8 @@ async function seed() {
       },
     ],
     status: "draft",
+    createdAt: date,
+    updatedAt: date,
   });
 
   // Seed scheduled post
@@ -181,6 +202,8 @@ async function seed() {
         status: "pending",
       },
     ],
+    createdAt: date,
+    updatedAt: date,
   });
 
   console.log("🌱 Seeding complete!");
