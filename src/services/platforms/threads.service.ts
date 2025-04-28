@@ -374,7 +374,6 @@ async function createTextPost(
   account: any,
   content: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  console.log({ account });
   try {
     const containerResponse = await axios.post(
       `https://graph.threads.net/v1.0/${account.platformAccountId}/threads`,
@@ -411,7 +410,6 @@ async function createTextPost(
         },
       }
     );
-    console.log({ publishResponse });
 
     if (!publishResponse?.data?.id) {
       throw new Error("Failed to publish Threads post");

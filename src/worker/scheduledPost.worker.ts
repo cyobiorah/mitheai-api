@@ -83,7 +83,6 @@ export class SocialPostWorker {
                 break;
               }
               case "threads": {
-                console.log({ account });
                 try {
                   // Post the content directly - token refresh will happen inside postContent if needed
                   publishResult = await threadsService.postContent(
@@ -94,7 +93,6 @@ export class SocialPostWorker {
                       : "TEXT",
                     post.mediaUrls?.[0]
                   );
-                  console.log({ publishResult });
                 } catch (tokenError: any) {
                   // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {

@@ -31,6 +31,12 @@ export async function listCollections(ownerId: string, ownerType: string) {
     .toArray();
 }
 
+// List individual collections
+export async function listIndividualCollections(ownerId: string) {
+  const { collections } = await getCollections();
+  return collections.find({ ownerId: new ObjectId(ownerId) }).toArray();
+}
+
 // Get a single collection (with content)
 export async function getCollection(id: string) {
   const { collections, socialposts, scheduledposts } = await getCollections();
@@ -69,7 +75,7 @@ export async function createCollection(req: any) {
   const now = new Date();
   const doc = {
     ...body,
-    ownerId: new ObjectId(user.userId),
+    ownerId: new ObjectId(user.id),
     ownerType: user.organizationId ? "org" : "user",
     contentIds: [],
     createdAt: now,

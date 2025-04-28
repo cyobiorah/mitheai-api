@@ -4,7 +4,7 @@ import { requireJwtAuth } from "../middlewares/auth";
 
 const router = Router();
 
-// router.get("/", requireJwtAuth, socialPostController.getPosts);
+router.get("/", requireJwtAuth, socialPostController.getPosts);
 router.delete("/:id", requireJwtAuth, socialPostController.deletePost);
 
 // Personal Posts

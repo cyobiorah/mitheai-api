@@ -26,6 +26,19 @@ export async function listCollections(req: Request, res: Response) {
   });
 }
 
+// List individual user collections
+export async function listIndividualCollections(req: any, res: Response) {
+  const ownerId = req.user.id;
+  const collections = await collectionsService.listIndividualCollections(
+    ownerId
+  );
+  res.json({
+    data: collections,
+    count: collections.length,
+    message: "Collections retrieved successfully",
+  });
+}
+
 // Get collection
 export async function getCollection(req: Request, res: Response) {
   const collection = await collectionsService.getCollection(req.params.id);
