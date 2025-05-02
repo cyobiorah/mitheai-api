@@ -39,7 +39,6 @@ interface TwitterUserResponse {
   };
 }
 
-// GET /platforms/twitter/direct-auth
 export const startDirectTwitterOAuth = async (req: any, res: any) => {
   try {
     if (!req.user) {
@@ -103,16 +102,14 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
   }
 };
 
-// GET /platforms/twitter/callback
 export const handleTwitterCallback = async (req: any, res: any) => {
   try {
-    // Check for error in the callback
     if (req.query.error) {
       console.error("Twitter OAuth error:", req.query.error);
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           req.query.error_description ?? "Authentication failed"
         )}`
       );
@@ -125,7 +122,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           "Missing required parameters"
         )}`
       );
@@ -138,7 +135,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           "Authentication session expired or invalid"
         )}`
       );
@@ -150,7 +147,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           "Authentication link expired"
         )}`
       );
@@ -197,7 +194,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           `Token exchange failed: ${tokenResponse.status} ${tokenResponse.statusText}`
         )}`
       );
@@ -224,7 +221,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           "Failed to fetch Twitter profile"
         )}`
       );
@@ -241,8 +238,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       await twitterService.createSocialAccount(
         userId,
         profileData.data,
-        tokenData.access_token,
-        tokenData.refresh_token ?? "",
+        tokenData,
         organizationId,
         currentTeamId
       );
@@ -259,7 +255,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?success=true&message=${encodeURIComponent(
+        }/dashboard/accounts?success=true&message=${encodeURIComponent(
           "Twitter account connected successfully"
         )}`
       );
@@ -272,7 +268,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
         return res.redirect(
           `${
             process.env.FRONTEND_URL
-          }/account-setup?error=duplicate_account&message=${encodeURIComponent(
+          }/dashboard/accounts?error=duplicate_account&message=${encodeURIComponent(
             error.message
           )}`
         );
@@ -281,7 +277,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       return res.redirect(
         `${
           process.env.FRONTEND_URL
-        }/account-setup?error=true&message=${encodeURIComponent(
+        }/dashboard/accounts?error=true&message=${encodeURIComponent(
           `Failed to create social account: ${error.message}`
         )}`
       );
@@ -291,7 +287,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
     return res.redirect(
       `${
         process.env.FRONTEND_URL
-      }/account-setup?error=true&message=${encodeURIComponent(
+      }/dashboard/accounts?error=true&message=${encodeURIComponent(
         `Authentication error: ${error.message}`
       )}`
     );
@@ -301,7 +297,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
 export const post = async (req: any, res: any) => {
   const twitterContentItem = {
     type: "social_post",
-    content: req.body.content,
+    content: req.body.data.content,
     metadata: {
       source: "webapp",
       language: "en",
@@ -309,20 +305,22 @@ export const post = async (req: any, res: any) => {
       customFields: req.body.customFields ?? {},
       socialPost: {
         platform: "twitter",
-        accountId: req.body.accountId,
-        platformAccountId: req.body.platformAccountId,
-        accountName: req.body.accountName,
-        accountType: req.body.accountType,
-        mediaType: req.body.mediaType,
-        scheduledTime: req.body.scheduledTime,
+        accountId: req.body.data.accountId,
+        platformAccountId: req.body.data.platformAccountId,
+        accountName: req.body.data.accountName,
+        accountType: req.body.data.accountType,
+        mediaType: req.body.data.mediaType,
+        scheduledTime: req.body.data.scheduledTime,
       },
     },
-    teamId: new ObjectId(req.user.teamId),
-    organizationId: new ObjectId(req.user.organizationId),
     userId: new ObjectId(req.user.id),
     createdBy: new ObjectId(req.user.id),
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...(req.body.data.teamId && { teamId: new ObjectId(req.body.data.teamId) }),
+    ...(req.body.data.organizationId && {
+      organizationId: new ObjectId(req.body.data.organizationId),
+    }),
   };
 
   try {

@@ -15,6 +15,7 @@ export const listScheduledPosts = async (req: any, res: any) => {
     .find(filter)
     .sort({ scheduledFor: 1 })
     .toArray();
+
   res.json({ data: posts, count: posts.length });
 };
 
@@ -45,7 +46,7 @@ export const createScheduledPost = async (req: any, res: any) => {
 
     // Prepare platforms array
     const platformsArray = (platforms ?? []).map((platform: any) => ({
-      platformId: platform.platformId,
+      platform: platform.platform,
       accountId: platform.accountId,
       status: "pending",
     }));
