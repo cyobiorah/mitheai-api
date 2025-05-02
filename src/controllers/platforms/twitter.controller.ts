@@ -39,7 +39,6 @@ interface TwitterUserResponse {
   };
 }
 
-// GET /platforms/twitter/direct-auth
 export const startDirectTwitterOAuth = async (req: any, res: any) => {
   try {
     if (!req.user) {
@@ -103,10 +102,8 @@ export const startDirectTwitterOAuth = async (req: any, res: any) => {
   }
 };
 
-// GET /platforms/twitter/callback
 export const handleTwitterCallback = async (req: any, res: any) => {
   try {
-    // Check for error in the callback
     if (req.query.error) {
       console.error("Twitter OAuth error:", req.query.error);
       return res.redirect(
@@ -241,8 +238,7 @@ export const handleTwitterCallback = async (req: any, res: any) => {
       await twitterService.createSocialAccount(
         userId,
         profileData.data,
-        tokenData.access_token,
-        tokenData.refresh_token ?? "",
+        tokenData,
         organizationId,
         currentTeamId
       );

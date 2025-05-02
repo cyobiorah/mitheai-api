@@ -151,6 +151,7 @@ export const post = async (req: Request, res: Response) => {
       const account = await socialaccounts.findOne({
         _id: new ObjectId(accountId),
       });
+
       if (!account) {
         return res.status(404).json({
           status: "error",

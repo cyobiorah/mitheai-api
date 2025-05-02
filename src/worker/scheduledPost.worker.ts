@@ -1,6 +1,7 @@
 import { getCollections } from "../config/db";
 import * as twitterService from "../services/platforms/twitter.service";
 import * as threadsService from "../services/platforms/threads.service";
+import * as linkedinService from "../services/platforms/linkedin.service";
 import { ObjectId } from "mongodb";
 // import other platform services as needed
 
@@ -117,7 +118,39 @@ export class SocialPostWorker {
                 }
                 break;
               }
-              // Add other platforms as needed
+              case "linkedin": {
+                try {
+                  const result = await linkedinService.postContent(
+                    account.accountId,
+                    post.content
+                  );
+                  publishResult = {
+                    id: result.id,
+                  };
+                } catch (tokenError: any) {
+                  // If token is expired, mark the account as needing reauthorization
+                  if (tokenError.code === "TOKEN_EXPIRED") {
+                    const { socialaccounts } = await getCollections();
+                    await socialaccounts.updateOne(
+                      { _id: account._id },
+                      {
+                        $set: {
+                          status: "expired",
+                          "metadata.requiresReauth": true,
+                          "metadata.lastError": tokenError.message,
+                          "metadata.lastErrorTime": new Date(),
+                          updatedAt: new Date(),
+                        },
+                      }
+                    );
+                    throw new Error(
+                      `LinkedIn account token has expired and requires reconnection: ${tokenError.message}`
+                    );
+                  }
+                  throw tokenError;
+                }
+                break;
+              }
               default:
                 throw new Error(`Unsupported platform: ${account.platform}`);
             }

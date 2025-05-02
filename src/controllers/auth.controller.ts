@@ -4,6 +4,7 @@ import * as UsersService from "../services/users.service";
 import * as OrgsService from "../services/organizations.service";
 import * as TeamsService from "../services/teams.service";
 import { validationError } from "../validation/validationError";
+import { sendWelcomeEmail } from "../services/email.service";
 
 // REGISTER
 export const register = async (req: Request, res: Response) => {
@@ -70,6 +71,15 @@ export const register = async (req: Request, res: Response) => {
         teamIds: [team._id],
       };
 
+      // Send welcome email
+      await sendWelcomeEmail({
+        to: email,
+        firstName,
+        lastName,
+        userType: "organization",
+        organizationName,
+      });
+
       // Generate JWT
       const token = AuthService.generateJWT(userWithoutPassword);
 
@@ -92,6 +102,15 @@ export const register = async (req: Request, res: Response) => {
       });
 
       const { password: _, ...userWithoutPassword } = individualUser;
+
+      // Send welcome email
+      await sendWelcomeEmail({
+        to: email,
+        firstName,
+        lastName,
+        userType: "individual",
+      });
+
       const token = AuthService.generateJWT(userWithoutPassword);
 
       return res.status(201).json({

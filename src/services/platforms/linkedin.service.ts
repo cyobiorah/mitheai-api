@@ -2,15 +2,16 @@ import * as crypto from "crypto";
 import axios from "axios";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
+import { SocialAccount } from "../../schema/schema";
 
-interface LinkedInProfile {
-  sub: string;
-  localizedFirstName?: string;
-  localizedLastName?: string;
-  profilePicture?: any;
-  email?: string;
-  name?: string;
-}
+// interface LinkedInProfile {
+//   sub: string;
+//   localizedFirstName?: string;
+//   localizedLastName?: string;
+//   profilePicture?: any;
+//   email?: string;
+//   name?: string;
+// }
 
 interface LinkedInEmail {
   elements: Array<{ "handle~": { emailAddress: string } }>;
@@ -31,60 +32,60 @@ export class LinkedInError extends Error {
   }
 }
 
-export async function createSocialAccount(
-  user: any,
-  profile: LinkedInProfile,
-  token: any
-) {
+export async function createSocialAccount(user: any, profile: any, token: any) {
   const { id: userId, organizationId } = user;
   const { access_token, id_token, expires_in } = token;
   const platform = "linkedin";
   const accountName = profile.name;
-  const platformAccountId = profile.sub;
-  const email = profile?.email ?? "";
+  const accountId = profile.sub;
 
-  // Prevent duplicate connection
   const { socialaccounts } = await getCollections();
+
   const existing = await socialaccounts.findOne({
     platform,
-    platformAccountId,
+    accountId,
   });
   if (existing) {
-    throw new Error(
+    const error: any = new Error(
       "This LinkedIn account is already connected to another user."
     );
+    error.code = "ACCOUNT_ALREADY_LINKED";
+    error.metadata = {
+      existingAccountId: existing._id,
+      userId: existing.userId,
+      organizationId: existing.organizationId,
+      connectedAt: existing.createdAt,
+    };
+    throw error;
   }
 
-  // Construct metadata (customize as needed)
   const metadata = {
-    profileUrl: `https://www.linkedin.com/in/${profile.sub}`,
+    profileUrl: `https://www.linkedin.com/in/${accountId}`,
+    picture: profile.picture,
+    email: profile.email,
+    verified: profile.email_verified,
+    locale: profile.locale,
     lastChecked: new Date(),
-    // Add more LinkedIn-specific metadata as needed
   };
 
-  // Construct permissions (customize as needed)
   const permissions = {
     canPost: true,
     canSchedule: true,
     canAnalyze: true,
   };
 
-  // Ownership model: user, team, organization
-  const socialAccount = await socialaccounts.insertOne({
-    userId: new ObjectId(userId),
+  const insertResult = await socialaccounts.insertOne({
     platform,
-    platformAccountId,
     accountType: organizationId ? "business" : "personal",
     accountName,
-    username: accountName,
-    accountId: profile.sub,
-    email,
+    accountId,
     accessToken: access_token,
+    refreshToken: token.refresh_token,
     idToken: id_token,
     tokenExpiry: new Date(Date.now() + expires_in * 1000),
     lastRefreshed: new Date(),
     status: "active",
-    profileData: profile,
+    userId: new ObjectId(userId),
     metadata,
     permissions,
     connectedAt: new Date(),
@@ -94,12 +95,12 @@ export async function createSocialAccount(
 
   if (organizationId) {
     await socialaccounts.updateOne(
-      { _id: socialAccount.insertedId },
+      { _id: insertResult.insertedId },
       { $set: { organizationId: new ObjectId(organizationId) } }
     );
   }
 
-  return socialAccount;
+  return insertResult;
 }
 
 /**
@@ -288,8 +289,8 @@ export async function postContent(
   // Determine author URN
   const authorUrn =
     account.accountType === "business"
-      ? `urn:li:organization:${account.platformAccountId}`
-      : `urn:li:person:${account.platformAccountId}`;
+      ? `urn:li:organization:${account.accountId}`
+      : `urn:li:person:${account.accountId}`;
 
   // Prepare payload
   const postPayload = {
@@ -343,7 +344,7 @@ export async function postContent(
     }
     return {
       success: false,
-      error: error.message || "Unknown error posting to LinkedIn",
+      error: error.message ?? "Unknown error posting to LinkedIn",
     };
   }
 
@@ -361,6 +362,14 @@ export async function postContent(
       socialAccountId: account._id,
       platform: "linkedin",
       content: message,
+      metadata: {
+        platform: account.platform,
+        platformAccountId: account.platformAccountId,
+        accountId: account.accountId,
+        accountName: account.accountName,
+        accountType: account.accountType,
+        platformId: account.platformId,
+      },
       mediaType: "TEXT",
       postId,
       status: "published",
