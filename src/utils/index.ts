@@ -13,4 +13,6 @@ export const allowedOrigins = [
   // Add production domains if different
   "https://app.mitheai.com",
   "https://api.mitheai.com",
+  "https://www.skedlii.xyz",
+  "https://skedlii.xyz",
 ];
