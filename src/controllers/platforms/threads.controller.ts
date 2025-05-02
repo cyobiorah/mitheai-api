@@ -45,7 +45,9 @@ export const startThreadsConnect = async (req: any, res: Response) => {
   if (!state) {
     console.error("No state parameter found in Threads connect request");
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/accounts?error=${encodeURIComponent(
         "Missing state parameter"
       )}`
     );
@@ -58,7 +60,9 @@ export const startThreadsConnect = async (req: any, res: Response) => {
     if (!stateData) {
       console.error("No state data found in Redis for Threads connect");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           "Invalid or expired state"
         )}`
       );
@@ -68,7 +72,9 @@ export const startThreadsConnect = async (req: any, res: Response) => {
     if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
       await redisService.delete(`threads:${state as string}`);
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           "Authentication link expired"
         )}`
       );
@@ -96,9 +102,9 @@ export const startThreadsConnect = async (req: any, res: Response) => {
   } catch (error) {
     console.error("Error in Threads connect:", error);
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
-        "Internal server error"
-      )}`
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/accounts?error=${encodeURIComponent("Internal server error")}`
     );
   }
 };
@@ -112,7 +118,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
     if (error) {
       console.error("Threads OAuth error:", error, error_description);
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           (error_description as string) ?? "Authentication failed"
         )}`
       );
@@ -122,7 +130,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
     if (!code || !state) {
       console.error("Missing code or state in Threads callback");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           "Missing required parameters"
         )}`
       );
@@ -136,7 +146,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
         `No state data found in Redis for state: ${state as string}`
       );
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           "Invalid or expired authentication link"
         )}`
       );
@@ -150,7 +162,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
     if (!userId) {
       console.error("No user ID found in state data");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           "User identification failed"
         )}`
       );
@@ -165,7 +179,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
       if (!accessToken) {
         console.error("Failed to exchange code for token");
         return res.redirect(
-          `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+          `${
+            process.env.FRONTEND_URL
+          }/dashboard/accounts?error=${encodeURIComponent(
             "Failed to authenticate with Threads"
           )}`
         );
@@ -177,7 +193,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
       if (!userProfile?.id) {
         console.error("Failed to get user profile:", userProfile);
         return res.redirect(
-          `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+          `${
+            process.env.FRONTEND_URL
+          }/dashboard/accounts?error=${encodeURIComponent(
             "Failed to retrieve Threads profile"
           )}`
         );
@@ -209,7 +227,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
         error.code === "account_already_connected"
       ) {
         return res.redirect(
-          `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+          `${
+            process.env.FRONTEND_URL
+          }/dashboard/accounts?error=${encodeURIComponent(
             error.message ??
               "This Threads account is already connected to another user"
           )}`
@@ -218,7 +238,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
 
       // Handle other errors
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?error=${encodeURIComponent(
           error.message ?? "Failed to connect Threads account"
         )}`
       );
@@ -226,7 +248,9 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Unexpected error in Threads callback:", error);
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/accounts?error=${encodeURIComponent(
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/accounts?error=${encodeURIComponent(
         error.message ?? "An unexpected error occurred"
       )}`
     );
@@ -245,13 +269,6 @@ export const post = async (req: any, res: any) => {
         message: "Account ID is required",
       });
     }
-
-    // if (!content && (!mediaUrls || mediaUrls.length === 0)) {
-    //   return res.status(400).json({
-    //     status: "error",
-    //     message: "Content or media is required",
-    //   });
-    // }
 
     // Validate mediaType
     if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
@@ -355,6 +372,13 @@ export const post = async (req: any, res: any) => {
         content,
         mediaType: mediaType ?? "TEXT",
         mediaUrls,
+        metadata: {
+          mediaType: mediaType ?? "TEXT",
+          mediaUrls,
+          accountName: account.accountName,
+          platformAccountId: account.platformAccountId,
+          platform: "threads",
+        },
         postId: postResult.id,
         status: "published",
         publishedDate: new Date(),
