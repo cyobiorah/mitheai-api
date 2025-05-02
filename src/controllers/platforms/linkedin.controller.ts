@@ -54,7 +54,7 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
     if (req.query.error) {
       console.error("LinkedIn OAuth error:", req.query);
       return res.redirect(
-        `${process.env.FRONTEND_URL}/account-setup?error=${
+        `${process.env.FRONTEND_URL}/dashboard/accounts?error=${
           req.query.error as string
         }`
       );
@@ -67,14 +67,14 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
     if (!code) {
       console.error("No authorization code in callback");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/account-setup?error=no_code`
+        `${process.env.FRONTEND_URL}/dashboard/accounts?error=no_code`
       );
     }
 
     if (!state) {
       console.error("No state parameter in LinkedIn callback");
       return res.redirect(
-        `${process.env.FRONTEND_URL}/account-setup?error=no_state`
+        `${process.env.FRONTEND_URL}/dashboard/accounts?error=no_state`
       );
     }
 
@@ -86,7 +86,7 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
         `No state data found in Redis for state: ${state as string}`
       );
       return res.redirect(
-        `${process.env.FRONTEND_URL}/account-setup?error=invalid_state`
+        `${process.env.FRONTEND_URL}/dashboard/accounts?error=invalid_state`
       );
     }
 
@@ -108,7 +108,7 @@ export const handleLinkedinCallback = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("LinkedIn callback error:", error);
     return res.redirect(
-      `${process.env.FRONTEND_URL}/account-setup?error=${
+      `${process.env.FRONTEND_URL}/dashboard/accounts?error=${
         error.message ?? "unknown_error"
       }`
     );
@@ -151,6 +151,7 @@ export const post = async (req: Request, res: Response) => {
       const account = await socialaccounts.findOne({
         _id: new ObjectId(accountId),
       });
+
       if (!account) {
         return res.status(404).json({
           status: "error",

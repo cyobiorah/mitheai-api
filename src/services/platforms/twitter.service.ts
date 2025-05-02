@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
 import { Client, auth } from "twitter-api-sdk";
+import { SocialAccount } from "../../schema/schema";
 
 // These should be in your env/config
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID!;
@@ -53,18 +54,18 @@ export const exchangeCodeForTokensAndProfile = async (code: string) => {
 export async function createSocialAccount(
   userId: string,
   profile: any,
-  accessToken: string,
-  refreshToken: string,
+  tokenData: any,
   organizationId?: string,
   teamId?: string
 ): Promise<any> {
   try {
     const { socialaccounts } = await getCollections();
 
-    // Check if this account is connected to ANY user
+    const accountId = profile.id;
+
     const anyExistingAccount = await socialaccounts.findOne({
       platform: "twitter",
-      platformAccountId: profile.id,
+      accountId,
     });
 
     if (anyExistingAccount && anyExistingAccount.userId.toString() !== userId) {
@@ -82,10 +83,9 @@ export async function createSocialAccount(
       throw error;
     }
 
-    // Now check if this specific user has already connected this account
     const userExistingAccount = await socialaccounts.findOne({
       platform: "twitter",
-      platformAccountId: profile.id,
+      accountId,
       userId: new ObjectId(userId),
     });
 
@@ -102,16 +102,14 @@ export async function createSocialAccount(
       throw error;
     }
 
-    // Build the social account object
-    const socialAccount: any = {
+    const socialAccount: SocialAccount = {
       platform: "twitter",
-      platformAccountId: profile.id,
       accountType: organizationId ? "business" : "personal",
-      accountName: profile.username,
+      accountName: profile.name,
       accountId: profile.id,
-      accessToken,
-      refreshToken,
-      tokenExpiry: null, // or set expiry if available
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token,
+      tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
       lastRefreshed: new Date(),
       status: "active",
       userId: new ObjectId(userId),
@@ -120,12 +118,15 @@ export async function createSocialAccount(
         followerCount: profile.public_metrics?.followers_count,
         followingCount: profile.public_metrics?.following_count,
         lastChecked: new Date(),
+        profileImageUrl: profile.profile_image_url,
+        username: profile.username,
       },
       permissions: {
         canPost: true,
         canSchedule: true,
         canAnalyze: true,
       },
+      connectedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -137,7 +138,6 @@ export async function createSocialAccount(
       socialAccount.teamId = new ObjectId(teamId);
     }
 
-    // Create the social account
     const createdAccount = await socialaccounts.insertOne(socialAccount);
     return createdAccount;
   } catch (error: any) {
@@ -166,16 +166,9 @@ export async function post(content: any): Promise<{ id: string }> {
   // First try to find by accountId if it's in the metadata
   if (content.metadata.socialPost.accountId) {
     account = await socialaccounts.findOne({
-      _id: new ObjectId(content.metadata.socialPost.accountId),
+      accountId: content.metadata.socialPost.accountId,
     });
   }
-
-  // If no account found by ID, try to find by userId
-  account ??= await socialaccounts.findOne({
-    userId: new ObjectId(content.createdBy),
-    platform: "twitter",
-    status: "active",
-  });
 
   if (!account) {
     throw new Error("No active Twitter account found");
@@ -186,6 +179,7 @@ export async function post(content: any): Promise<{ id: string }> {
   try {
     // Reuse the postTweet method which already handles token refresh
     const response = await postTweet(accountId, content.content);
+
     if (!response.data?.id) {
       throw new Error("Failed to create tweet");
     }
@@ -197,6 +191,15 @@ export async function post(content: any): Promise<{ id: string }> {
       platform: "twitter",
       status: "posted",
       postedAt: new Date(),
+      metadata: {
+        ...content.metadata,
+        socialPost: {
+          ...content.metadata.socialPost,
+          username: account.metadata?.username,
+          profileUrl: account.metadata?.profileUrl,
+          profileImageUrl: account.metadata?.profileImageUrl,
+        },
+      },
     };
 
     await socialposts.insertOne(postRecord);

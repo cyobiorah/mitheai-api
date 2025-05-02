@@ -8,6 +8,7 @@ import manualCronRoutes from "./manualCron.routes";
 import invitationsRoutes from "./invitations.routes";
 import socialPostsRoutes from "./socialPosts.routes";
 import scheduledPostsRoutes from "./scheduledPosts.routes";
+import collectionsRoutes from "./collections.routes";
 
 const router = Router();
 
@@ -31,6 +32,9 @@ router.use("/social-accounts", socialAccountRoutes);
 
 // Social posts routes
 router.use("/social-posts", socialPostsRoutes);
+
+// Collections routes
+router.use("/collections", collectionsRoutes);
 
 // Scheduled posts routes
 router.use("/scheduled-posts", scheduledPostsRoutes);
