@@ -6,6 +6,8 @@ import { allowedOrigins } from "./utils";
 import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { redisClient } from "./utils/redisClient";
+import { handleWebhook } from "./controllers/webhook.controller";
+import bodyParser from "body-parser";
 
 dotenv.config();
 
@@ -23,6 +25,13 @@ declare module "express-session" {
 }
 
 const app = express();
+
+// Stripe Webhook
+app.post(
+  "/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  handleWebhook
+);
 
 // Trust first proxy (Vercel)
 app.set("trust proxy", 1);
