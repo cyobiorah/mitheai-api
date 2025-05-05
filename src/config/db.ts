@@ -96,5 +96,6 @@ export async function getCollections() {
     sessions: db.collection("sessions"),
     socialaccounts: db.collection("socialaccounts"),
     collections: db.collection("collections"),
+    invoices: db.collection("invoices"),
   };
 }
