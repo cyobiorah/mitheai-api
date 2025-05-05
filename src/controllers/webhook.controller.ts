@@ -52,6 +52,14 @@ export async function handleWebhook(req: Request, res: Response) {
       });
     }
 
+    if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object;
+      const interval = subscription.items.data[0]?.plan.interval;
+      await usersService.updateUserByStripeId(subscription.customer as string, {
+        billingInterval: interval,
+      });
+    }
+
     // 2. Invoice Payment Succeeded
     else if (event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object;
