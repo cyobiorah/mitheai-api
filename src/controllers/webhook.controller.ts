@@ -29,7 +29,9 @@ export async function handleWebhook(req: Request, res: Response) {
       webhookSecret!
     );
   } catch (err: any) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return res
+      .status(400)
+      .json({ error: `Webhook Error: ${String(err.message)}` });
   }
 
   try {
