@@ -18,6 +18,7 @@ async function seed() {
     sessions,
     socialaccounts,
     collections,
+    invoices,
   } = await getCollections();
 
   // Clear existing data
@@ -32,6 +33,7 @@ async function seed() {
     sessions.deleteMany({}),
     socialaccounts.deleteMany({}),
     collections.deleteMany({}),
+    invoices.deleteMany({}),
   ]);
   console.log("🧹 Cleared existing data");
 

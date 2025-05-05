@@ -99,3 +99,88 @@ export const sendWelcomeEmail = async ({
     throw error;
   }
 };
+
+interface SendPaymentEmailParams {
+  to: string;
+  firstName: string;
+  planName: string;
+  renewalDate: string;
+  amountPaid: number;
+  currency: string;
+}
+
+export const sendPaymentSuccessEmail = async ({
+  to,
+  firstName,
+  planName,
+  renewalDate,
+  amountPaid,
+  currency,
+}: SendPaymentEmailParams) => {
+  const baseUrl =
+    process.env.FRONTEND_URL?.replace(/\/$/, "") ?? "http://localhost:5173";
+
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email: to, name: firstName }];
+  sendSmtpEmail.templateId = Number(
+    process.env.BREVO_PAYMENT_SUCCESS_TEMPLATE_ID
+  );
+  sendSmtpEmail.sender = DEFAULT_SENDER;
+  sendSmtpEmail.params = {
+    firstName,
+    planName,
+    renewalDate,
+    amountPaid,
+    currency,
+    dashboardLink: `${baseUrl}/dashboard/billing`,
+  };
+
+  try {
+    return await apiInstance.sendTransacEmail(sendSmtpEmail);
+  } catch (error) {
+    console.error("Error sending payment success email:", error);
+    throw error;
+  }
+};
+
+interface SendPaymentFailedEmailParams {
+  to: string;
+  firstName: string;
+  planName: string;
+  amountDue: number;
+  currency: string;
+  invoiceDate: string;
+  billingLink: string;
+}
+
+export const sendPaymentFailedEmail = async ({
+  to,
+  firstName,
+  planName,
+  amountDue,
+  currency,
+  invoiceDate,
+  billingLink,
+}: SendPaymentFailedEmailParams) => {
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email: to, name: firstName }];
+  sendSmtpEmail.templateId = Number(
+    process.env.BREVO_PAYMENT_FAILED_TEMPLATE_ID
+  );
+  sendSmtpEmail.sender = DEFAULT_SENDER;
+  sendSmtpEmail.params = {
+    firstName,
+    planName,
+    amountDue,
+    currency,
+    invoiceDate,
+    billingLink,
+  };
+
+  try {
+    return await apiInstance.sendTransacEmail(sendSmtpEmail);
+  } catch (error) {
+    console.error("Error sending payment failed email:", error);
+    throw error;
+  }
+};
