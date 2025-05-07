@@ -8,8 +8,6 @@ export async function createCheckoutSession(
 ) {
   const isReturningCustomer = !!customerId;
 
-  console.log({ isReturningCustomer });
-
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: planId, quantity: 1 }],
