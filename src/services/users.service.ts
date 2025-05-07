@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
 import { getCollections } from "../config/db";
+import { HttpError } from "../utils/httpError";
 
 export const getUserById = async (userId: string) => {
   const { users } = await getCollections();
