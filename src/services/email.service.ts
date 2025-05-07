@@ -184,3 +184,36 @@ export const sendPaymentFailedEmail = async ({
     throw error;
   }
 };
+
+interface SendPasswordResetEmailParams {
+  to: string;
+  token: string;
+  firstName: string;
+  resetLink: string;
+}
+
+export const sendPasswordResetEmail = async ({
+  to,
+  token,
+  firstName,
+  resetLink,
+}: SendPasswordResetEmailParams) => {
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email: to }];
+  sendSmtpEmail.templateId = Number(
+    process.env.BREVO_PASSWORD_RESET_TEMPLATE_ID
+  );
+  sendSmtpEmail.sender = DEFAULT_SENDER;
+  sendSmtpEmail.params = {
+    token,
+    firstName,
+    resetLink,
+  };
+
+  try {
+    return await apiInstance.sendTransacEmail(sendSmtpEmail);
+  } catch (error) {
+    console.error("Error sending password reset email:", error);
+    throw error;
+  }
+};
