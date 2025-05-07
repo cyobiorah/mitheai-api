@@ -15,4 +15,5 @@ export const allowedOrigins = [
   "https://api.mitheai.com",
   "https://www.skedlii.xyz",
   "https://skedlii.xyz",
+  "https://staging.skedlii.xyz"
 ];

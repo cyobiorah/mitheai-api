@@ -19,6 +19,7 @@ export function requireJwtAuth(
     (req as any).user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    console.log("Invalid or expired token", err);
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 }

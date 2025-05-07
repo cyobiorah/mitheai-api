@@ -19,6 +19,19 @@ export const listScheduledPosts = async (req: any, res: any) => {
   res.json({ data: posts, count: posts.length });
 };
 
+// Get logged in users scheduled posts
+export const getLoggedInUsersScheduledPosts = async (req: any, res: any) => {
+  const userId = req.user.id;
+  const { scheduledposts } = await getCollections();
+
+  const posts = await scheduledposts
+    .find({ createdBy: new ObjectId(userId) })
+    .sort({ scheduledFor: 1 })
+    .toArray();
+
+  res.json({ data: posts, count: posts.length });
+};
+
 // Create scheduled post
 export const createScheduledPost = async (req: any, res: any) => {
   try {
@@ -59,6 +72,7 @@ export const createScheduledPost = async (req: any, res: any) => {
       platforms: platformsArray,
       scheduledFor: scheduledTimeUTC,
       createdBy: new ObjectId(userId),
+      userId: new ObjectId(userId),
       teamId: teamId ? new ObjectId(teamId) : undefined,
       organizationId: organizationId ? new ObjectId(organizationId) : undefined,
       status: "scheduled",

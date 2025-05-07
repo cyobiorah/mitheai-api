@@ -4,7 +4,10 @@ import * as UsersService from "../services/users.service";
 import * as OrgsService from "../services/organizations.service";
 import * as TeamsService from "../services/teams.service";
 import { validationError } from "../validation/validationError";
-import { sendWelcomeEmail } from "../services/email.service";
+import {
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+} from "../services/email.service";
 
 // REGISTER
 export const register = async (req: Request, res: Response) => {
@@ -155,5 +158,55 @@ export const login = async (req: Request, res: Response) => {
     res.json({ user: userWithoutPassword, token, organization, teams });
   } catch (err: any) {
     res.status(401).json({ message: err.message });
+  }
+};
+
+// FORGOT PASSWORD
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    const user = await AuthService.findUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const token = AuthService.generateJWT({
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+    });
+
+    const resetLink = `${process.env.WEBAPP_URL}reset-password?token=${token}`;
+
+    await sendPasswordResetEmail({
+      to: email,
+      token,
+      firstName: user.firstName,
+      resetLink,
+    });
+
+    // save token to user
+    await UsersService.updateUser(user._id, { resetToken: token });
+
+    res.json({ message: "Password reset email sent successfully" });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// RESET PASSWORD
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    const user = await AuthService.findUserByToken(token);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await AuthService.resetPassword(user._id.toString(), password);
+
+    res.json({ message: "Password reset successfully" });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 };

@@ -11,38 +11,27 @@ export const getUserById = async (userId: string) => {
   );
 };
 
-// export const updateUserProfile = async (userId: string, update: any) => {
-//   // Only allow certain fields to be updated
-//   const allowedFields = ["firstName", "lastName", "avatar", "bio"];
-//   const updateData: any = {};
-//   for (const field of allowedFields) {
-//     if (update[field] !== undefined) updateData[field] = update[field];
-//   }
-//   return User.findByIdAndUpdate(userId, updateData, {
-//     new: true,
-//     runValidators: true,
-//   }).select("-password");
-// };
-
-// export const changeUserPassword = async (
-//   userId: string,
-//   currentPassword: string,
-//   newPassword: string
-// ) => {
-//   const user = await User.findById(userId);
-//   if (!user) throw new Error("User not found");
-
-//   const match = await bcrypt.compare(currentPassword, user.password);
-//   if (!match) throw new Error("Current password is incorrect");
-
-//   user.password = await bcrypt.hash(newPassword, 10);
-//   await user.save();
-// };
-
 export async function updateUserProfile(userId: string, update: any) {
   const { users } = await getCollections();
+
+  const user = await users.findOne({ _id: new ObjectId(userId) });
+
+  if (!user) throw new Error("User not found");
+
   await users.updateOne({ _id: new ObjectId(userId) }, { $set: update });
-  return users.findOne({ _id: new ObjectId(userId) });
+  return user;
+}
+
+export async function updateUserByStripeId(
+  stripeCustomerId: string,
+  update: any
+) {
+  const { users } = await getCollections();
+  const user = await users.findOne({ stripeCustomerId });
+  if (!user) throw new Error("User not found");
+
+  await users.updateOne({ stripeCustomerId }, { $set: update });
+  return user;
 }
 
 export async function changeUserPassword(
