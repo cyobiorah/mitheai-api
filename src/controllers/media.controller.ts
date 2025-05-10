@@ -14,7 +14,7 @@ export const getSignedCloudinaryParams = async (
   const timestamp = Math.floor(Date.now() / 1000);
 
   const signature = crypto
-    .createHash("sha1")
+    .createHash("sha256")
     .update(
       `folder=${folder}&public_id=${public_id}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`
     )
