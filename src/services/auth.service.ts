@@ -73,3 +73,9 @@ export const resetPassword = async (userId: string, password: string) => {
     { $set: { password: hashed } }
   );
 };
+
+// Delete user
+export const deleteUser = async (userId: string) => {
+  const { users } = await getCollections();
+  await users.deleteOne({ _id: new ObjectId(userId) });
+};
