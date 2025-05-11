@@ -26,7 +26,16 @@ export const startDirectInstagramOAuth = async (
 export const handleInstagramCallback = async (req: Request, res: Response) => {
   const { code, state } = req.query;
 
-  if (!code || !state) return res.status(400).send("Missing code or state.");
+  if (!code || !state) {
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/accounts?status=failed&message=${encodeURIComponent(
+        "Missing code or state"
+      )}`
+    );
+    return;
+  }
 
   const stored = await redisService.get(`instagram:state:${state as string}`);
   if (!stored) return res.status(403).send("Invalid or expired state.");
