@@ -9,7 +9,6 @@ export const startDirectInstagramOAuth = async (
   req: Request,
   res: Response
 ) => {
-  console.log("instagram connection started");
   const { id: userId, organizationId, currentTeamId } = (req as any).user!;
   const state = `${userId}:${organizationId}:${currentTeamId}:${Date.now()}`;
 
@@ -21,12 +20,10 @@ export const startDirectInstagramOAuth = async (
 
   const redirectUri = instagramService.getAuthorizationUrl(state);
 
-  console.log({ redirectUri });
   res.send(redirectUri);
 };
 
 export const handleInstagramCallback = async (req: Request, res: Response) => {
-  console.log("instagram callback started");
   const { code, state } = req.query;
 
   if (!code || !state) return res.status(400).send("Missing code or state.");
@@ -143,9 +140,6 @@ export const post = async (req: Request, res: Response) => {
     const { caption, media } = req.body.data;
     const userId = (req as any).user?.id;
 
-    console.log({ params: req.params });
-    console.log({ body: req.body });
-
     if (!accountId) {
       return res.status(400).json({
         status: "error",
@@ -168,7 +162,6 @@ export const post = async (req: Request, res: Response) => {
     }
 
     const { socialaccounts } = await getCollections();
-    console.log({ accountId });
     const account = await socialaccounts.findOne({
       _id: new ObjectId(accountId),
     });

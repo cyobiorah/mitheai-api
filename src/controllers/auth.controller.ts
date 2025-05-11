@@ -210,3 +210,14 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// DELETE MY ACCOUNT
+export const deleteOwnAccount = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id!;
+    await AuthService.deleteUser(userId);
+    res.json({ message: "Account deleted successfully" });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
