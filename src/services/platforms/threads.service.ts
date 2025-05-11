@@ -287,8 +287,7 @@ export async function postContent(
   try {
     const { socialaccounts } = await getCollections();
     const account = await socialaccounts.findOne({
-      // _id: new ObjectId(accountId),
-      accountId: accountId,
+      _id: new ObjectId(accountId),
     });
 
     if (!account) {
@@ -462,8 +461,7 @@ export async function getAccountWithValidToken(
 
     const existingAccountForAnyUser = await socialaccounts.findOne({
       // platform: "threads",
-      // _id: new ObjectId(accountId),
-      accountId: accountId,
+      _id: new ObjectId(accountId),
     });
 
     if (!existingAccountForAnyUser) {
@@ -488,8 +486,7 @@ export async function getAccountWithValidToken(
     // Get the updated account
     const updatedAccount = await socialaccounts.findOne({
       // platform: "threads",
-      // _id: new ObjectId(accountId),
-      accountId: accountId,
+      _id: new ObjectId(accountId),
     });
     if (!updatedAccount) {
       throw new Error(`Social account not found after refresh: ${accountId}`);
@@ -511,8 +508,7 @@ export async function checkAndRefreshToken(
   try {
     const { socialaccounts } = await getCollections();
     const socialAccount = await socialaccounts.findOne({
-      // _id: new ObjectId(accountId),
-      accountId: accountId,
+      _id: new ObjectId(accountId),
     });
 
     if (!socialAccount) {
@@ -559,7 +555,7 @@ export async function checkAndRefreshToken(
       const newExpiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
 
       await socialaccounts.updateOne(
-        { accountId: accountId },
+        { _id: new ObjectId(accountId) },
         {
           $set: {
             lastRefreshed: now,
@@ -580,7 +576,7 @@ export async function checkAndRefreshToken(
           verifyError.response?.data?.error?.code === 190);
 
       await socialaccounts.updateOne(
-        { accountId: accountId },
+        { _id: new ObjectId(accountId) },
         {
           $set: {
             status: isExpiredToken ? "expired" : "error",
