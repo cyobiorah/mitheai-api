@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response as ExpressResponse } from "express";
 import * as instagramService from "../../services/platforms/instagram.service";
 import redisService from "../../utils/redisClient";
 import axios from "axios";
@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 
 export const startDirectInstagramOAuth = async (
   req: Request,
-  res: Response
+  res: ExpressResponse
 ) => {
   const { id: userId, organizationId, currentTeamId } = (req as any).user!;
   const state = `${userId}:${organizationId}:${currentTeamId}:${Date.now()}`;
@@ -23,7 +23,10 @@ export const startDirectInstagramOAuth = async (
   res.send(redirectUri);
 };
 
-export const handleInstagramCallback = async (req: Request, res: Response) => {
+export const handleInstagramCallback = async (
+  req: Request,
+  res: ExpressResponse
+) => {
   const { code, state } = req.query;
 
   if (!code || !state) {
@@ -100,6 +103,7 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
       accountType: "business",
       accountName: igProfile.username,
       accountId: igId,
+      platformAccountId: igId,
       accessToken: userAccessToken,
       refreshToken: null,
       tokenExpiry,
@@ -143,7 +147,7 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
   }
 };
 
-export const post = async (req: Request, res: Response) => {
+export const post = async (req: Request, res: ExpressResponse) => {
   try {
     const { accountId } = req.params;
     const { caption, media } = req.body.data;
@@ -206,5 +210,59 @@ export const post = async (req: Request, res: Response) => {
       status: "error",
       message: error.message ?? "An unexpected error occurred",
     });
+  }
+};
+
+export const postToInstagram = async ({
+  req,
+  res,
+  postData,
+}: {
+  req?: Request;
+  res?: ExpressResponse;
+  postData?: any;
+}): Promise<any> => {
+  try {
+    const { accountId, content, mediaUrls } = postData ?? req?.body?.data ?? {};
+    const userId = postData?.userId ?? (req as any)?.user?.id;
+
+    if (!accountId || !userId) {
+      const message = !accountId
+        ? "Account ID is required"
+        : "Authentication required";
+      res?.status(400).json({ status: "error", message });
+      return { success: false, error: message };
+    }
+
+    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+      const message = "Post content or media is required";
+      res?.status(400).json({ status: "error", message });
+      return { success: false, error: message };
+    }
+
+    const result = await instagramService.postContent(
+      accountId,
+      content,
+      mediaUrls
+    );
+
+    if (res) {
+      return res.status(200).json({
+        status: "success",
+        message: "Successfully posted to Instagram",
+        data: result.postId,
+      });
+    }
+
+    return { success: true, postId: result.postId };
+  } catch (error: any) {
+    console.error("Error posting to Instagram:", error);
+    if (res) {
+      res.status(500).json({
+        status: "error",
+        message: error.message ?? "An unexpected error occurred",
+      });
+    }
+    return { success: false, error: error.message };
   }
 };

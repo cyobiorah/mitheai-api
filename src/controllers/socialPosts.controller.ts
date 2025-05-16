@@ -38,24 +38,31 @@
 //   res.json({ data: posts, total: posts.length });
 // };
 
-import { Request, Response } from "express";
-import * as SocialPostsService from "../services/socialPosts.service";
+import { Request, Response as ExpressResponse } from "express";
+import {
+  getSocialPostsByUserId,
+  getSocialPostsByTeamId,
+  getSocialPostsByOrganizationId,
+  getSocialPostById,
+  createSocialPost,
+  updateSocialPost,
+  deleteSocialPost,
+  handlePlatformUploadAndPost,
+} from "../services/socialPosts.service";
 
 // Get posts (with flexible filtering)
-export const getPosts = async (req: Request, res: Response) => {
+export const getPosts = async (req: Request, res: ExpressResponse) => {
   try {
     const { userId, teamId, organizationId } = req.query;
 
     // Only apply one type of ownership filter at a time for strictness
     let posts: any = [];
     if (userId) {
-      posts = await SocialPostsService.getSocialPostsByUserId(userId as string);
+      posts = await getSocialPostsByUserId(userId as string);
     } else if (teamId) {
-      posts = await SocialPostsService.getSocialPostsByTeamId(teamId as string);
+      posts = await getSocialPostsByTeamId(teamId as string);
     } else if (organizationId) {
-      posts = await SocialPostsService.getSocialPostsByOrganizationId(
-        organizationId as string
-      );
+      posts = await getSocialPostsByOrganizationId(organizationId as string);
     } else {
       // Optionally, you could return [] or an error if no owner filter is provided
       posts = [];
@@ -68,10 +75,10 @@ export const getPosts = async (req: Request, res: Response) => {
 };
 
 // Get posts by userId
-export const getPostsByUserId = async (req: Request, res: Response) => {
+export const getPostsByUserId = async (req: Request, res: ExpressResponse) => {
   try {
     const { userId } = req.params;
-    const posts = await SocialPostsService.getSocialPostsByUserId(userId);
+    const posts = await getSocialPostsByUserId(userId);
     res.json({ data: posts, total: posts.length });
   } catch (error: any) {
     res
@@ -81,10 +88,10 @@ export const getPostsByUserId = async (req: Request, res: Response) => {
 };
 
 // Get posts by teamId
-export const getPostsByTeamId = async (req: Request, res: Response) => {
+export const getPostsByTeamId = async (req: Request, res: ExpressResponse) => {
   try {
     const { teamId } = req.params;
-    const posts = await SocialPostsService.getSocialPostsByTeamId(teamId);
+    const posts = await getSocialPostsByTeamId(teamId);
     res.json({ data: posts, total: posts.length });
   } catch (error: any) {
     res
@@ -94,12 +101,13 @@ export const getPostsByTeamId = async (req: Request, res: Response) => {
 };
 
 // Get posts by organizationId
-export const getPostsByOrganizationId = async (req: Request, res: Response) => {
+export const getPostsByOrganizationId = async (
+  req: Request,
+  res: ExpressResponse
+) => {
   try {
     const { organizationId } = req.params;
-    const posts = await SocialPostsService.getSocialPostsByOrganizationId(
-      organizationId
-    );
+    const posts = await getSocialPostsByOrganizationId(organizationId);
     res.json({ data: posts, total: posts.length });
   } catch (error: any) {
     res
@@ -109,10 +117,10 @@ export const getPostsByOrganizationId = async (req: Request, res: Response) => {
 };
 
 // Get a single post by ID
-export const getPostById = async (req: Request, res: Response) => {
+export const getPostById = async (req: Request, res: ExpressResponse) => {
   try {
     const { id } = req.params;
-    const post = await SocialPostsService.getSocialPostById(id);
+    const post = await getSocialPostById(id);
     if (!post) return res.status(404).json({ error: "Post not found" });
     res.json({ data: post });
   } catch (error: any) {
@@ -121,9 +129,9 @@ export const getPostById = async (req: Request, res: Response) => {
 };
 
 // Create a new post
-export const createPost = async (req: Request, res: Response) => {
+export const createPost = async (req: Request, res: ExpressResponse) => {
   try {
-    const post = await SocialPostsService.createSocialPost(req.body);
+    const post = await createSocialPost(req.body);
     res.status(201).json({ data: post });
   } catch (error: any) {
     res.status(500).json({ error: error.message ?? "Failed to create post" });
@@ -131,10 +139,10 @@ export const createPost = async (req: Request, res: Response) => {
 };
 
 // Update a post
-export const updatePost = async (req: Request, res: Response) => {
+export const updatePost = async (req: Request, res: ExpressResponse) => {
   try {
     const { id } = req.params;
-    const post = await SocialPostsService.updateSocialPost(id, req.body);
+    const post = await updateSocialPost(id, req.body);
     res.json({ data: post });
   } catch (error: any) {
     res.status(500).json({ error: error.message ?? "Failed to update post" });
@@ -142,12 +150,121 @@ export const updatePost = async (req: Request, res: Response) => {
 };
 
 // Delete a post
-export const deletePost = async (req: Request, res: Response) => {
+export const deletePost = async (req: Request, res: ExpressResponse) => {
   try {
     const { id } = req.params;
-    const result = await SocialPostsService.deleteSocialPost(id);
+    const result = await deleteSocialPost(id);
     res.json({ data: result });
   } catch (error: any) {
     res.status(500).json({ error: error.message ?? "Failed to delete post" });
   }
 };
+
+// // Post to platform
+// export async function postToMultiPlatform({
+//   req,
+//   res,
+// }: {
+//   req: Request;
+//   res: ExpressResponse;
+// }) {
+//   try {
+//     const media = (req.files ?? []) as Express.Multer.File[];
+//     const { postData, dimensions } = req.body;
+
+//     if (
+//       !postData ||
+//       (JSON.parse(postData)?.mediaType !== "text" && !media?.length)
+//     ) {
+//       return res.status(400).json({ error: "Missing media or postData" });
+//     }
+
+//     const parsed = JSON.parse(postData);
+
+//     console.log({ dimensions });
+
+//     await handlePlatformUploadAndPost({
+//       platform: parsed.platform,
+//       mediaFiles: media,
+//       userId: (req as any).user.id,
+//       postMeta: {
+//         accountId: parsed.accountId,
+//         accountName: parsed.accountName,
+//         accountType: parsed.accountType,
+//         caption: parsed.caption,
+//         mediaType: parsed.mediaType,
+//         platformAccountId: parsed.platformAccountId,
+//         accessToken: parsed.accessToken,
+//         dimensions,
+//       },
+//       res,
+//     });
+
+//     // if (!result.success) {
+//     //   return res.status(500).json({ error: result.error });
+//     // }
+
+//     // res.status(200).json({ postId: result.postId });
+//   } catch (err: any) {
+//     console.error("Post to platform failed:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// }
+
+export async function postToMultiPlatform({
+  req,
+  res,
+}: {
+  req: Request;
+  res: ExpressResponse;
+}) {
+  try {
+    const media = (req.files ?? []) as Express.Multer.File[];
+    const { postData, dimensions } = req.body;
+
+    if (
+      !postData ||
+      (JSON.parse(postData)?.mediaType !== "text" && !media?.length)
+    ) {
+      return res.status(400).json({ error: "Missing media or postData" });
+    }
+
+    const parsedPostData = JSON.parse(postData);
+
+    // dimensions[] comes as an array of JSON strings, parse each
+    const parsedDimensions: { id: string; width: number; height: number }[] =
+      Array.isArray(dimensions)
+        ? dimensions
+            .map((d: string) => {
+              try {
+                return JSON.parse(d);
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean)
+        : [];
+
+    console.log("Parsed dimensions:", parsedDimensions);
+
+    await handlePlatformUploadAndPost({
+      platform: parsedPostData.platform,
+      mediaFiles: media,
+      userId: (req as any).user.id,
+      postMeta: {
+        accountId: parsedPostData.accountId,
+        accountName: parsedPostData.accountName,
+        accountType: parsedPostData.accountType,
+        caption: parsedPostData.caption,
+        mediaType: parsedPostData.mediaType,
+        platformAccountId: parsedPostData.platformAccountId,
+        accessToken: parsedPostData.accessToken,
+        dimensions: parsedDimensions,
+      },
+      res,
+    });
+  } catch (err: any) {
+    console.error("Post to platform failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+}
