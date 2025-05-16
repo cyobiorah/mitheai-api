@@ -9,9 +9,11 @@ import {
 
 const router = Router();
 
-router.get("/direct-auth", requireJwtAuth, startDirectThreadsAuth);
-router.get("/connect", requireJwtAuth, startThreadsConnect);
-router.get("/callback", requireJwtAuth, handleThreadsCallback);
+router.get("/direct-auth", requireJwtAuth, (req, res) => {
+  startDirectThreadsAuth(req, res);
+});
+router.get("/connect", startThreadsConnect);
+router.get("/callback", handleThreadsCallback);
 router.post(":accountId/post", requireJwtAuth, (req, res) => {
   post({ req, res });
 });
