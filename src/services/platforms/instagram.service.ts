@@ -101,12 +101,13 @@ export const saveSocialPost = async (postData: any) => {
 export const postContent = async (
   accountId: string,
   caption: string,
-  media: { url: string; type?: string }[]
+  mediaUrls: string[]
 ): Promise<{ success: boolean; postId: string }> => {
   const { socialaccounts, socialposts } = await getCollections();
 
   const account = await socialaccounts.findOne({
-    _id: new ObjectId(accountId),
+    // _id: new ObjectId(accountId),
+    accountId,
   });
   if (!account) throw new Error("Instagram account not found");
   if (!account.accessToken) throw new Error("Missing access token");
@@ -116,12 +117,12 @@ export const postContent = async (
 
   let postId: string;
 
-  if (media.length === 1) {
+  if (mediaUrls.length === 1) {
     // Single image
     const mediaRes = await axios.post(
       `https://graph.facebook.com/v19.0/${igUserId}/media`,
       new URLSearchParams({
-        image_url: media[0].url,
+        image_url: mediaUrls[0],
         caption: caption || "",
         access_token: accessToken,
       })
@@ -140,11 +141,11 @@ export const postContent = async (
     // Carousel
     const containerIds = [];
 
-    for (const item of media) {
+    for (const item of mediaUrls) {
       const res = await axios.post(
         `https://graph.facebook.com/v19.0/${igUserId}/media`,
         new URLSearchParams({
-          image_url: item.url,
+          image_url: item,
           is_carousel_item: "true",
           access_token: accessToken,
         })

@@ -281,13 +281,14 @@ export async function createSocialAccount(
 export async function postContent(
   accountId: string,
   content: string,
-  mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" = "TEXT",
+  mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" | "text" = "TEXT",
   mediaUrl?: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const { socialaccounts } = await getCollections();
     const account = await socialaccounts.findOne({
-      _id: new ObjectId(accountId),
+      // _id: new ObjectId(accountId),
+      accountId,
     });
 
     if (!account) {
@@ -298,7 +299,9 @@ export async function postContent(
     }
 
     // Post the content based on the media type
-    if (mediaType === "TEXT") {
+    console.log({ mediaType });
+    console.log({ mediaUrl });
+    if (mediaType === "TEXT" || mediaType === "text") {
       return await createTextPost(account, content);
     } else if (mediaType === "IMAGE" && mediaUrl) {
       return await createImagePost(account, content, mediaUrl);
@@ -461,7 +464,8 @@ export async function getAccountWithValidToken(
 
     const existingAccountForAnyUser = await socialaccounts.findOne({
       // platform: "threads",
-      _id: new ObjectId(accountId),
+      // _id: new ObjectId(accountId),
+      accountId,
     });
 
     if (!existingAccountForAnyUser) {
