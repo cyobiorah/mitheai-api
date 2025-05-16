@@ -126,8 +126,6 @@ export async function handlePlatformUploadAndPost({
           }).transformation
         : undefined;
 
-      console.log(`[Transformation for ${platform}]:`, transformation);
-
       const uploadResult = await uploadToCloudinaryBuffer(file, {
         folder: "skedlii",
         publicId: `${file.originalname}-${Date.now()}`,
