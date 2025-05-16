@@ -4,7 +4,7 @@ import { requireJwtAuth } from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/", requireJwtAuth, scheduledPostsController.listScheduledPosts);
+router.get("/", requireJwtAuth, scheduledPostsController.getLoggedInUsersScheduledPosts);
 router.get(
   "/:id",
   requireJwtAuth,

@@ -4,6 +4,7 @@ export interface SocialAccount {
   _id?: ObjectId;
   platform: "twitter" | "linkedin";
   accountId: string;
+  platformAccountId: string;
   accountName: string;
   accountType: "personal" | "business";
   userId: ObjectId;

@@ -2,6 +2,7 @@ import { getCollections } from "../config/db";
 import * as twitterService from "../services/platforms/twitter.service";
 import * as threadsService from "../services/platforms/threads.service";
 import * as linkedinService from "../services/platforms/linkedin.service";
+import * as instagramService from "../services/platforms/instagram.service";
 import { ObjectId } from "mongodb";
 // import other platform services as needed
 
@@ -151,6 +152,49 @@ export class SocialPostWorker {
                 }
                 break;
               }
+              case "instagram": {
+                const contentItem = {
+                  content: post.content,
+                  media: (post.mediaUrls ?? []).map((url: string) => ({
+                    url,
+                    type:
+                      post.mediaType?.toLowerCase() === "video"
+                        ? "video"
+                        : "image",
+                  })),
+                };
+                try {
+                  const result = await instagramService.postContent(
+                    platform.accountId,
+                    contentItem.content,
+                    contentItem.media
+                  );
+                  publishResult = {
+                    id: result.postId,
+                  };
+                } catch (tokenError: any) {
+                  if (tokenError.code === "TOKEN_EXPIRED") {
+                    const { socialaccounts } = await getCollections();
+                    await socialaccounts.updateOne(
+                      { _id: account._id },
+                      {
+                        $set: {
+                          status: "expired",
+                          "metadata.requiresReauth": true,
+                          "metadata.lastError": tokenError.message,
+                          "metadata.lastErrorTime": new Date(),
+                          updatedAt: new Date(),
+                        },
+                      }
+                    );
+                    throw new Error(
+                      `Instagram account token has expired and requires reconnection: ${tokenError.message}`
+                    );
+                  }
+                  throw tokenError;
+                }
+                break;
+              }
               default:
                 throw new Error(`Unsupported platform: ${account.platform}`);
             }
@@ -231,11 +275,11 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              status: allSuccessful
-                ? "completed"
-                : allFailed
-                ? "failed"
-                : "partial",
+              status: () => {
+                if (allSuccessful) return "completed";
+                if (allFailed) return "failed";
+                return "partial";
+              },
               platforms: post.platforms,
               updatedAt: new Date(),
             },

@@ -1,27 +1,45 @@
 import { Router } from "express";
-import * as socialPostController from "../controllers/socialPosts.controller";
+import {
+  postToMultiPlatform,
+  getPosts,
+  deletePost,
+  getPostsByUserId,
+  getPostsByTeamId,
+  getPostsByOrganizationId,
+} from "../controllers/socialPosts.controller";
 import { requireJwtAuth } from "../middlewares/auth";
+import multer from "multer";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+});
 
 const router = Router();
 
-router.get("/", requireJwtAuth, socialPostController.getPosts);
-router.delete("/:id", requireJwtAuth, socialPostController.deletePost);
+router.get("/", requireJwtAuth, getPosts);
+router.delete("/:id", requireJwtAuth, deletePost);
 
 // Personal Posts
-router.get("/:userId", requireJwtAuth, socialPostController.getPostsByUserId);
+router.get("/:userId", requireJwtAuth, getPostsByUserId);
 
 // Team Posts
-router.get(
-  "/team/:teamId",
-  requireJwtAuth,
-  socialPostController.getPostsByTeamId
-);
+router.get("/team/:teamId", requireJwtAuth, getPostsByTeamId);
 
 // Organization Posts
 router.get(
   "/organization/:organizationId",
   requireJwtAuth,
-  socialPostController.getPostsByOrganizationId
+  getPostsByOrganizationId
+);
+
+// Multi Files/Accounts Posts
+router.post(
+  "/post-to-platforms",
+  upload.array("media"),
+  requireJwtAuth,
+  (req, res) => {
+    postToMultiPlatform({ req, res });
+  }
 );
 
 export default router;

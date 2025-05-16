@@ -4,6 +4,7 @@ import { requireJwtAuth } from "../middlewares/auth";
 import twitterRoutes from "./platforms/twitter.routes";
 import linkedinRoutes from "./platforms/linkedin.routes";
 import threadsRoutes from "./platforms/threads.routes";
+import instagramRoutes from "./platforms/instagram.routes";
 
 const router = Router();
 
@@ -11,6 +12,7 @@ const router = Router();
 router.use("/twitter", twitterRoutes);
 router.use("/linkedin", linkedinRoutes);
 router.use("/threads", threadsRoutes);
+router.use("/instagram", instagramRoutes);
 
 // Get Social Accounts by Organization
 router.get(

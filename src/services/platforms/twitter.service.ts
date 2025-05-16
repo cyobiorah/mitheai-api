@@ -107,6 +107,7 @@ export async function createSocialAccount(
       accountType: organizationId ? "business" : "personal",
       accountName: profile.name,
       accountId: profile.id,
+      platformAccountId: profile.id,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
       tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
