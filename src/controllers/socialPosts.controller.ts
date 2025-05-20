@@ -1,43 +1,3 @@
-// import { ObjectId } from "mongodb";
-// import { getCollections } from "../config/db";
-
-// export const getPosts = async (req: any, res: any) => {
-//   const { userId, platform, status, teamId, organizationId } = req.params;
-//   const { socialposts } = await getCollections();
-
-//   // Build query filter
-//   const filter: any = {};
-//   if (userId) filter.userId = new ObjectId(userId);
-//   if (platform) filter.platform = platform;
-//   if (status) filter.status = status;
-//   if (teamId) filter.teamId = new ObjectId(teamId);
-//   if (organizationId) filter.organizationId = new ObjectId(organizationId);
-
-//   const posts = await socialposts
-//     .find(filter)
-//     .sort({ createdAt: -1 })
-//     .toArray();
-//   res.json({ data: posts, total: posts.length });
-// };
-
-// export const deletePost = async (req: any, res: any) => {
-//   const { id } = req.params;
-//   const { socialposts } = await getCollections();
-//   const result = await socialposts.deleteOne({ _id: new ObjectId(id) });
-//   res.json({ data: result });
-// };
-
-// // Get personal posts
-// export const getPersonalPosts = async (req: any, res: any) => {
-//   const { accountId } = req.params;
-//   const { socialposts } = await getCollections();
-//   const posts = await socialposts
-//     .find({ accountId: new ObjectId(accountId) })
-//     .sort({ createdAt: -1 })
-//     .toArray();
-//   res.json({ data: posts, total: posts.length });
-// };
-
 import { Request, Response as ExpressResponse } from "express";
 import {
   getSocialPostsByUserId,
@@ -159,57 +119,6 @@ export const deletePost = async (req: Request, res: ExpressResponse) => {
     res.status(500).json({ error: error.message ?? "Failed to delete post" });
   }
 };
-
-// // Post to platform
-// export async function postToMultiPlatform({
-//   req,
-//   res,
-// }: {
-//   req: Request;
-//   res: ExpressResponse;
-// }) {
-//   try {
-//     const media = (req.files ?? []) as Express.Multer.File[];
-//     const { postData, dimensions } = req.body;
-
-//     if (
-//       !postData ||
-//       (JSON.parse(postData)?.mediaType !== "text" && !media?.length)
-//     ) {
-//       return res.status(400).json({ error: "Missing media or postData" });
-//     }
-
-//     const parsed = JSON.parse(postData);
-
-//     console.log({ dimensions });
-
-//     await handlePlatformUploadAndPost({
-//       platform: parsed.platform,
-//       mediaFiles: media,
-//       userId: (req as any).user.id,
-//       postMeta: {
-//         accountId: parsed.accountId,
-//         accountName: parsed.accountName,
-//         accountType: parsed.accountType,
-//         caption: parsed.caption,
-//         mediaType: parsed.mediaType,
-//         platformAccountId: parsed.platformAccountId,
-//         accessToken: parsed.accessToken,
-//         dimensions,
-//       },
-//       res,
-//     });
-
-//     // if (!result.success) {
-//     //   return res.status(500).json({ error: result.error });
-//     // }
-
-//     // res.status(200).json({ postId: result.postId });
-//   } catch (err: any) {
-//     console.error("Post to platform failed:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// }
 
 export async function postToMultiPlatform({
   req,

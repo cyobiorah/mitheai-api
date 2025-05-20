@@ -7,7 +7,6 @@ import {
 } from "../utils/cloudinary";
 import { postToThreads } from "../controllers/platforms/threads.controller";
 import { postToTwitter } from "../controllers/platforms/twitter.controller";
-// import { postToLinkedIn } from "../controllers/platforms/linkedin.controller";
 import { Response as ExpressResponse } from "express";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 

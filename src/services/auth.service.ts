@@ -26,9 +26,9 @@ export const registerUser = async (userData: any) => {
 export const authenticateUser = async (email: string, password: string) => {
   const { users } = await getCollections();
   const user = await users.findOne({ email });
-  if (!user) throw new HttpError("Invalid credentials", 401);
+  if (!user) throw new HttpError("Invalid credentials", 403);
   const match = await bcrypt.compare(password, user.password);
-  if (!match) throw new HttpError("Invalid credentials", 401);
+  if (!match) throw new HttpError("Invalid credentials", 403);
   return user;
 };
 
