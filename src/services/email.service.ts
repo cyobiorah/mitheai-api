@@ -12,8 +12,8 @@ apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, apiKey);
 
 // Default sender configuration
 const DEFAULT_SENDER = {
-  email: process.env.EMAIL_SENDER_ADDRESS ?? "cyobiorah@gmail.com",
-  name: process.env.EMAIL_SENDER_NAME ?? "MitheAI",
+  email: process.env.EMAIL_SENDER_ADDRESS ?? "hello@skedlii.xyz",
+  name: process.env.EMAIL_SENDER_NAME ?? "Skedlii",
 };
 
 interface SendInvitationEmailParams {

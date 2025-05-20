@@ -1,10 +1,10 @@
-# MitheAI Product Requirements Document (PRD)
+# Skedlii Product Requirements Document (PRD)
 
 ---
 
 ## 1. Overview
 
-MitheAI is a SaaS platform for AI-powered content creation, management, and social media publishing. It is designed for organizations, teams, and individuals, providing seamless scheduling, analytics, and robust social account management with strict uniqueness and flexible ownership models.
+Skedlii is a SaaS platform for AI-powered content creation, management, and social media publishing. It is designed for organizations, teams, and individuals, providing seamless scheduling, analytics, and robust social account management with strict uniqueness and flexible ownership models.
 
 ---
 
@@ -113,8 +113,8 @@ MitheAI is a SaaS platform for AI-powered content creation, management, and soci
 ---
 
 
-mitheai-api/
-├── PRD_MitheAi.MD
+skedlii-api/
+├── PRD_Skedlii.MD
 ├── package.json
 ├── tsconfig.json
 ├── .env.example

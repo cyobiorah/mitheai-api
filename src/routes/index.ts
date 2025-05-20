@@ -56,7 +56,7 @@ router.use("/media", mediaRoutes);
 
 // Example route
 router.get("/", (_req, res) => {
-  res.json({ message: "Welcome to MitheAI API" });
+  res.json({ message: "Welcome to Skedlii API" });
 });
 
 // Manual cron routes
