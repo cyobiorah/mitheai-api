@@ -313,7 +313,7 @@ export async function getSocialAccount(accountId: string): Promise<any> {
   try {
     return await socialaccounts.findOne({ _id: new ObjectId(accountId) });
   } catch (error) {
-    console.error(`Error retrieving social account ${accountId}:`, error);
+    console.error(`Error retrieving social account :`, error);
     return null;
   }
 }
