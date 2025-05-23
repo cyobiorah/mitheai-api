@@ -41,6 +41,7 @@ export async function listIndividualCollections(req: any, res: Response) {
 
 // Get collection
 export async function getCollection(req: Request, res: Response) {
+  console.log({ req });
   const collection = await collectionsService.getCollection(req.params.id);
   if (!collection) return res.status(404).json({ message: "Not found" });
   res.json(collection);

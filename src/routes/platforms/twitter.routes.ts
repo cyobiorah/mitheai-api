@@ -11,6 +11,8 @@ router.get(
 );
 router.get("/callback", twitterController.handleTwitterCallback);
 
+router.get("/refresh/:accountId", requireJwtAuth, twitterController.refreshAccessToken);
+
 router.post("/:id/post", requireJwtAuth, twitterController.post);
 
 export default router;

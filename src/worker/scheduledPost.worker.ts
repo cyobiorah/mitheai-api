@@ -265,7 +265,7 @@ export class SocialPostWorker {
 
             allFailed = false;
           } catch (err: any) {
-            platform.status = "failed";
+            // platform.status = "failed";
             platform.errorMessage = err.message ?? "Failed to publish";
             allSuccessful = false;
           }
@@ -275,11 +275,11 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              status: () => {
-                if (allSuccessful) return "completed";
-                if (allFailed) return "failed";
-                return "partial";
-              },
+              // status: () => {
+              //   if (allSuccessful) return "completed";
+              //   if (allFailed) return "failed";
+              //   return "partial";
+              // },
               platforms: post.platforms,
               updatedAt: new Date(),
             },

@@ -90,16 +90,34 @@ export async function createSocialAccount(
     });
 
     if (userExistingAccount) {
-      const error: any = new Error("Account already connected by this user");
-      error.code = "account_already_connected";
-      error.details = {
-        existingAccountId: userExistingAccount._id,
-        connectedUserId: userExistingAccount.userId,
-        organizationId: userExistingAccount.organizationId,
-        teamId: userExistingAccount.teamId,
-        connectionDate: userExistingAccount.createdAt,
+      // Treat this as a reconnection attempt — update token and metadata
+      const updatedAccount = {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
+        lastRefreshed: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          ...userExistingAccount.metadata,
+          profileUrl: `https://twitter.com/${profile.username}`,
+          followerCount: profile.public_metrics?.followers_count,
+          followingCount: profile.public_metrics?.following_count,
+          lastChecked: new Date(),
+          profileImageUrl: profile.profile_image_url,
+          username: profile.username,
+        },
+        status: "active",
       };
-      throw error;
+
+      await socialaccounts.updateOne(
+        { _id: userExistingAccount._id },
+        { $set: updatedAccount }
+      );
+
+      return {
+        _id: userExistingAccount._id,
+        updated: true,
+      };
     }
 
     const socialAccount: SocialAccount = {
@@ -295,7 +313,7 @@ export async function getSocialAccount(accountId: string): Promise<any> {
   try {
     return await socialaccounts.findOne({ _id: new ObjectId(accountId) });
   } catch (error) {
-    console.error(`Error retrieving social account ${accountId}:`, error);
+    console.error(`Error retrieving social account :`, error);
     return null;
   }
 }
