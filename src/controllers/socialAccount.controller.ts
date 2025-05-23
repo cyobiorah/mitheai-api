@@ -65,8 +65,17 @@ export const listSocialAccounts = async (
       );
     }
 
+    const accountsWithStatus = accounts.map((account) => {
+      const expired =
+        account.tokenExpiry && new Date(account.tokenExpiry) < new Date();
+      return {
+        ...account,
+        status: expired ? "expired" : account.status ?? "active",
+      };
+    });
+
     // Sanitize accounts to remove sensitive information
-    res.json(accounts.map((account) => sanitizeAccount(account)));
+    res.json(accountsWithStatus.map((account) => sanitizeAccount(account)));
   } catch (err) {
     next(err);
   }

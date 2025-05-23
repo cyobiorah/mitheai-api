@@ -406,3 +406,14 @@ export const postToTwitter = async ({
     );
   }
 };
+
+export const refreshAccessToken = async (req: any, res: any) => {
+  const { accountId } = req.params;
+  try {
+    const result = await twitterService.refreshAccessToken(accountId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error refreshing access token:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
