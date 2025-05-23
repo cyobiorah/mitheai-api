@@ -16,8 +16,7 @@ export const allowedOrigins = [
   "https://www.skedlii.xyz",
   "https://skedlii.xyz",
   "https://staging.skedlii.xyz",
-  // "https://dev.skedlii.xyz",
-  "*.skedlii.xyz",
+  "https://dev.skedlii.xyz",
 ];
 
 export function sanitizeAccount(account: any) {
