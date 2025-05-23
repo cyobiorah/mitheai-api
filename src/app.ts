@@ -9,7 +9,6 @@ import { allowedOrigins } from "./utils";
 import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { redisClient } from "./utils/redisClient";
-import { validationResult } from "express-validator";
 import { handleWebhook } from "./controllers/webhook.controller";
 import bodyParser from "body-parser";
 import pkg from "../package.json";
