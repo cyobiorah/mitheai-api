@@ -3,7 +3,6 @@ import * as threadsService from "../../services/platforms/threads.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 import { getCollections } from "../../config/db";
-import { extractThreadsPostContext } from "../../utils/extractThreadsPostContext";
 
 // 1. Start Threads OAuth
 export const startDirectThreadsAuth = async (

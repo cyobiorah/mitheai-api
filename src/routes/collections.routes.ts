@@ -8,7 +8,7 @@ const router = Router();
 router.get("/:orgId", requireJwtAuth, controller.listCollectionsOrg);
 
 router.get("/", requireJwtAuth, controller.listIndividualCollections);
-router.get("/:id", requireJwtAuth, controller.getCollection);
+router.get("/collection/:id", requireJwtAuth, controller.getCollection);
 router.post("/", requireJwtAuth, controller.createCollection);
 router.patch("/:id", requireJwtAuth, controller.updateCollection);
 router.delete("/:id", requireJwtAuth, controller.deleteCollection);

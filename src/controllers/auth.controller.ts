@@ -157,7 +157,10 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({ user: userWithoutPassword, token, organization, teams });
   } catch (err: any) {
-    res.status(401).json({ message: err.message });
+    console.error("Login error:", err);
+    res
+      .status(err.statusCode ?? err.status ?? 500)
+      .json({ message: err.message });
   }
 };
 

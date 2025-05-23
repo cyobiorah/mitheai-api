@@ -1,7 +1,7 @@
 {
-  "name": "mitheai-api",
+  "name": "skedlii-api",
   "version": "1.0.0",
-  "description": "Backend API for MitheAI - AI-powered content and social media management platform",
+  "description": "Backend API for Skedlii - AI-powered content and social media management platform",
   "main": "dist/server.js",
   "scripts": {
     "start": "ts-node src/server.ts",
@@ -9,7 +9,7 @@
     "build": "tsc",
     "test": "jest"
   },
-  "author": "Your Name",
+  "author": "ciryl",
   "license": "MIT",
   "dependencies": {
     "@getbrevo/brevo": "^2.2.0",
