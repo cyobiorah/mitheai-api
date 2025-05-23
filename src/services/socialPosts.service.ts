@@ -9,14 +9,32 @@ import { postToThreads } from "../controllers/platforms/threads.controller";
 import { postToTwitter } from "../controllers/platforms/twitter.controller";
 import { Response as ExpressResponse } from "express";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
+import { lookupCollectionDetails } from "../utils/mongoAggregations";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
   const { socialposts } = await getCollections();
-  return socialposts
-    .find({ userId: new ObjectId(userId) })
-    .sort({ createdAt: -1 })
-    .toArray();
+
+  const pipeline = [
+    {
+      $match: {
+        userId: new ObjectId(userId),
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1, // Newest first
+      },
+    },
+    ...lookupCollectionDetails({
+      localField: "collectionsId",
+      foreignField: "_id",
+      asField: "collection",
+      from: "collections",
+    }),
+  ];
+
+  return socialposts.aggregate(pipeline).toArray();
 }
 
 // Get social posts by teamId

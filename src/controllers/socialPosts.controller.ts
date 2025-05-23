@@ -154,8 +154,6 @@ export async function postToMultiPlatform({
             .filter(Boolean)
         : [];
 
-    console.log("Parsed dimensions:", parsedDimensions);
-
     await handlePlatformUploadAndPost({
       platform: parsedPostData.platform,
       mediaFiles: media,
