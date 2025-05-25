@@ -186,6 +186,7 @@ export const postContent = async (
     platform: "instagram",
     content: caption,
     mediaType: "IMAGE", // You can improve this to detect VIDEO
+    mediaUrls,
     postId,
     status: "published",
     publishedDate: now,
