@@ -128,7 +128,8 @@ export async function postToMultiPlatform({
   res: ExpressResponse;
 }) {
   try {
-    const media = (req.files ?? []) as Express.Multer.File[];
+    const media = ((req as any).files?.["media"] ??
+      []) as Express.Multer.File[];
     const { postData, dimensions } = req.body;
 
     if (

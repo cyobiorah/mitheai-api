@@ -35,12 +35,6 @@ export const platformConstraints: AllPlatformConstraints = {
       "video/webm",
       "image/HEIC",
     ],
-    // image: {
-    //   minDimensions: { width: 320, height: 320 },
-    //   maxDimensions: { width: 1920, height: 1080 }, // Loosely, IG resizes aggressively
-    //   aspectRatios: ["1.91:1", "4:5", "1:1"], // Landscape, Portrait, Square
-    //   recommendedAspectRatios: ["1:1", "4:5"],
-    // },
     image: {
       minDimensions: { width: 320, height: 320 },
       maxDimensions: { width: 1080, height: 1350 },
@@ -150,20 +144,29 @@ export const platformConstraints: AllPlatformConstraints = {
   },
   // Generic fallback or for platforms with no specific constraints known
   general: {
-    maxFileSizeMB: 500,
+    maxFileSizeMB: 100,
     allowedMediaTypes: [
       "image/jpeg",
       "image/png",
+      "video/mp4",
       "image/gif",
       "image/webp",
-      "video/mp4",
       "video/quicktime",
       "video/webm",
       "image/HEIC",
     ],
-    image: {},
+    image: {
+      minDimensions: { width: 320, height: 320 },
+      maxDimensions: { width: 1080, height: 1350 },
+      aspectRatios: ["1.91:1", "4:5", "1:1"],
+      recommendedAspectRatios: ["1:1", "4:5"],
+    },
     video: {
-      maxDurationSeconds: 300, // 5 minutes general video
+      minDurationSeconds: 3,
+      maxDurationSeconds: 60,
+      aspectRatios: ["1.91:1", "4:5", "1:1", "9:16"],
+      recommendedAspectRatios: ["4:5", "9:16"],
+      maxBitrateKbps: 5000,
     },
   },
 };

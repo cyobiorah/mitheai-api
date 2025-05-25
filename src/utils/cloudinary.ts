@@ -529,9 +529,9 @@ function getTargetCropAR(
 }
 
 export function getCloudinaryTransformations(
-  platform: string,
   fileMimeType: string,
-  metadata?: { width?: number; height?: number }
+  metadata?: { width?: number; height?: number },
+  platform: string = "general"
 ): {
   transformation: Record<string, any> | undefined;
 } {
