@@ -35,7 +35,7 @@ router.get(
 // Multi Files/Accounts Posts
 router.post(
   "/post-to-platforms",
-  upload.array("media"),
+  upload.fields([{ name: "media" }]),
   requireJwtAuth,
   (req, res) => {
     postToMultiPlatform({ req, res });

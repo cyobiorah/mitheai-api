@@ -31,30 +31,16 @@ export class SocialPostWorker {
         for (const platform of post.platforms) {
           try {
             const account = await socialaccounts.findOne({
-              // _id: new ObjectId(platform.accountId),
               accountId: platform.accountId,
             });
 
-            // find account by accountId inside platforms array
-            // const account = await socialaccounts.findOne({
-            //   platforms: {
-            //     $elemMatch: {
-            //       accountId: platform.accountId,
-            //     },
-            //   },
-            // });
             if (!account) {
-              console.error(`Account not found in socialaccounts collection:`, {
-                accountId: platform.accountId,
-                postId: post._id,
-              });
               throw new Error(`Account not found: ${platform.accountId}`);
             }
 
             let publishResult: any;
             switch (account.platform) {
               case "twitter": {
-                // --- Construct ContentItem as in legacy codebase ---
                 const contentItem = {
                   id: post._id?.toString(),
                   type: "social_post",
@@ -86,7 +72,6 @@ export class SocialPostWorker {
               }
               case "threads": {
                 try {
-                  // Post the content directly - token refresh will happen inside postContent if needed
                   publishResult = await threadsService.postContent(
                     account.accountId,
                     post.content,
@@ -96,7 +81,6 @@ export class SocialPostWorker {
                     post.mediaUrls?.[0]
                   );
                 } catch (tokenError: any) {
-                  // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {
                     const { socialaccounts } = await getCollections();
                     await socialaccounts.updateOne(
@@ -129,7 +113,6 @@ export class SocialPostWorker {
                     id: result.id,
                   };
                 } catch (tokenError: any) {
-                  // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {
                     const { socialaccounts } = await getCollections();
                     await socialaccounts.updateOne(
@@ -155,13 +138,7 @@ export class SocialPostWorker {
               case "instagram": {
                 const contentItem = {
                   content: post.content,
-                  media: (post.mediaUrls ?? []).map((url: string) => ({
-                    url,
-                    type:
-                      post.mediaType?.toLowerCase() === "video"
-                        ? "video"
-                        : "image",
-                  })),
+                  media: post.mediaUrls ?? [],
                 };
                 try {
                   const result = await instagramService.postContent(
@@ -258,16 +235,12 @@ export class SocialPostWorker {
               updatedAt: new Date(),
             };
 
-            // Remove _id if present
             delete insertDoc._id;
 
             await socialposts.insertOne(insertDoc);
-
-            allFailed = false;
           } catch (err: any) {
-            // platform.status = "failed";
+            platform.status = "retry";
             platform.errorMessage = err.message ?? "Failed to publish";
-            allSuccessful = false;
           }
         }
 
@@ -275,11 +248,6 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              // status: () => {
-              //   if (allSuccessful) return "completed";
-              //   if (allFailed) return "failed";
-              //   return "partial";
-              // },
               platforms: post.platforms,
               updatedAt: new Date(),
             },
@@ -290,7 +258,7 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              status: "failed",
+              status: "retry",
               errorMessage: err.message ?? "Failed to process scheduled post",
               updatedAt: new Date(),
             },

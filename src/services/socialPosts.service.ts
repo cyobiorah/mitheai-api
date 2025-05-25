@@ -1,6 +1,5 @@
 import { ObjectId } from "mongodb";
 import { getCollections } from "../config/db";
-import { platformConstraints } from "../config/platformConstraints";
 import {
   getCloudinaryTransformations,
   uploadToCloudinaryBuffer,
@@ -122,43 +121,18 @@ export async function handlePlatformUploadAndPost({
   };
   res: ExpressResponse;
 }): Promise<any> {
-  console.log({ mediaFiles });
   try {
-    const constraint =
-      platformConstraints[platform] ?? platformConstraints.general;
-
     // Validate file types here if needed
 
-    const uploadedUrls: string[] = [];
-
-    for (const file of mediaFiles) {
-      const matchingDimension = postMeta.dimensions.find((dim) =>
-        file.originalname.includes(dim.id)
-      );
-
-      const transformation = matchingDimension
-        ? getCloudinaryTransformations(platform, file.mimetype, {
-            width: matchingDimension.width,
-            height: matchingDimension.height,
-          }).transformation
-        : undefined;
-
-      const uploadResult = await uploadToCloudinaryBuffer(file, {
-        folder: "skedlii",
-        publicId: `${file.originalname}-${Date.now()}`,
-        transformations: transformation
-          ? file.mimetype.startsWith("image/")
-            ? { image: transformation }
-            : { video: transformation }
-          : undefined,
-      });
-
-      uploadedUrls.push(uploadResult.secure_url);
-    }
+    const uploadUrls = await handleTransformAndUpload({
+      mediaFiles,
+      postMeta,
+      platform,
+    });
 
     const payload = {
       content: postMeta.caption,
-      mediaUrls: uploadedUrls,
+      mediaUrls: uploadUrls,
       mediaType: postMeta.mediaType,
       accountId: postMeta.accountId,
       platformAccountId: postMeta.platformAccountId,
@@ -166,29 +140,23 @@ export async function handlePlatformUploadAndPost({
       userId,
     };
 
-    console.log({ payload });
-
     switch (platform) {
       case "threads": {
-        const threadsReponse = await postToThreads({ postData: payload, res });
-        console.log({ threadsReponse });
+        await postToThreads({ postData: payload, res });
         break;
       }
       case "twitter": {
-        const twitterReponse = await postToTwitter({ postData: payload, res });
-        console.log({ twitterReponse });
+        await postToTwitter({ postData: payload, res });
         return { success: true };
       }
       case "instagram": {
-        const instagramReponse = await postToInstagram({
+        await postToInstagram({
           postData: payload,
           res,
         });
-        console.log({ instagramReponse });
         return { success: true };
       }
       case "linkedin":
-        console.log("linkedin called");
         break;
       default:
         return { success: false, error: `Unsupported platform: ${platform}` };
@@ -196,4 +164,61 @@ export async function handlePlatformUploadAndPost({
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+export async function handleTransformAndUpload({
+  mediaFiles,
+  postMeta,
+  platform,
+}: {
+  mediaFiles: Express.Multer.File[];
+  postMeta: {
+    dimensions: {
+      id: string;
+      width: number;
+      height: number;
+    }[];
+  };
+  platform: string;
+}) {
+  const uploadedUrls: string[] = [];
+
+  for (const file of mediaFiles) {
+    const matchingDimension = postMeta.dimensions.find((dim) =>
+      file.originalname.includes(dim.id)
+    );
+
+    const transformation = matchingDimension
+      ? getCloudinaryTransformations(
+          file.mimetype,
+          {
+            width: matchingDimension.width,
+            height: matchingDimension.height,
+          },
+          platform
+        ).transformation
+      : undefined;
+
+    let transformations;
+
+    if (transformation) {
+      if (file.mimetype.startsWith("image/")) {
+        transformations = { image: transformation };
+      } else {
+        transformations = { video: transformation };
+      }
+    } else {
+      transformations = undefined;
+    }
+
+    const uploadResult = await uploadToCloudinaryBuffer(file, {
+      folder: "skedlii",
+      publicId: `${file.originalname}-${Date.now()}`,
+      transformations,
+    });
+
+    uploadedUrls.push(uploadResult.secure_url);
+  }
+
+  return uploadedUrls;
 }

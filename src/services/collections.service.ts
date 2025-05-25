@@ -39,7 +39,6 @@ export async function listIndividualCollections(ownerId: string) {
 
 // Get a single collection (with content)
 export async function getCollection(id: string) {
-  console.log("getCollection", id);
   const { collections, socialposts, scheduledposts } = await getCollections();
   const collection = await collections.findOne({ _id: new ObjectId(id) });
   if (!collection) return null;
