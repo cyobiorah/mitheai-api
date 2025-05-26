@@ -1,6 +1,8 @@
+import { Request, Response as ExpressResponse } from "express";
 import { ObjectId } from "mongodb";
 import { getCollections } from "../config/db";
 import { toUTC } from "../utils/dateUtils";
+import { handleTransformAndUpload } from "../services/socialPosts.service";
 
 // List scheduled posts
 export const listScheduledPosts = async (req: any, res: any) => {
@@ -19,53 +21,94 @@ export const listScheduledPosts = async (req: any, res: any) => {
   res.json({ data: posts, count: posts.length });
 };
 
-// Create scheduled post
-export const createScheduledPost = async (req: any, res: any) => {
-  try {
-    const {
-      content,
-      mediaUrls,
-      platforms,
-      scheduledFor,
-      teamId,
-      organizationId,
-      mediaType,
-      timezone,
-    } = req.body;
-    const userId = req.user?.id;
+// Get logged in users scheduled posts
+export const getLoggedInUsersScheduledPosts = async (req: any, res: any) => {
+  const userId = req.user.id;
+  const { scheduledposts } = await getCollections();
 
-    if (!userId) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required",
-      });
+  const posts = await scheduledposts
+    .find({ createdBy: new ObjectId(userId) })
+    .sort({ scheduledFor: 1 })
+    .toArray();
+
+  res.json({ data: posts, count: posts.length });
+};
+
+// Create scheduled post
+export const createScheduledPost = async ({
+  req,
+  res,
+}: {
+  req: Request;
+  res: ExpressResponse;
+}) => {
+  try {
+    const media = ((req as any).files?.["media"] ??
+      []) as Express.Multer.File[];
+    const { postData, dimensions } = req.body;
+    const userId = (req as any).user.id;
+
+    if (
+      !postData ||
+      (JSON.parse(postData)?.mediaType !== "text" && !media?.length)
+    ) {
+      return res.status(400).json({ error: "Missing media or postData" });
     }
 
+    // dimensions[] comes as an array of JSON strings, parse each
+    const parsedDimensions: { id: string; width: number; height: number }[] =
+      Array.isArray(dimensions)
+        ? dimensions
+            .map((d: string) => {
+              try {
+                return JSON.parse(d);
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean)
+        : [];
+
+    const parsedPostData = JSON.parse(postData);
+
     // Convert scheduled time to UTC
-    const scheduledTimeUTC = toUTC(new Date(scheduledFor));
+    const scheduledTimeUTC = toUTC(new Date(parsedPostData.scheduledFor));
 
     // Prepare platforms array
-    const platformsArray = (platforms ?? []).map((platform: any) => ({
+    const platformsArray = parsedPostData.platforms.map((platform: any) => ({
       platform: platform.platform,
       accountId: platform.accountId,
       status: "pending",
     }));
 
+    const mediaUrls = await handleTransformAndUpload({
+      mediaFiles: media,
+      postMeta: {
+        dimensions: parsedDimensions,
+      },
+      platform: "general",
+    });
+
     const { scheduledposts } = await getCollections();
 
     const newScheduledPost = {
-      content,
+      content: parsedPostData.content,
       mediaUrls: mediaUrls ?? [],
       platforms: platformsArray,
       scheduledFor: scheduledTimeUTC,
       createdBy: new ObjectId(userId),
-      teamId: teamId ? new ObjectId(teamId) : undefined,
-      organizationId: organizationId ? new ObjectId(organizationId) : undefined,
+      userId: new ObjectId(userId),
+      teamId: parsedPostData.teamId
+        ? new ObjectId(parsedPostData.teamId)
+        : undefined,
+      organizationId: parsedPostData.organizationId
+        ? new ObjectId(parsedPostData.organizationId)
+        : undefined,
       status: "scheduled",
       createdAt: new Date(),
       updatedAt: new Date(),
-      mediaType,
-      timezone,
+      mediaType: parsedPostData.mediaType,
+      timezone: parsedPostData.timezone,
     };
 
     const result = await scheduledposts.insertOne(newScheduledPost);
@@ -82,6 +125,7 @@ export const createScheduledPost = async (req: any, res: any) => {
     });
   }
 };
+
 // Update scheduled post
 export const updateScheduledPost = async (req: any, res: any) => {
   const { scheduledposts } = await getCollections();

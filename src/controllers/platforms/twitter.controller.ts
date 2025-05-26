@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import * as twitterService from "../../services/platforms/twitter.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
+import { Response as ExpressResponse } from "express";
 
 const rawCallbackUrl: string = process.env.TWITTER_CALLBACK_URL ?? "";
 
@@ -328,5 +329,91 @@ export const post = async (req: any, res: any) => {
     res.status(200).json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+export const postToTwitter = async ({
+  postData,
+  res,
+}: {
+  postData: any;
+  res?: ExpressResponse;
+}) => {
+  try {
+    const {
+      accountId,
+      platformAccountId,
+      accountName,
+      accountType,
+      mediaType,
+      scheduledTime,
+      content,
+      teamId,
+      organizationId,
+      userId,
+      tags = [],
+      customFields = {},
+    } = postData;
+
+    if (!accountId || !content || !userId) {
+      const msg = "Missing required fields (accountId, content, or userId)";
+      return (
+        res?.status(400).json({ error: msg }) ?? { success: false, error: msg }
+      );
+    }
+
+    const twitterContentItem = {
+      type: "social_post",
+      content,
+      metadata: {
+        source: "webapp",
+        language: "en",
+        tags,
+        customFields,
+        socialPost: {
+          platform: "twitter",
+          accountId,
+          platformAccountId,
+          accountName,
+          accountType,
+          mediaType,
+          scheduledTime,
+        },
+      },
+      userId: new ObjectId(userId),
+      createdBy: new ObjectId(userId),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(teamId && { teamId: new ObjectId(teamId) }),
+      ...(organizationId && { organizationId: new ObjectId(organizationId) }),
+    };
+
+    const result = await twitterService.post(twitterContentItem);
+
+    return (
+      res?.status(200).json({ status: "success", id: result.id }) ?? {
+        success: true,
+        id: result.id,
+      }
+    );
+  } catch (error: any) {
+    console.error("Twitter post error:", error);
+    return (
+      res?.status(500).json({ error: error.message }) ?? {
+        success: false,
+        error: error.message,
+      }
+    );
+  }
+};
+
+export const refreshAccessToken = async (req: any, res: any) => {
+  const { accountId } = req.params;
+  try {
+    const result = await twitterService.refreshAccessToken(accountId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error refreshing access token:", error);
+    return res.status(500).json({ error: error.message });
   }
 };

@@ -18,6 +18,7 @@ async function seed() {
     sessions,
     socialaccounts,
     collections,
+    invoices,
   } = await getCollections();
 
   // Clear existing data
@@ -32,6 +33,7 @@ async function seed() {
     sessions.deleteMany({}),
     socialaccounts.deleteMany({}),
     collections.deleteMany({}),
+    invoices.deleteMany({}),
   ]);
   console.log("🧹 Cleared existing data");
 
@@ -47,7 +49,7 @@ async function seed() {
   await users.insertMany([
     {
       _id: adminUserId,
-      email: "admin@mitheai.com",
+      email: "admin@skedlii.xyz",
       password,
       firstName: "Admin",
       lastName: "User",
@@ -59,7 +61,7 @@ async function seed() {
     },
     {
       _id: orgOwnerId,
-      email: "owner@mitheai.com",
+      email: "owner@skedlii.xyz",
       password,
       firstName: "Org",
       lastName: "Owner",
@@ -71,7 +73,7 @@ async function seed() {
     },
     {
       _id: individualUserId,
-      email: "individual@mitheai.com",
+      email: "individual@skedlii.xyz",
       password,
       firstName: "Indi",
       lastName: "Vidual",
@@ -117,7 +119,7 @@ async function seed() {
       userId: orgOwnerId,
       organizationId: orgId,
       teamId: teamId,
-      title: "Welcome to MitheAI",
+      title: "Welcome to Skedlii",
       body: "This is a sample content item.",
       status: "draft",
       createdAt: date,
@@ -172,7 +174,7 @@ async function seed() {
     userId: orgOwnerId,
     organizationId: orgId,
     teamId: teamId,
-    content: "Hello world! #mitheai",
+    content: "Hello world! #skedlii",
     platforms: [
       {
         platform: "twitter",

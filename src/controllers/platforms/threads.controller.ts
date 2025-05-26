@@ -1,11 +1,14 @@
-import { Request, Response } from "express";
+import { Request, Response as ExpressResponse } from "express";
 import * as threadsService from "../../services/platforms/threads.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 import { getCollections } from "../../config/db";
 
 // 1. Start Threads OAuth
-export const startDirectThreadsAuth = async (req: any, res: Response) => {
+export const startDirectThreadsAuth = async (
+  req: any,
+  res: ExpressResponse
+) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -38,7 +41,7 @@ export const startDirectThreadsAuth = async (req: any, res: Response) => {
 };
 
 //2. Start Threads Connect
-export const startThreadsConnect = async (req: any, res: Response) => {
+export const startThreadsConnect = async (req: any, res: ExpressResponse) => {
   // Check for state parameter
   const { state } = req.query;
 
@@ -110,7 +113,10 @@ export const startThreadsConnect = async (req: any, res: Response) => {
 };
 
 // 3. Threads OAuth Callback
-export const handleThreadsCallback = async (req: Request, res: Response) => {
+export const handleThreadsCallback = async (
+  req: Request,
+  res: ExpressResponse
+) => {
   try {
     const { code, state, error, error_description } = req.query;
 
@@ -257,7 +263,13 @@ export const handleThreadsCallback = async (req: Request, res: Response) => {
   }
 };
 
-export const post = async (req: any, res: any) => {
+export const post = async ({
+  req,
+  res,
+}: {
+  req: Request;
+  res: ExpressResponse;
+}) => {
   try {
     const { accountId } = req.params;
     const { content, mediaUrls, mediaType = "TEXT" } = req.body.data;
@@ -271,7 +283,17 @@ export const post = async (req: any, res: any) => {
     }
 
     // Validate mediaType
-    if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL"].includes(mediaType)) {
+    if (
+      ![
+        "TEXT",
+        "IMAGE",
+        "VIDEO",
+        "CAROUSEL",
+        "text",
+        "image",
+        "video",
+      ].includes(mediaType)
+    ) {
       return res.status(400).json({
         status: "error",
         message:
@@ -297,7 +319,7 @@ export const post = async (req: any, res: any) => {
     }
 
     // Get user ID from the authenticated request
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({
         status: "error",
@@ -317,7 +339,7 @@ export const post = async (req: any, res: any) => {
 
     // Security check: Verify the account belongs to the authenticated user
     if (String(account.userId) !== String(userId)) {
-      const user = req.user;
+      const user = (req as any).user;
       const hasAccess =
         (account.organizationId &&
           user.organizationId &&
@@ -402,5 +424,181 @@ export const post = async (req: any, res: any) => {
       status: "error",
       message: error.message ?? "An unexpected error occurred",
     });
+  }
+};
+
+export const postToThreads = async ({
+  res,
+  postData,
+}: {
+  res?: ExpressResponse;
+  postData: any;
+}) => {
+  try {
+    const {
+      accountId,
+      content,
+      mediaUrls = [],
+      mediaType = "TEXT",
+      userId,
+      user,
+    } = postData;
+
+    if (!accountId) {
+      const msg = "Account ID is required";
+      return (
+        res?.status(400).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    if (!userId) {
+      const msg = "Authentication required";
+      return (
+        res?.status(401).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    if (!["TEXT", "IMAGE", "VIDEO", "CAROUSEL", "text"].includes(mediaType)) {
+      const msg = `Invalid media type. Must be one of: TEXT, IMAGE, VIDEO, CAROUSEL`;
+      return (
+        res?.status(400).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    if (
+      (mediaType === "IMAGE" || mediaType === "VIDEO") &&
+      mediaUrls.length !== 1
+    ) {
+      const msg = `${mediaType} posts require exactly one media URL`;
+      return (
+        res?.status(400).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    if (
+      mediaType === "CAROUSEL" &&
+      (mediaUrls.length < 2 || mediaUrls.length > 20)
+    ) {
+      const msg = `CAROUSEL posts require between 2 and 20 media URLs`;
+      return (
+        res?.status(400).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    const account = await threadsService.getAccountWithValidToken(accountId);
+    if (!account) {
+      const msg = "Social account not found";
+      return (
+        res?.status(404).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    const hasAccess =
+      String(account.userId) === String(userId) ||
+      (account.organizationId &&
+        user?.organizationId &&
+        String(account.organizationId) === String(user.organizationId)) ||
+      (account.teamId && user?.teamIds?.includes(account.teamId.toString())) ||
+      user?.role === "super_admin";
+
+    if (!hasAccess) {
+      const msg = "You do not have permission to post with this account";
+      return (
+        res?.status(403).json({ status: "error", message: msg }) ?? {
+          success: false,
+          error: msg,
+        }
+      );
+    }
+
+    const postResult = await threadsService.postContent(
+      accountId,
+      content,
+      mediaType as "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL",
+      mediaUrls[0]
+    );
+
+    if (!postResult.success) {
+      if (postResult.error?.includes("token has expired")) {
+        const err = {
+          status: "error",
+          code: "TOKEN_EXPIRED",
+          message: postResult.error,
+          accountId,
+          platform: "threads",
+          requiresReconnect: true,
+        };
+        return res?.status(401).json(err) ?? { success: false, ...err };
+      }
+
+      const err = {
+        status: "error",
+        message: postResult.error ?? "Failed to post to Threads",
+      };
+      return res?.status(400).json(err) ?? { success: false, ...err };
+    }
+
+    // Save to DB (don't block on failure)
+    try {
+      const { socialposts } = await getCollections();
+      await socialposts.insertOne({
+        userId: account.userId,
+        teamId: account.teamId,
+        organizationId: account.organizationId,
+        socialAccountId: accountId,
+        platform: "threads",
+        content,
+        mediaType,
+        mediaUrls,
+        metadata: {
+          mediaType,
+          mediaUrls,
+          accountName: account.accountName,
+          platformAccountId: account.platformAccountId,
+          platform: "threads",
+        },
+        postId: postResult.id,
+        status: "published",
+        publishedDate: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      console.error("Error saving post to DB:", err);
+    }
+
+    return (
+      res?.status(200).json({ status: "success", data: postResult.id }) ?? {
+        success: true,
+        postId: postResult.id,
+      }
+    );
+  } catch (error: any) {
+    console.error("Unexpected error in Threads post:", error);
+    const msg = error.message ?? "An unexpected error occurred";
+    return (
+      res?.status(500).json({ status: "error", message: msg }) ?? {
+        success: false,
+        error: msg,
+      }
+    );
   }
 };

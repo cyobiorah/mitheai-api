@@ -4,6 +4,7 @@ import {
   validateSocialAccountCreate,
   validateSocialAccountUpdate,
 } from "../validation/socialAccount.validation";
+import { sanitizeAccount } from "../utils";
 
 // Link a new social account
 export const linkSocialAccount = async (
@@ -34,22 +35,6 @@ export const linkSocialAccount = async (
   }
 };
 
-// List all social accounts for the current user (optionally filter by org/team)
-// export const listSocialAccounts = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction
-// ) => {
-//   const { userId } = req.params;
-//   try {
-//     const accounts = await socialAccountService.listAccounts({
-//       userId,
-//     });
-//     res.json(accounts);
-//   } catch (err) {
-//     next(err);
-//   }
-// };
 export const listSocialAccounts = async (
   req: Request,
   res: Response,
@@ -80,7 +65,17 @@ export const listSocialAccounts = async (
       );
     }
 
-    res.json(accounts);
+    const accountsWithStatus = accounts.map((account) => {
+      const expired =
+        account.tokenExpiry && new Date(account.tokenExpiry) < new Date();
+      return {
+        ...account,
+        status: expired ? "expired" : account.status ?? "active",
+      };
+    });
+
+    // Sanitize accounts to remove sensitive information
+    res.json(accountsWithStatus.map((account) => sanitizeAccount(account)));
   } catch (err) {
     next(err);
   }
@@ -139,7 +134,8 @@ export const getSocialAccountsByOrganizationId = async (
     const accounts = await socialAccountService.listAccountsByOrganizationId(
       organizationId
     );
-    res.json(accounts);
+    // Sanitize accounts to remove sensitive information
+    res.json(accounts.map((account) => sanitizeAccount(account)));
   } catch (err) {
     next(err);
   }
@@ -155,7 +151,8 @@ export const getPersonalAccount = async (
     const { accountId } = req.params;
     const account = await socialAccountService.getPersonalAccount(accountId);
     if (!account) return res.status(404).json({ message: "Account not found" });
-    res.json(account);
+    // Sanitize account to remove sensitive information
+    res.json(sanitizeAccount(account));
   } catch (err) {
     next(err);
   }
@@ -187,7 +184,11 @@ export const assignSocialAccountToTeam = async (
       return res.status(400).json({ message: "Invalid account or team" });
     }
 
-    res.json({ message: "Social account assignment updated", account: result });
+    // Sanitize account to remove sensitive information
+    res.json({
+      message: "Social account assignment updated",
+      account: sanitizeAccount(result),
+    });
   } catch (err) {
     next(err);
   }
@@ -216,7 +217,8 @@ export const listSocialAccountsByTeam = async (
     }
 
     const accounts = await socialAccountService.listAccountsByTeamId(teamId);
-    res.json(accounts);
+    // Sanitize accounts to remove sensitive information
+    res.json(accounts.map((account) => sanitizeAccount(account)));
   } catch (err) {
     next(err);
   }

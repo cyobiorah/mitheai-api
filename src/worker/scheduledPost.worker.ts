@@ -2,6 +2,7 @@ import { getCollections } from "../config/db";
 import * as twitterService from "../services/platforms/twitter.service";
 import * as threadsService from "../services/platforms/threads.service";
 import * as linkedinService from "../services/platforms/linkedin.service";
+import * as instagramService from "../services/platforms/instagram.service";
 import { ObjectId } from "mongodb";
 // import other platform services as needed
 
@@ -30,30 +31,16 @@ export class SocialPostWorker {
         for (const platform of post.platforms) {
           try {
             const account = await socialaccounts.findOne({
-              // _id: new ObjectId(platform.accountId),
               accountId: platform.accountId,
             });
 
-            // find account by accountId inside platforms array
-            // const account = await socialaccounts.findOne({
-            //   platforms: {
-            //     $elemMatch: {
-            //       accountId: platform.accountId,
-            //     },
-            //   },
-            // });
             if (!account) {
-              console.error(`Account not found in socialaccounts collection:`, {
-                accountId: platform.accountId,
-                postId: post._id,
-              });
               throw new Error(`Account not found: ${platform.accountId}`);
             }
 
             let publishResult: any;
             switch (account.platform) {
               case "twitter": {
-                // --- Construct ContentItem as in legacy codebase ---
                 const contentItem = {
                   id: post._id?.toString(),
                   type: "social_post",
@@ -85,7 +72,6 @@ export class SocialPostWorker {
               }
               case "threads": {
                 try {
-                  // Post the content directly - token refresh will happen inside postContent if needed
                   publishResult = await threadsService.postContent(
                     account.accountId,
                     post.content,
@@ -95,7 +81,6 @@ export class SocialPostWorker {
                     post.mediaUrls?.[0]
                   );
                 } catch (tokenError: any) {
-                  // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {
                     const { socialaccounts } = await getCollections();
                     await socialaccounts.updateOne(
@@ -128,7 +113,6 @@ export class SocialPostWorker {
                     id: result.id,
                   };
                 } catch (tokenError: any) {
-                  // If token is expired, mark the account as needing reauthorization
                   if (tokenError.code === "TOKEN_EXPIRED") {
                     const { socialaccounts } = await getCollections();
                     await socialaccounts.updateOne(
@@ -145,6 +129,43 @@ export class SocialPostWorker {
                     );
                     throw new Error(
                       `LinkedIn account token has expired and requires reconnection: ${tokenError.message}`
+                    );
+                  }
+                  throw tokenError;
+                }
+                break;
+              }
+              case "instagram": {
+                const contentItem = {
+                  content: post.content,
+                  media: post.mediaUrls ?? [],
+                };
+                try {
+                  const result = await instagramService.postContent(
+                    platform.accountId,
+                    contentItem.content,
+                    contentItem.media
+                  );
+                  publishResult = {
+                    id: result.postId,
+                  };
+                } catch (tokenError: any) {
+                  if (tokenError.code === "TOKEN_EXPIRED") {
+                    const { socialaccounts } = await getCollections();
+                    await socialaccounts.updateOne(
+                      { _id: account._id },
+                      {
+                        $set: {
+                          status: "expired",
+                          "metadata.requiresReauth": true,
+                          "metadata.lastError": tokenError.message,
+                          "metadata.lastErrorTime": new Date(),
+                          updatedAt: new Date(),
+                        },
+                      }
+                    );
+                    throw new Error(
+                      `Instagram account token has expired and requires reconnection: ${tokenError.message}`
                     );
                   }
                   throw tokenError;
@@ -214,16 +235,12 @@ export class SocialPostWorker {
               updatedAt: new Date(),
             };
 
-            // Remove _id if present
             delete insertDoc._id;
 
             await socialposts.insertOne(insertDoc);
-
-            allFailed = false;
           } catch (err: any) {
-            platform.status = "failed";
+            platform.status = "retry";
             platform.errorMessage = err.message ?? "Failed to publish";
-            allSuccessful = false;
           }
         }
 
@@ -231,11 +248,6 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              status: allSuccessful
-                ? "completed"
-                : allFailed
-                ? "failed"
-                : "partial",
               platforms: post.platforms,
               updatedAt: new Date(),
             },
@@ -246,7 +258,7 @@ export class SocialPostWorker {
           { _id: post._id },
           {
             $set: {
-              status: "failed",
+              status: "retry",
               errorMessage: err.message ?? "Failed to process scheduled post",
               updatedAt: new Date(),
             },

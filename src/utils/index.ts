@@ -15,4 +15,21 @@ export const allowedOrigins = [
   "https://api.mitheai.com",
   "https://www.skedlii.xyz",
   "https://skedlii.xyz",
+  "https://staging.skedlii.xyz",
+  "https://dev.skedlii.xyz",
 ];
+
+export function sanitizeAccount(account: any) {
+  const { accessToken, idToken, refreshToken, ...rest } = account;
+
+  const metadata = { ...rest.metadata };
+  if (metadata?.profile) {
+    const { longLivedToken, ...cleanProfile } = metadata.profile;
+    metadata.profile = cleanProfile;
+  }
+
+  return {
+    ...rest,
+    metadata,
+  };
+}

@@ -1,25 +1,31 @@
 import { Router } from "express";
-import * as scheduledPostsController from "../controllers/scheduledPosts.controller";
+import {
+  createScheduledPost,
+  getLoggedInUsersScheduledPosts,
+  getSingleScheduledPost,
+  updateScheduledPost,
+  deleteScheduledPost,
+} from "../controllers/scheduledPosts.controller";
 import { requireJwtAuth } from "../middlewares/auth";
+import multer from "multer";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+});
 
 const router = Router();
 
-router.get("/", requireJwtAuth, scheduledPostsController.listScheduledPosts);
-router.get(
-  "/:id",
+router.get("/", requireJwtAuth, getLoggedInUsersScheduledPosts);
+router.get("/:id", requireJwtAuth, getSingleScheduledPost);
+router.post(
+  "/",
+  upload.fields([{ name: "media" }]),
   requireJwtAuth,
-  scheduledPostsController.getSingleScheduledPost
+  (req, res) => {
+    createScheduledPost({ req, res });
+  }
 );
-router.post("/", requireJwtAuth, scheduledPostsController.createScheduledPost);
-router.put(
-  "/:id",
-  requireJwtAuth,
-  scheduledPostsController.updateScheduledPost
-);
-router.delete(
-  "/:id",
-  requireJwtAuth,
-  scheduledPostsController.deleteScheduledPost
-);
+router.put("/:id", requireJwtAuth, updateScheduledPost);
+router.delete("/:id", requireJwtAuth, deleteScheduledPost);
 
 export default router;
