@@ -299,8 +299,6 @@ export async function postContent(
     }
 
     // Post the content based on the media type
-    console.log({ mediaType });
-    console.log({ mediaUrl });
     if (mediaType === "TEXT" || mediaType === "text") {
       return await createTextPost(account, content);
     } else if (mediaType === "IMAGE" && mediaUrl) {

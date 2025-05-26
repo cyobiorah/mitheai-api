@@ -9,7 +9,6 @@ import { allowedOrigins } from "./utils";
 import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { redisClient } from "./utils/redisClient";
-import { validationResult } from "express-validator";
 import { handleWebhook } from "./controllers/webhook.controller";
 import bodyParser from "body-parser";
 import pkg from "../package.json";
@@ -99,13 +98,13 @@ app.use("/api/auth/", authLimiter);
 // -----------------------------------------
 // Validation Error Handler
 // -----------------------------------------
-app.use((req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  next();
-});
+// app.use((req, res, next) => {
+//   const errors = validationResult(req);
+//   if (!errors.isEmpty()) {
+//     return res.status(400).json({ errors: errors.array() });
+//   }
+//   next();
+// });
 
 // -----------------------------------------
 // Routes
@@ -138,13 +137,29 @@ app.use((req: express.Request, res: express.Response) => {
 // -----------------------------------------
 // Error Handler
 // -----------------------------------------
+// app.use((err: any, req: express.Request, res: express.Response) => {
+//   console.error("[ERROR]", {
+//     message: err.message,
+//     stack: err.stack,
+//     code: err.code,
+//   });
+//   res.status(err.status ?? 500).json({
+//     error: "Internal Server Error",
+//     message: process.env.NODE_ENV === "development" ? err.message : undefined,
+//     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+//   });
+// });
 app.use((err: any, req: express.Request, res: express.Response) => {
   console.error("[ERROR]", {
     message: err.message,
     stack: err.stack,
     code: err.code,
+    statusCode: err.statusCode, // add for visibility
   });
-  res.status(err.status ?? 500).json({
+
+  const status = err.statusCode ?? err.status ?? 500;
+
+  res.status(status).json({
     error: "Internal Server Error",
     message: process.env.NODE_ENV === "development" ? err.message : undefined,
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
