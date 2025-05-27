@@ -247,6 +247,7 @@ export async function createSocialAccount(
         profile,
         tokenExpiresAt,
         lastChecked: now,
+        profileImageUrl: profile.profile_picture_url,
       },
       permissions: {
         canPost: true,
