@@ -17,7 +17,7 @@ export const startDirectMetaOAuth = async (
     600
   );
 
-  const redirectUri = getAuthorizationUrl(state);
+  const redirectUri = getAuthorizationUrl(state, "instagram");
 
   res.send(redirectUri);
 };
