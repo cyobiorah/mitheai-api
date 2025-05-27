@@ -1,5 +1,9 @@
 import { Request, Response as ExpressResponse } from "express";
 import * as instagramService from "../../services/platforms/instagram.service";
+import {
+  saveOrUpdateMetaAccount,
+  getAuthorizationUrl,
+} from "../../services/platforms/meta.service";
 import redisService from "../../utils/redisClient";
 import axios from "axios";
 import { getCollections } from "../../config/db";
@@ -18,7 +22,7 @@ export const startDirectInstagramOAuth = async (
     600
   );
 
-  const redirectUri = instagramService.getAuthorizationUrl(state);
+  const redirectUri = getAuthorizationUrl(state, "instagram");
 
   res.send(redirectUri);
 };
@@ -50,8 +54,8 @@ export const handleInstagramCallback = async (
     const tokenRes = await axios.post(
       "https://graph.facebook.com/v19.0/oauth/access_token",
       new URLSearchParams({
-        client_id: process.env.INSTAGRAM_CLIENT_ID!,
-        client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+        client_id: process.env.META_CLIENT_ID!,
+        client_secret: process.env.META_CLIENT_SECRET!,
         grant_type: "authorization_code",
         redirect_uri: process.env.INSTAGRAM_REDIRECT_URI!,
         code: code as string,
@@ -99,7 +103,7 @@ export const handleInstagramCallback = async (
 
     // 5. Compose payload
     const accountPayload = {
-      platform: "instagram",
+      platform: "instagram" as "facebook" | "instagram",
       accountType: "business",
       accountName: igProfile.username,
       accountId: igId,
@@ -130,7 +134,7 @@ export const handleInstagramCallback = async (
     };
 
     // 6. Save via service
-    await instagramService.saveOrUpdateInstagramAccount(accountPayload);
+    await saveOrUpdateMetaAccount(accountPayload);
 
     res.redirect(
       `${process.env.FRONTEND_URL}/dashboard/accounts?status=success`

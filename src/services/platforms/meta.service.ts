@@ -1,11 +1,13 @@
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
 
-const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID!;
-const META_REDIRECT_URI = process.env.META_REDIRECT_URI!;
+const META_CLIENT_ID = process.env.META_CLIENT_ID!;
+const INSTAGRAM_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI!;
+const FACEBOOK_REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI!;
+const THREADS_REDIRECT_URI = process.env.THREADS_REDIRECT_URI!;
 
 export interface MetaAccountPayload {
-  platform: "instagram" | "facebook";
+  platform: "instagram" | "facebook" | "threads";
   accountType: string;
   accountName: string;
   accountId: string;
@@ -27,11 +29,25 @@ export interface MetaAccountPayload {
   updatedAt: Date;
 }
 
-export const getAuthorizationUrl = (state: string) => {
+export const getAuthorizationUrl = (state: string, platform: string) => {
+  let redirectUri;
+  switch (platform) {
+    case "instagram":
+      redirectUri = INSTAGRAM_REDIRECT_URI;
+      break;
+    case "facebook":
+      redirectUri = FACEBOOK_REDIRECT_URI;
+      break;
+    case "threads":
+      redirectUri = THREADS_REDIRECT_URI;
+      break;
+    default:
+      redirectUri = INSTAGRAM_REDIRECT_URI;
+  }
   const base = "https://www.facebook.com/v19.0/dialog/oauth";
   const params = new URLSearchParams({
-    client_id: INSTAGRAM_CLIENT_ID,
-    redirect_uri: META_REDIRECT_URI,
+    client_id: META_CLIENT_ID,
+    redirect_uri: redirectUri,
     scope:
       "pages_show_list,instagram_basic,instagram_content_publish,pages_read_engagement,pages_manage_posts,business_management",
     response_type: "code",
