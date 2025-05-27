@@ -96,7 +96,7 @@ export const startThreadsConnect = async (req: any, res: ExpressResponse) => {
     threadsAuthUrl.searchParams.append("response_type", "code");
     threadsAuthUrl.searchParams.append(
       "scope",
-      "threads_basic,threads_content_publish,public_profile"
+      "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
     );
     threadsAuthUrl.searchParams.append("state", state as string);
 
@@ -205,8 +205,6 @@ export const handleThreadsCallback = async (
           )}`
         );
       }
-
-      console.log({ userProfile });
 
       // Create or update the social account
       await threadsService.createSocialAccount(
