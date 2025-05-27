@@ -6,6 +6,7 @@ import {
 } from "../utils/cloudinary";
 import { postToThreads } from "../controllers/platforms/threads.controller";
 import { postToTwitter } from "../controllers/platforms/twitter.controller";
+import { postToFacebook } from "../controllers/platforms/facebook.controller";
 import { Response as ExpressResponse } from "express";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { lookupCollectionDetails } from "../utils/mongoAggregations";
@@ -141,19 +142,24 @@ export async function handlePlatformUploadAndPost({
     };
 
     switch (platform) {
-      case "threads": {
-        await postToThreads({ postData: payload, res });
-        break;
-      }
-      case "twitter": {
-        await postToTwitter({ postData: payload, res });
-        return { success: true };
-      }
+      // Instagram Complete
       case "instagram": {
         await postToInstagram({
           postData: payload,
           res,
         });
+        return { success: true };
+      }
+      case "facebook": {
+        await postToFacebook({ postData: payload, res });
+        return { success: true };
+      }
+      case "threads": {
+        await postToThreads({ postData: payload, res });
+        return { success: true };
+      }
+      case "twitter": {
+        await postToTwitter({ postData: payload, res });
         return { success: true };
       }
       case "linkedin":

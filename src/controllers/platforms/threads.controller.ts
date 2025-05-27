@@ -87,17 +87,16 @@ export const startThreadsConnect = async (req: any, res: ExpressResponse) => {
     const threadsAuthUrl = new URL("https://threads.net/oauth/authorize");
     threadsAuthUrl.searchParams.append(
       "client_id",
-      process.env.THREADS_APP_ID ?? ""
+      process.env.THREADS_APP_ID!
     );
     threadsAuthUrl.searchParams.append(
       "redirect_uri",
-      process.env.THREADS_CALLBACK_URL ??
-        "http://localhost:3001/api/social-accounts/threads/callback"
+      process.env.THREADS_CALLBACK_URL!
     );
     threadsAuthUrl.searchParams.append("response_type", "code");
     threadsAuthUrl.searchParams.append(
       "scope",
-      "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies,threads_manage_insights"
+      "threads_basic,threads_content_publish,public_profile"
     );
     threadsAuthUrl.searchParams.append("state", state as string);
 
@@ -206,6 +205,8 @@ export const handleThreadsCallback = async (
           )}`
         );
       }
+
+      console.log({ userProfile });
 
       // Create or update the social account
       await threadsService.createSocialAccount(
