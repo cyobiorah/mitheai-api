@@ -49,7 +49,7 @@ export const getAuthorizationUrl = (state: string, platform: string) => {
     client_id: META_CLIENT_ID,
     redirect_uri: redirectUri,
     scope:
-      "pages_show_list,instagram_basic,instagram_content_publish,pages_read_engagement,pages_manage_posts,business_management",
+      "pages_show_list,instagram_basic,instagram_content_publish,pages_manage_posts",
     response_type: "code",
     state,
   });
