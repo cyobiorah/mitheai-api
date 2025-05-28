@@ -169,8 +169,10 @@ export async function getUserProfile(accessToken: string) {
     // Use the access token directly to fetch user profile information
     // For Threads API, we need to use the Threads Graph API
     const response = await axios.get(
-      `https://graph.threads.net/me?fields=id,username&access_token=${accessToken}`
+      `https://graph.threads.net/me?fields=id,username,threads_profile_picture_url,threads_biography&access_token=${accessToken}`
     );
+
+    console.log({ response });
 
     if (!response.data?.id) {
       throw new Error("Failed to fetch valid Threads user profile");
