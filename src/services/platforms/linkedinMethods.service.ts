@@ -30,9 +30,6 @@ export async function uploadImageToLinkedIn({
 
     const { uploadUrl, image } = registerRes.data.value;
 
-    console.log("LinkedIn Upload URL:", uploadUrl);
-    console.log("Image URN:", image);
-
     const putRes = await axios.put(uploadUrl, fileBuffer, {
       headers: {
         "Content-Type": mimetype,
@@ -40,8 +37,6 @@ export async function uploadImageToLinkedIn({
       },
       timeout: 10000, // add timeout
     });
-
-    console.log("Upload response:", putRes.status);
 
     return image;
   } catch (err: any) {
