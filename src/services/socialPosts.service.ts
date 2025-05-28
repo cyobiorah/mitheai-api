@@ -1,3 +1,4 @@
+import { Response as ExpressResponse } from "express";
 import { ObjectId } from "mongodb";
 import { getCollections } from "../config/db";
 import {
@@ -7,9 +8,9 @@ import {
 import { postToThreads } from "../controllers/platforms/threads.controller";
 import { postToTwitter } from "../controllers/platforms/twitter.controller";
 import { postToFacebook } from "../controllers/platforms/facebook.controller";
-import { Response as ExpressResponse } from "express";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { lookupCollectionDetails } from "../utils/mongoAggregations";
+import { postToLinkedIn } from "./platforms/linkedin.service";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
@@ -125,11 +126,15 @@ export async function handlePlatformUploadAndPost({
   try {
     // Validate file types here if needed
 
-    const uploadUrls = await handleTransformAndUpload({
-      mediaFiles,
-      postMeta,
-      platform,
-    });
+    let uploadUrls: string[] = [];
+
+    if (platform !== "linkedin") {
+      uploadUrls = await handleTransformAndUpload({
+        mediaFiles,
+        postMeta,
+        platform,
+      });
+    }
 
     const payload = {
       content: postMeta.caption,
@@ -162,8 +167,30 @@ export async function handlePlatformUploadAndPost({
         await postToTwitter({ postData: payload, res });
         return { success: true };
       }
-      case "linkedin":
-        break;
+      case "linkedin": {
+        try {
+          const result = await postToLinkedIn({
+            postData: payload,
+            mediaFiles,
+          });
+          console.log({ result });
+          if (!result.success) {
+            return res.status(400).json({ error: result.error });
+          }
+
+          return res
+            .status(200)
+            .json({
+              message: "Post published successfully",
+              postId: result.postId,
+            });
+        } catch (err: any) {
+          console.error("LinkedIn post error:", err);
+          return res
+            .status(500)
+            .json({ error: "Unexpected error posting to LinkedIn" });
+        }
+      }
       default:
         return { success: false, error: `Unsupported platform: ${platform}` };
     }
