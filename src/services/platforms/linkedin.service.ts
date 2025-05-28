@@ -301,11 +301,6 @@ export async function postContent(
     isReshareDisabledByAuthor: false,
   };
 
-  console.log(
-    "Final LinkedIn postPayload:",
-    JSON.stringify(postPayload, null, 2)
-  );
-
   // Make API request
   let response;
   try {

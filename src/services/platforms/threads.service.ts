@@ -172,8 +172,6 @@ export async function getUserProfile(accessToken: string) {
       `https://graph.threads.net/me?fields=id,username,threads_profile_picture_url&access_token=${accessToken}`
     );
 
-    console.log({ response });
-
     if (!response.data?.id) {
       throw new Error("Failed to fetch valid Threads user profile");
     }
