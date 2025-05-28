@@ -573,6 +573,8 @@ export const postToThreads = async ({
           accountName: account.accountName,
           platformAccountId: account.platformAccountId,
           platform: "threads",
+          profileImageUrl:
+            account.metadata?.profile?.threads_profile_picture_url,
         },
         postId: postResult.id,
         status: "published",

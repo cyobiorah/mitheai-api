@@ -2,16 +2,11 @@ import * as crypto from "crypto";
 import axios from "axios";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
-import { SocialAccount } from "../../schema/schema";
-
-// interface LinkedInProfile {
-//   sub: string;
-//   localizedFirstName?: string;
-//   localizedLastName?: string;
-//   profilePicture?: any;
-//   email?: string;
-//   name?: string;
-// }
+import {
+  uploadImageToLinkedIn,
+  uploadVideoToLinkedIn,
+} from "./linkedinMethods.service";
+import { request } from "undici";
 
 interface LinkedInEmail {
   elements: Array<{ "handle~": { emailAddress: string } }>;
@@ -319,9 +314,17 @@ export async function postContent(
           "LinkedIn-Version": "202405",
           "Content-Type": "application/json",
         },
+        timeout: 30000,
       }
     );
   } catch (error: any) {
+    console.error("LinkedIn post error:", error);
+    if (error.code === "ECONNABORTED") {
+      return {
+        success: false,
+        error: "LinkedIn request timed out. Please try again.",
+      };
+    }
     // Handle LinkedIn API errors
     if (error.response) {
       if (error.response.status === 401) {
@@ -385,5 +388,186 @@ export async function postContent(
   return {
     success: true,
     id: postId,
+  };
+}
+
+export async function postToLinkedIn({
+  postData,
+  mediaFiles,
+}: {
+  postData: any;
+  mediaFiles: Express.Multer.File[];
+}) {
+  const { accessToken, accountId, accountType, content, mediaType } = postData;
+
+  const { socialaccounts, socialposts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    accountId,
+    platform: "linkedin",
+  });
+
+  if (!account) {
+    return {
+      success: false,
+      error: "LinkedIn account not found",
+    };
+  }
+
+  if (account.tokenExpiry && new Date(account.tokenExpiry) < new Date()) {
+    return {
+      success: false,
+      error: "LinkedIn access token has expired and needs to be reconnected",
+    };
+  }
+
+  const authorUrn =
+    accountType === "business"
+      ? `urn:li:organization:${accountId}`
+      : `urn:li:person:${accountId}`;
+
+  let assetUrns: string[] = [];
+
+  if (mediaType === "image") {
+    for (const file of mediaFiles) {
+      const assetUrn = await uploadImageToLinkedIn({
+        fileBuffer: file.buffer,
+        mimetype: file.mimetype,
+        accountUrn: authorUrn,
+        accessToken: account.accessToken,
+      });
+      assetUrns.push(assetUrn);
+    }
+  }
+
+  if (mediaType === "video" && mediaFiles[0]) {
+    const assetUrn = await uploadVideoToLinkedIn({
+      fileBuffer: mediaFiles[0].buffer,
+      mimetype: mediaFiles[0].mimetype,
+      accountUrn: authorUrn,
+      accessToken: account.accessToken,
+    });
+    assetUrns.push(assetUrn);
+  }
+
+  const postPayload: any = {
+    author: authorUrn,
+    commentary: content,
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: [],
+    },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false,
+  };
+
+  if (assetUrns.length > 0) {
+    postPayload.content = {
+      media: {
+        id: assetUrns[0], // LinkedIn currently supports 1 media per /rest/posts
+      },
+    };
+  }
+
+  let response;
+  try {
+    response = await axios.post(
+      "https://api.linkedin.com/rest/posts",
+      postPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+          "LinkedIn-Version": "202505",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (err: any) {
+    const errorData = err.response?.data ?? {};
+    const errorMessage = errorData.message || err.message;
+
+    // Detect and handle duplicate post errors
+    if (
+      typeof errorMessage === "string" &&
+      errorMessage.toLowerCase().includes("duplicate")
+    ) {
+      return {
+        success: false,
+        error: "LinkedIn rejected the post as duplicate content.",
+      };
+    }
+
+    // Timeout
+    if (err.code === "ECONNABORTED") {
+      return {
+        success: false,
+        error: "LinkedIn request timed out. Please try again.",
+      };
+    }
+
+    // Auth error
+    if (err.response?.status === 401) {
+      return {
+        success: false,
+        error: "LinkedIn authentication failed. Please reconnect your account.",
+      };
+    }
+
+    // Permission error
+    if (err.response?.status === 403) {
+      return {
+        success: false,
+        error: "Not authorized to post to this LinkedIn account.",
+      };
+    }
+
+    // Log unhandled errors
+    console.error("Unhandled LinkedIn post error:", errorData);
+
+    return {
+      success: false,
+      error: `LinkedIn API error: ${JSON.stringify(errorData)}`,
+    };
+  }
+
+  const postId = response.headers["x-restli-id"] ?? null;
+
+  try {
+    await socialposts.insertOne({
+      userId: account.userId,
+      teamId: account.teamId ? new ObjectId(account.teamId) : undefined,
+      organizationId: account.organizationId
+        ? new ObjectId(account.organizationId)
+        : undefined,
+      socialAccountId: account._id,
+      platform: "linkedin",
+      content,
+      metadata: {
+        platform: account.platform,
+        platformAccountId: account.platformAccountId,
+        accountId: account.accountId,
+        accountName: account.accountName,
+        accountType: account.accountType,
+        platformId: account.platformId,
+        mediaAssetUrns: assetUrns,
+        profileImageUrl: account.metadata?.picture,
+      },
+      mediaType: mediaType?.toUpperCase() ?? "TEXT",
+      postId,
+      status: "published",
+      publishedDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  } catch (saveError) {
+    console.error("Error saving LinkedIn post to database:", saveError);
+  }
+
+  return {
+    success: true,
+    postId,
   };
 }
