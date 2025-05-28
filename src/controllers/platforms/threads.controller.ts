@@ -195,8 +195,6 @@ export const handleThreadsCallback = async (
       // Get user profile from Threads
       const userProfile = await threadsService.getUserProfile(accessToken);
 
-      console.log({ userProfile });
-
       if (!userProfile?.id) {
         console.error("Failed to get user profile:", userProfile);
         return res.redirect(
@@ -575,6 +573,8 @@ export const postToThreads = async ({
           accountName: account.accountName,
           platformAccountId: account.platformAccountId,
           platform: "threads",
+          profileImageUrl:
+            account.metadata?.profile?.threads_profile_picture_url,
         },
         postId: postResult.id,
         status: "published",

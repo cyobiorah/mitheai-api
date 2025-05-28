@@ -301,11 +301,6 @@ export async function postContent(
     isReshareDisabledByAuthor: false,
   };
 
-  console.log(
-    "Final LinkedIn postPayload:",
-    JSON.stringify(postPayload, null, 2)
-  );
-
   // Make API request
   let response;
   try {
@@ -395,142 +390,6 @@ export async function postContent(
     id: postId,
   };
 }
-
-// export async function postToLinkedIn({
-//   postData,
-//   mediaFiles,
-// }: {
-//   postData: any;
-//   mediaFiles: Express.Multer.File[];
-// }) {
-//   const { accessToken, accountId, accountType, content, mediaType } = postData;
-
-//   console.log({ postData });
-//   console.log({ mediaFiles });
-
-//   const { socialaccounts, socialposts } = await getCollections();
-
-//   const account = await socialaccounts.findOne({
-//     accountId,
-//     platform: "linkedin",
-//   });
-
-//   if (!account) {
-//     return {
-//       success: false,
-//       error: "LinkedIn account not found",
-//     };
-//   }
-
-//   if (account.tokenExpiry && new Date(account.tokenExpiry) < new Date()) {
-//     return {
-//       success: false,
-//       error: "LinkedIn access token has expired and needs to be reconnected",
-//     };
-//   }
-
-//   console.log({ account });
-
-//   const authorUrn =
-//     accountType === "business"
-//       ? `urn:li:organization:${accountId}`
-//       : `urn:li:person:${accountId}`;
-
-//   let assetUrns: string[] = [];
-
-//   if (mediaType === "image") {
-//     for (const file of mediaFiles) {
-//       const assetUrn = await uploadImageToLinkedIn({
-//         fileBuffer: file.buffer,
-//         mimetype: file.mimetype,
-//         accountUrn: authorUrn,
-//         accessToken: account.accessToken,
-//       });
-//       assetUrns.push(assetUrn);
-//     }
-//   }
-
-//   if (mediaType === "video" && mediaFiles[0]) {
-//     const assetUrn = await uploadVideoToLinkedIn({
-//       fileBuffer: mediaFiles[0].buffer,
-//       mimetype: mediaFiles[0].mimetype,
-//       accountUrn: authorUrn,
-//       accessToken: account.accessToken,
-//     });
-//     assetUrns.push(assetUrn);
-//   }
-
-//   console.log({ assetUrns });
-
-//   const postPayload: any = {
-//     author: authorUrn,
-//     commentary: content,
-//     visibility: "PUBLIC",
-//     distribution: {
-//       feedDistribution: "MAIN_FEED",
-//       targetEntities: [],
-//       thirdPartyDistributionChannels: [],
-//     },
-//     lifecycleState: "PUBLISHED",
-//     isReshareDisabledByAuthor: false,
-//   };
-
-//   if (assetUrns.length > 0) {
-//     postPayload.content = {
-//       media: {
-//         id: assetUrns[0], // LinkedIn currently allows only one media per post in /rest/posts
-//       },
-//     };
-//   }
-
-//   console.log({ postPayloadsssssss: JSON.stringify(postPayload, null, 2) });
-//   console.log({ postMedia: postPayload.content?.media });
-
-//   let response;
-
-//   try {
-//     console.log("🚀 Attempting to send LinkedIn request...");
-//     const undiciRes = await request("https://api.linkedin.com/rest/posts", {
-//       method: "POST",
-//       headers: {
-//         Authorization: `Bearer ${account.accessToken}`,
-//         "X-Restli-Protocol-Version": "2.0.0",
-//         "LinkedIn-Version": "202505",
-//         "Content-Type": "application/json",
-//       },
-//       body: JSON.stringify(postPayload),
-//     });
-
-//     const response = await axios.post(
-//       "https://api.linkedin.com/rest/posts",
-//       postPayload,
-//       {
-//         headers: {
-//           Authorization: `Bearer ${account.accessToken}`,
-//           "X-Restli-Protocol-Version": "2.0.0",
-//           "LinkedIn-Version": "202505",
-//           "Content-Type": "application/json",
-//         },
-//       }
-//     );
-//     console.log("✅ Axios response:", response.status, response.data);
-
-//     console.log("✅ LinkedIn response status:", undiciRes.statusCode);
-//     const responseBody = await undiciRes.body.json();
-//     console.log("✅ LinkedIn response body:", responseBody);
-
-//     return {
-//       success: true,
-//       postId: undiciRes.headers["x-restli-id"] ?? null,
-//     };
-//   } catch (err: any) {
-//     console.error("❌ Error during undici request:", err);
-//     return {
-//       success: false,
-//       error: err.message ?? "LinkedIn request failed unexpectedly",
-//     };
-//   }
-// }
 
 export async function postToLinkedIn({
   postData,
@@ -694,6 +553,7 @@ export async function postToLinkedIn({
         accountType: account.accountType,
         platformId: account.platformId,
         mediaAssetUrns: assetUrns,
+        profileImageUrl: account.metadata?.picture,
       },
       mediaType: mediaType?.toUpperCase() ?? "TEXT",
       postId,
