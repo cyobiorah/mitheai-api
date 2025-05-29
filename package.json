@@ -15,6 +15,7 @@
     "@getbrevo/brevo": "^2.2.0",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
+    "bullmq": "^5.53.0",
     "cloudinary": "^2.6.1",
     "compression": "^1.7.5",
     "connect-redis": "^8.0.2",
