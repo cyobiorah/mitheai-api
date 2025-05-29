@@ -142,6 +142,12 @@ export const postToPlatform = async (job: PlatformDetails) => {
       scheduledPostId: post._id,
       createdAt: new Date(),
       updatedAt: new Date(),
+      metadata: {
+        source: "scheduled_post",
+        accountName: account.accountName,
+        platform: account.platform,
+        platformAccountId: account.accountId,
+      },
     };
 
     delete insertDoc._id;
