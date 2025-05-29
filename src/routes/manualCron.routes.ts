@@ -1,5 +1,19 @@
+// eslint-ignore-
+// import { Router } from "express";
+// import { SocialPostWorker } from "../worker/scheduledPost.worker";
+// const router = Router();
+// router.get("/", async (req, res) => {
+//   const token = req.headers["authorization"];
+//   if (token !== `Bearer ${process.env.CRON_SECRET}`) {
+//     return res.status(403).json({ message: "Unauthorized" });
+//   }
+//   const result = await SocialPostWorker.processScheduledPosts();
+//   res.status(200).json({ message: "Cron ran", result });
+// });
+// export default router;
+
 import { Router } from "express";
-import { SocialPostWorker } from "../worker/scheduledPost.worker";
+import { enqueueScheduledPostJobs } from "../worker/queueProducer";
 
 const router = Router();
 
@@ -8,8 +22,15 @@ router.get("/", async (req, res) => {
   if (token !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(403).json({ message: "Unauthorized" });
   }
-  const result = await SocialPostWorker.processScheduledPosts();
-  res.status(200).json({ message: "Cron ran", result });
+
+  try {
+    const enqueuedCount = await enqueueScheduledPostJobs();
+    res.status(200).json({ message: "Cron ran", enqueued: enqueuedCount });
+  } catch (error: any) {
+    res
+      .status(500)
+      .json({ message: "Failed to enqueue jobs", error: error.message });
+  }
 });
 
 export default router;
