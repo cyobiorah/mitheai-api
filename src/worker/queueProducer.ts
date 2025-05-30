@@ -16,20 +16,16 @@ export const enqueueScheduledPostJobs = async () => {
 
   for (const post of duePosts) {
     for (const platform of post.platforms) {
-      await postQueue.add(
-        "post-platform",
-        {
-          scheduledPostId: post._id.toString(),
-          platform: {
-            platformName: platform.platform,
-            accountId: platform.accountId,
-          },
-          userId: post.createdBy,
-          teamId: post.teamId ?? null,
-          organizationId: post.organizationId ?? null,
-        }
-        // { timeout: 15000 }
-      );
+      await postQueue.add("post-platform", {
+        scheduledPostId: post._id.toString(),
+        platform: {
+          platformName: platform.platform,
+          accountId: platform.accountId,
+        },
+        userId: post.createdBy,
+        teamId: post.teamId ?? null,
+        organizationId: post.organizationId ?? null,
+      });
 
       enqueuedCount++;
     }
