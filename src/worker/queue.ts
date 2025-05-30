@@ -18,6 +18,5 @@ export const postQueue = new Queue("scheduled-posts", {
       type: "exponential",
       delay: 3000,
     },
-    // timeout: 15000,
   },
 });

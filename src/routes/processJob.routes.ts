@@ -11,8 +11,6 @@ router.post("/", async (req, res) => {
     return res.status(403).json({ message: "Unauthorized" });
   }
 
-  //   eslint-disable-next-line no-void
-  //   const [job] = await postQueue.getJobs(["waiting"], 0, 0);
   const [job] = await postQueue.getJobs(["waiting", "delayed", "paused"], 0, 5);
   if (!job) return res.status(200).json({ message: "No job available" });
   if (!job?.data?.scheduledPostId) {
