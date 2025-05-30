@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import "./worker/postWorker";
 
 dotenv.config();
 

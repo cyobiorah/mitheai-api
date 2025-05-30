@@ -5,6 +5,7 @@ import organizationsRoutes from "./organizations.routes";
 import teamsRoutes from "./teams.routes";
 import socialAccountRoutes from "./socialAccount.routes";
 import manualCronRoutes from "./manualCron.routes";
+import processJobRoutes from "./processJob.routes";
 import invitationsRoutes from "./invitations.routes";
 import socialPostsRoutes from "./socialPosts.routes";
 import scheduledPostsRoutes from "./scheduledPosts.routes";
@@ -14,6 +15,7 @@ import checkoutRoutes from "./checkout.routes";
 import { skedliiPlans } from "../services/plans.service";
 import invoicesRoutes from "./invoices.routes";
 import mediaRoutes from "./media.routes";
+import queueStatusRoutes from "./queueStatus.routes";
 
 const router = Router();
 
@@ -61,6 +63,12 @@ router.get("/", (_req, res) => {
 
 // Manual cron routes
 router.use("/manual-cron", manualCronRoutes);
+
+// Process job
+router.use("/process-job", processJobRoutes);
+
+// Queue status
+router.use("/queue-status", queueStatusRoutes);
 
 // App plans routes
 router.get("/plans", (_req, res) => {
