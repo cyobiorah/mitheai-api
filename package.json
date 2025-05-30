@@ -35,7 +35,6 @@
     "streamifier": "^0.1.1",
     "stripe": "^18.1.0",
     "twitter-api-sdk": "^1.2.1",
-    "undici": "^7.10.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
