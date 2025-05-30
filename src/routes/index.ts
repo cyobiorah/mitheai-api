@@ -5,7 +5,6 @@ import organizationsRoutes from "./organizations.routes";
 import teamsRoutes from "./teams.routes";
 import socialAccountRoutes from "./socialAccount.routes";
 import manualCronRoutes from "./manualCron.routes";
-// import jobCycle from "./jobCycle.routes";
 import processJobRoutes from "./processJob.routes";
 import invitationsRoutes from "./invitations.routes";
 import socialPostsRoutes from "./socialPosts.routes";
@@ -64,8 +63,6 @@ router.get("/", (_req, res) => {
 
 // Manual cron routes
 router.use("/manual-cron", manualCronRoutes);
-// Job Runner
-// router.use("/job-cycle", jobCycle);
 
 // Process job
 router.use("/process-job", processJobRoutes);

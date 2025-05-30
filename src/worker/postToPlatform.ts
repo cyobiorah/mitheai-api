@@ -17,7 +17,6 @@ interface PlatformDetails {
 }
 
 export const postToPlatform = async (job: PlatformDetails) => {
-  console.log("🚀 ~ postToPlatform ~ job:", job);
   const { scheduledposts, socialaccounts, socialposts } =
     await getCollections();
 
@@ -105,8 +104,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
       };
     }
 
-    console.log({ publishResult });
-
     const postUrl =
       "url" in publishResult
         ? publishResult.url
@@ -142,19 +139,20 @@ export const postToPlatform = async (job: PlatformDetails) => {
       scheduledPostId: post._id,
       createdAt: new Date(),
       updatedAt: new Date(),
+      metadata: {
+        source: "scheduled_post",
+        accountName: account.accountName,
+        platform: account.platform,
+        platformAccountId: account.accountId,
+      },
     };
 
     delete insertDoc._id;
 
     await socialposts.insertOne(insertDoc);
 
-    console.log(
-      `✅ Post successful: ${account.platform} → ${publishResult.id}`
-    );
-
     return { success: true, id: publishResult.id, postUrl };
   } catch (err: any) {
-    console.error(`🔥 Post failed [${account.platform}]: ${err.message}`);
     if (err.code === "TOKEN_EXPIRED") {
       await socialaccounts.updateOne(
         { _id: account._id },
