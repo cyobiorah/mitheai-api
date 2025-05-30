@@ -15,6 +15,7 @@
     "@getbrevo/brevo": "^2.2.0",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
+    "bullmq": "^5.53.0",
     "cloudinary": "^2.6.1",
     "compression": "^1.7.5",
     "connect-redis": "^8.0.2",
@@ -34,7 +35,6 @@
     "streamifier": "^0.1.1",
     "stripe": "^18.1.0",
     "twitter-api-sdk": "^1.2.1",
-    "undici": "^7.10.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

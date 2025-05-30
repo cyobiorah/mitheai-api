@@ -6,11 +6,6 @@ import {
   uploadImageToLinkedIn,
   uploadVideoToLinkedIn,
 } from "./linkedinMethods.service";
-import { request } from "undici";
-
-interface LinkedInEmail {
-  elements: Array<{ "handle~": { emailAddress: string } }>;
-}
 
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID!;
 const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET!;
@@ -398,7 +393,7 @@ export async function postToLinkedIn({
   postData: any;
   mediaFiles: Express.Multer.File[];
 }) {
-  const { accessToken, accountId, accountType, content, mediaType } = postData;
+  const { accountId, accountType, content, mediaType } = postData;
 
   const { socialaccounts, socialposts } = await getCollections();
 
@@ -487,7 +482,7 @@ export async function postToLinkedIn({
     );
   } catch (err: any) {
     const errorData = err.response?.data ?? {};
-    const errorMessage = errorData.message || err.message;
+    const errorMessage = errorData.message ?? err.message;
 
     // Detect and handle duplicate post errors
     if (
