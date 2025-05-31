@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { enqueueScheduledPostJobs } from "../worker/queueProducer";
+import { shouldSkipTrigger } from "../middlewares/deduplicateTrigger";
 
 const router = Router();
 
@@ -7,6 +8,12 @@ router.get("/", async (req, res) => {
   const token = req.headers["authorization"];
   if (token !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  const source = req.query.source as "qstash" | "cron" | undefined;
+
+  if (source && shouldSkipTrigger(source, source === "qstash" ? 15 : 20)) {
+    return res.status(200).json({ message: "Skipped duplicate trigger" });
   }
 
   try {
