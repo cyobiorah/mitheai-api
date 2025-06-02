@@ -226,13 +226,9 @@ export const postToInstagram = async ({
   res?: ExpressResponse;
   postData?: any;
 }): Promise<any> => {
-  console.log({ postData });
   try {
     const { accountId, content, mediaUrls } = postData ?? req?.body?.data ?? {};
     const userId = postData?.userId ?? (req as any)?.user?.id;
-
-    console.log({ accountId });
-    console.log({ userId });
 
     if (!accountId || !userId) {
       const message = !accountId

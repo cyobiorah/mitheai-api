@@ -158,9 +158,6 @@ export async function postToMultiPlatform({
 
     const { socialaccounts } = await getCollections();
 
-    console.log({ parsedPostData });
-    console.log({ platforms: parsedPostData.platforms });
-
     let account;
     if (parsedPostData.scheduledFor) {
       account = await socialaccounts.findOne({

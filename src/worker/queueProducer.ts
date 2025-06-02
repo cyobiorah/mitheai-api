@@ -25,6 +25,7 @@ export const enqueueScheduledPostJobs = async () => {
         userId: post.createdBy,
         teamId: post.teamId ?? null,
         organizationId: post.organizationId ?? null,
+        ...(post.fileRefs ? { fileRefs: post.fileRefs } : {}),
       });
 
       enqueuedCount++;
