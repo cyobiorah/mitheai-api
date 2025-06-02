@@ -1,6 +1,5 @@
 import { Router } from "express";
 import {
-  createScheduledPost,
   getLoggedInUsersScheduledPosts,
   getSingleScheduledPost,
   updateScheduledPost,
@@ -24,7 +23,6 @@ router.post(
   requireJwtAuth,
   (req, res) => {
     postToMultiPlatform({ req, res });
-    // createScheduledPost({ req, res });
   }
 );
 router.put("/:id", requireJwtAuth, updateScheduledPost);

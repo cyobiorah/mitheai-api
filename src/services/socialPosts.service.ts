@@ -133,7 +133,6 @@ export async function handlePlatformUploadAndPost({
   };
   res: ExpressResponse;
 }): Promise<any> {
-  console.log({ platform, mediaFiles, userId, postMeta });
   try {
     const { scheduledFor } = postMeta;
 
@@ -182,10 +181,22 @@ export async function handlePlatformUploadAndPost({
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
       if (platform === "linkedin") {
-        newScheduledPost.fileRefs = mediaFiles.map(
-          (f) => `${f.originalname}-${Date.now()}`
-        );
-        newScheduledPost.mediaUrls = []; // Don’t reuse Cloudinary URLs
+        const fileRefs: string[] = [];
+
+        for (const file of mediaFiles) {
+          const publicId = `${file.originalname}-${Date.now()}`;
+
+          await uploadToCloudinaryBuffer(file, {
+            folder: "skedlii",
+            publicId,
+            transformations: undefined, // or pass platform-specific if needed
+          });
+
+          fileRefs.push(publicId);
+        }
+
+        newScheduledPost.fileRefs = fileRefs;
+        newScheduledPost.mediaUrls = []; // Do not use URL-based posting for LinkedIn
       }
 
       const result = await scheduledposts.insertOne(newScheduledPost);

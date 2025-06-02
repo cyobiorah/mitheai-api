@@ -2,9 +2,10 @@ import { getCollections } from "../config/db";
 import { ObjectId } from "mongodb";
 import { post as postToTwitter } from "../services/platforms/twitter.service";
 import { postContent as postToThreads } from "../services/platforms/threads.service";
-import { postContent as postToLinkedin } from "../services/platforms/linkedin.service";
 
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
+import { postToLinkedIn } from "../services/platforms/linkedin.service";
+import { fetchCloudinaryFileBuffer } from "../utils/cloudinary";
 
 interface PlatformDetails {
   scheduledPostId: string;
@@ -15,6 +16,7 @@ interface PlatformDetails {
   userId: string;
   teamId?: string;
   organizationId?: string;
+  fileRefs?: string[];
 }
 
 export const postToPlatform = async (job: PlatformDetails) => {
@@ -81,9 +83,66 @@ export const postToPlatform = async (job: PlatformDetails) => {
         );
         break;
 
-      case "linkedin":
-        publishResult = await postToLinkedin(account.accountId, post.content);
+      case "linkedin": {
+        const mediaFiles = await Promise.all(
+          post.fileRefs.map(async (ref: string) => {
+            // Reconstruct the full publicId or Cloudinary path if needed
+            const publicId = `skedlii/${ref}`;
+            const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
+              publicId
+            );
+
+            if (!buffer || !mimetype) {
+              throw new Error(
+                `Invalid Cloudinary asset or missing content-type for ref: ${ref}`
+              );
+            }
+
+            return {
+              originalname: ref,
+              buffer,
+              mimetype,
+            };
+          })
+        );
+
+        try {
+          const result = await postToLinkedIn({
+            postData: {
+              accountId: account.accountId,
+              accountName: account.accountName,
+              accountType: account.accountType,
+              content: post.content,
+              mediaType: post.mediaType,
+              platformAccountId: account.accountId,
+              accessToken: account.accessToken,
+              dimensions: post.dimensions,
+              mediaUrls: post.mediaUrls,
+              userId: job.userId,
+            },
+            mediaFiles,
+          });
+          if (!result.success) {
+            return {
+              success: false,
+              error: result.error,
+              errorType: "SERVICE_ERROR",
+            };
+          }
+
+          publishResult = {
+            id: result.postId,
+          };
+        } catch (err: any) {
+          console.error("LinkedIn post error:", err);
+          return {
+            success: false,
+            error: "Unexpected error posting to LinkedIn",
+            errorType: "SERVICE_ERROR",
+          };
+        }
         break;
+      }
 
       case "instagram": {
         const payload = {
@@ -98,8 +157,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
           mediaUrls: post.mediaUrls,
           userId: job.userId,
         };
-
-        console.log({ payload });
 
         const result = await postToInstagram({ postData: payload });
         if (!result.success) {
@@ -141,7 +198,8 @@ export const postToPlatform = async (job: PlatformDetails) => {
 
       // Generate platform-specific URLs
       if (account.platform === "linkedin") {
-        postUrl = `https://www.linkedin.com/feed/update/${postId}`;
+        const visibleId = publishResult.id?.split(":").pop();
+        postUrl = `https://www.linkedin.com/feed/update/${visibleId}`;
       } else if (account.platform === "threads") {
         postUrl = `https://threads.net/t/${postId}`;
       } else {
