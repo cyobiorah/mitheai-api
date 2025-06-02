@@ -9,6 +9,7 @@ import {
   deleteSocialPost,
   handlePlatformUploadAndPost,
 } from "../services/socialPosts.service";
+import { getCollections } from "../config/db";
 
 // Get posts (with flexible filtering)
 export const getPosts = async (req: Request, res: ExpressResponse) => {
@@ -155,19 +156,47 @@ export async function postToMultiPlatform({
             .filter(Boolean)
         : [];
 
+    const { socialaccounts } = await getCollections();
+
+    console.log({ parsedPostData });
+    console.log({ platforms: parsedPostData.platforms });
+
+    let account;
+    if (parsedPostData.scheduledFor) {
+      account = await socialaccounts.findOne({
+        accountId: parsedPostData.platforms[0].accountId,
+        platform: parsedPostData.platforms[0].platform,
+      });
+    } else {
+      account = await socialaccounts.findOne({
+        accountId: parsedPostData.accountId,
+        platform: parsedPostData.platform,
+      });
+    }
+
+    if (!account) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
     await handlePlatformUploadAndPost({
-      platform: parsedPostData.platform,
+      platform: account.platform,
       mediaFiles: media,
       userId: (req as any).user.id,
       postMeta: {
-        accountId: parsedPostData.accountId,
-        accountName: parsedPostData.accountName,
-        accountType: parsedPostData.accountType,
-        caption: parsedPostData.caption,
+        accountId: account.accountId,
+        accountName: account.accountName,
+        accountType: account.accountType,
+        caption: parsedPostData.caption ?? parsedPostData.content,
         mediaType: parsedPostData.mediaType,
-        platformAccountId: parsedPostData.platformAccountId,
-        accessToken: parsedPostData.accessToken,
+        platformAccountId: account.accountId,
+        accessToken: account.accessToken,
         dimensions: parsedDimensions,
+        ...(parsedPostData.scheduledFor && {
+          scheduledFor: parsedPostData.scheduledFor,
+        }),
+        ...(parsedPostData.timezone && {
+          timezone: parsedPostData.timezone,
+        }),
       },
       res,
     });
