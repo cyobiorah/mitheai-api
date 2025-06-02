@@ -8,6 +8,7 @@ import {
 } from "../controllers/scheduledPosts.controller";
 import { requireJwtAuth } from "../middlewares/auth";
 import multer from "multer";
+import { postToMultiPlatform } from "../controllers/socialPosts.controller";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,7 +23,8 @@ router.post(
   upload.fields([{ name: "media" }]),
   requireJwtAuth,
   (req, res) => {
-    createScheduledPost({ req, res });
+    postToMultiPlatform({ req, res });
+    // createScheduledPost({ req, res });
   }
 );
 router.put("/:id", requireJwtAuth, updateScheduledPost);
