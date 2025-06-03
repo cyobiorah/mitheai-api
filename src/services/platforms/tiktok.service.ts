@@ -37,7 +37,10 @@ export async function createSocialAccount(
   const profileRes = await axios.get(
     "https://open.tiktokapis.com/v2/user/info/",
     {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
     }
   );
 
