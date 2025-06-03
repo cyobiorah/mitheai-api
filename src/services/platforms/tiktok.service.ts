@@ -10,12 +10,17 @@ const TIKTOK_REDIRECT_URI = process.env.TIKTOK_REDIRECT_URI!;
 export async function exchangeCodeForTokens(code: string) {
   const response = await axios.post(
     "https://open.tiktokapis.com/v2/oauth/token/",
-    {
+    new URLSearchParams({
       client_key: TIKTOK_CLIENT_KEY,
       client_secret: TIKTOK_CLIENT_SECRET,
       code,
       grant_type: "authorization_code",
       redirect_uri: TIKTOK_REDIRECT_URI,
+    }),
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
     }
   );
   return response.data;
