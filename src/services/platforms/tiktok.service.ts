@@ -35,7 +35,7 @@ export async function createSocialAccount(
   const { socialaccounts } = await getCollections();
 
   const profileRes = await axios.get(
-    "https://open.tiktokapis.com/v2/user/info/?fields=open_id,username,avatar_url,display_name",
+    "https://open.tiktokapis.com/v2/user/info/?fields=open_id,avatar_url,display_name,profile_deep_link,bio_description",
     {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
@@ -43,6 +43,8 @@ export async function createSocialAccount(
       },
     }
   );
+
+  console.log({ profileRes });
 
   const profile = profileRes.data.data;
   const accountId = profile.open_id;
@@ -82,9 +84,8 @@ export async function createSocialAccount(
       updatedAt: new Date(),
       metadata: {
         ...userExistingAccount.metadata,
-        username: profile.username,
+        username: profile.display_name,
         avatar: profile.avatar_url,
-        bio: profile.bio_description,
       },
       status: "active",
     };
@@ -113,9 +114,8 @@ export async function createSocialAccount(
     status: "active",
     userId: new ObjectId(userId),
     metadata: {
-      username: profile.username,
+      username: profile.display_name,
       profileImageUrl: profile.avatar_url,
-      bio: profile.bio_description,
     },
     permissions: {
       canPost: true,
