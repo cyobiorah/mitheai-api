@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 
 export interface SocialAccount {
   _id?: ObjectId;
-  platform: "twitter" | "linkedin";
+  platform: "twitter" | "linkedin" | "tiktok";
   accountId: string;
   platformAccountId: string;
   accountName: string;
@@ -25,9 +25,10 @@ export interface SocialAccount {
     followerCount?: number;
     followingCount?: number;
     connectionsCount?: number;
-    lastChecked: Date;
+    lastChecked?: Date;
     profileImageUrl?: string;
     username?: string;
+    bio?: string;
   };
 
   permissions: {
