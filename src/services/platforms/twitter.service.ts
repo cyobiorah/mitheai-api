@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from "uuid";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
 import { Client, auth } from "twitter-api-sdk";
+import { TwitterApi } from "twitter-api-v2";
 import { SocialAccount } from "../../schema/schema";
+import { fetchCloudinaryFileBuffer } from "../../utils/cloudinary";
 
 // These should be in your env/config
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID!;
@@ -172,38 +174,41 @@ export async function createSocialAccount(
 }
 
 export async function post(content: any): Promise<{ id: string }> {
-  if (
-    !content.metadata.socialPost?.platform ||
-    content.metadata.socialPost.platform !== "twitter"
-  ) {
+  const { fileRefs = [], metadata, content: text } = content;
+
+  if (metadata?.socialPost?.platform !== "twitter") {
     throw new Error("Invalid platform for Twitter post");
   }
 
-  let account;
-  const { socialaccounts } = await getCollections();
+  const { socialaccounts, socialposts } = await getCollections();
 
-  // First try to find by accountId if it's in the metadata
-  if (content.metadata.socialPost.accountId) {
-    account = await socialaccounts.findOne({
-      accountId: content.metadata.socialPost.accountId,
-    });
-  }
+  const account = await socialaccounts.findOne({
+    accountId: metadata.socialPost.accountId,
+  });
 
   if (!account) {
     throw new Error("No active Twitter account found");
   }
 
-  const accountId = account._id.toString();
+  let mediaIds: string[] = [];
+
+  if (fileRefs.length > 0) {
+    for (const ref of fileRefs) {
+      const publicId = `skedlii/${ref}`;
+      const { buffer, mimetype } = await fetchCloudinaryFileBuffer(publicId);
+      const mediaId = await uploadMediaToTwitter(account, buffer, mimetype);
+      mediaIds.push(mediaId);
+    }
+  }
 
   try {
     // Reuse the postTweet method which already handles token refresh
-    const response = await postTweet(accountId, content.content);
+    const response = await postTweet(account._id.toString(), text, mediaIds);
 
     if (!response.data?.id) {
       throw new Error("Failed to create tweet");
     }
 
-    const { socialposts } = await getCollections();
     const postRecord = {
       ...content,
       platformPostId: response.data.id,
@@ -232,27 +237,25 @@ export async function post(content: any): Promise<{ id: string }> {
 
 export async function postTweet(
   accountId: string,
-  message: string
+  message: string,
+  mediaIds: string[]
 ): Promise<any> {
   try {
     const account = await getValidAccount(accountId);
 
-    // Check for OAuth 2.0 token
-    const hasOAuth2Token = !!(
-      account.accessToken &&
-      typeof account.accessToken === "string" &&
-      account.accessToken.length > 0
-    );
-
-    if (!hasOAuth2Token) {
+    if (!account?.accessToken) {
       throw new Error("No valid OAuth 2.0 token available for posting tweets");
     }
 
     try {
       const client = new Client(new auth.OAuth2Bearer(account.accessToken));
-      const response = await client.tweets.createTweet({
-        text: message,
-      });
+      const tweetPayload: any = { text: message };
+
+      if (mediaIds && mediaIds.length > 0) {
+        tweetPayload.media = { media_ids: mediaIds };
+      }
+
+      const response = await client.tweets.createTweet(tweetPayload);
       return response;
     } catch (apiError: any) {
       // Handle duplicate content errors
@@ -285,6 +288,18 @@ export async function postTweet(
             );
           }
         }
+      }
+
+      if (apiError.response?.status === 429) {
+        console.log("here rate limit error");
+        const resetTime = apiError.response.headers["x-app-limit-24hour-reset"];
+        const resetDate = resetTime
+          ? new Date(parseInt(resetTime, 10) * 1000).toLocaleString()
+          : "unknown";
+
+        throw new Error(
+          `Twitter rate limit exceeded. Try again after ${resetDate}`
+        );
       }
       throw apiError;
     }
@@ -396,4 +411,14 @@ export function isTokenExpired(account: any): boolean {
       ? account.tokenExpiry.getTime()
       : new Date(account.tokenExpiry).getTime();
   return Date.now() > expiryTime - expiryBuffer;
+}
+
+export async function uploadMediaToTwitter(
+  account: any,
+  buffer: Buffer,
+  mimetype: string
+): Promise<string> {
+  const client = new TwitterApi(account.accessToken);
+  const mediaId = await client.v1.uploadMedia(buffer, { mimeType: mimetype });
+  return mediaId;
 }

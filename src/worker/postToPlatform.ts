@@ -47,7 +47,28 @@ export const postToPlatform = async (job: PlatformDetails) => {
     let publishResult: any;
 
     switch (account.platform) {
-      case "twitter":
+      case "twitter": {
+        const mediaFiles = await Promise.all(
+          post.fileRefs.map(async (ref: string) => {
+            // Reconstruct the full publicId or Cloudinary path if needed
+            const publicId = `skedlii/${ref}`;
+            const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
+              publicId
+            );
+
+            if (!buffer || !mimetype) {
+              throw new Error(
+                `Invalid Cloudinary asset or missing content-type for ref: ${ref}`
+              );
+            }
+
+            return {
+              originalname: ref,
+              buffer,
+              mimetype,
+            };
+          })
+        );
         publishResult = await postToTwitter({
           id: post._id.toString(),
           type: "social_post",
@@ -71,8 +92,10 @@ export const postToPlatform = async (job: PlatformDetails) => {
           updatedAt: new Date(),
           mediaType: post.mediaType,
           timezone: post.timezone,
+          fileRefs: mediaFiles,
         });
         break;
+      }
 
       case "threads": {
         const postData = {
