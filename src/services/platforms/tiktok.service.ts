@@ -35,11 +35,11 @@ export async function createSocialAccount(
   const { socialaccounts } = await getCollections();
 
   const profileRes = await axios.get(
-    "https://open.tiktokapis.com/v2/user/info/",
+    "https://open.tiktokapis.com/v2/user/info/?fields=open_id,username,avatar_url,display_name",
     {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
       },
     }
   );
