@@ -4,6 +4,14 @@ import { postQueue } from "../worker/queue";
 const router = Router();
 
 router.get("/", async (_req, res) => {
+  // @ts-ignore
+  // // Remove all completed jobs
+  // await postQueue.clean(0, 1000, "completed");
+  // // Remove all failed jobs
+  // await postQueue.clean(0, 1000, "failed");
+  // // Optionally clear delayed/waiting jobs
+  // await postQueue.clean(0, 1000, "delayed");
+  // await postQueue.clean(0, 1000, "paused");
   try {
     const counts = await postQueue.getJobCounts();
     const jobs = await postQueue.getJobs(

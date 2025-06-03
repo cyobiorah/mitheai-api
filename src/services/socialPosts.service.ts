@@ -11,6 +11,7 @@ import { postToFacebook } from "../controllers/platforms/facebook.controller";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
+import { toUTC } from "../utils/dateUtils";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
@@ -120,25 +121,97 @@ export async function handlePlatformUploadAndPost({
       width: number;
       height: number;
     }[];
+    scheduledFor?: string;
+    teamId?: string;
+    organizationId?: string;
+    timezone?: string;
+    account: {
+      accountName: string;
+      profileImageUrl: string;
+      platform: string;
+    };
   };
   res: ExpressResponse;
 }): Promise<any> {
   try {
-    // Validate file types here if needed
+    const { scheduledFor } = postMeta;
 
-    let uploadUrls: string[] = [];
+    let mediaUrls: string[] = [];
 
     if (platform !== "linkedin") {
-      uploadUrls = await handleTransformAndUpload({
+      mediaUrls = await handleTransformAndUpload({
         mediaFiles,
         postMeta,
         platform,
       });
     }
 
+    // ✅ Handle scheduling flow
+    if (scheduledFor) {
+      const { scheduledposts } = await getCollections();
+
+      const newScheduledPost: any = {
+        content: postMeta.caption,
+        mediaUrls,
+        mediaType: postMeta.mediaType,
+        platforms: [
+          {
+            platform,
+            accountId: postMeta.accountId,
+            status: "pending",
+          },
+        ],
+        scheduledFor: toUTC(new Date(scheduledFor)),
+        createdBy: new ObjectId(userId),
+        userId: new ObjectId(userId),
+        teamId: postMeta.teamId ? new ObjectId(postMeta.teamId) : undefined,
+        organizationId: postMeta.organizationId
+          ? new ObjectId(postMeta.organizationId)
+          : undefined,
+        status: "scheduled",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        timezone: postMeta.timezone,
+        account: {
+          accountName: postMeta.accountName,
+          profileImageUrl: postMeta.accountType,
+          platform,
+        },
+      };
+
+      // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
+      if (platform === "linkedin") {
+        const fileRefs: string[] = [];
+
+        for (const file of mediaFiles) {
+          const publicId = `${file.originalname}-${Date.now()}`;
+
+          await uploadToCloudinaryBuffer(file, {
+            folder: "skedlii",
+            publicId,
+            transformations: undefined, // or pass platform-specific if needed
+          });
+
+          fileRefs.push(publicId);
+        }
+
+        newScheduledPost.fileRefs = fileRefs;
+        newScheduledPost.mediaUrls = []; // Do not use URL-based posting for LinkedIn
+      }
+
+      const result = await scheduledposts.insertOne(newScheduledPost);
+
+      return res.status(201).json({
+        status: "scheduled",
+        data: { _id: result.insertedId },
+        message: "Post scheduled successfully",
+      });
+    }
+
+    // ✅ Immediate Posting
     const payload = {
       content: postMeta.caption,
-      mediaUrls: uploadUrls,
+      mediaUrls,
       mediaType: postMeta.mediaType,
       accountId: postMeta.accountId,
       platformAccountId: postMeta.platformAccountId,
@@ -147,7 +220,6 @@ export async function handlePlatformUploadAndPost({
     };
 
     switch (platform) {
-      // Instagram Complete
       case "instagram": {
         await postToInstagram({
           postData: payload,
@@ -177,12 +249,10 @@ export async function handlePlatformUploadAndPost({
             return res.status(400).json({ error: result.error });
           }
 
-          return res
-            .status(200)
-            .json({
-              message: "Post published successfully",
-              postId: result.postId,
-            });
+          return res.status(200).json({
+            message: "Post published successfully",
+            postId: result.postId,
+          });
         } catch (err: any) {
           console.error("LinkedIn post error:", err);
           return res

@@ -72,14 +72,11 @@ export class SocialPostWorker {
               }
               case "threads": {
                 try {
-                  publishResult = await threadsService.postContent(
-                    account.accountId,
-                    post.content,
-                    post.mediaType
-                      ? (post.mediaType as "TEXT" | "IMAGE" | "VIDEO")
-                      : "TEXT",
-                    post.mediaUrls?.[0]
-                  );
+                  publishResult = await threadsService.postToThreads({
+                    accountId: account.accountId,
+                    content: post.content,
+                    mediaUrls: post.mediaUrls,
+                  });
                 } catch (tokenError: any) {
                   if (tokenError.code === "TOKEN_EXPIRED") {
                     const { socialaccounts } = await getCollections();

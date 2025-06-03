@@ -1,9 +1,11 @@
 import { getCollections } from "../config/db";
 import { ObjectId } from "mongodb";
 import { post as postToTwitter } from "../services/platforms/twitter.service";
-import { postContent as postToThreads } from "../services/platforms/threads.service";
-import { postContent as postToLinkedin } from "../services/platforms/linkedin.service";
-import { postContent as postToInstagram } from "../services/platforms/instagram.service";
+import { postToThreads } from "../services/platforms/threads.service";
+
+import { postToInstagram } from "../controllers/platforms/instagram.controller";
+import { postToLinkedIn } from "../services/platforms/linkedin.service";
+import { fetchCloudinaryFileBuffer } from "../utils/cloudinary";
 
 interface PlatformDetails {
   scheduledPostId: string;
@@ -14,6 +16,7 @@ interface PlatformDetails {
   userId: string;
   teamId?: string;
   organizationId?: string;
+  fileRefs?: string[];
 }
 
 export const postToPlatform = async (job: PlatformDetails) => {
@@ -71,26 +74,105 @@ export const postToPlatform = async (job: PlatformDetails) => {
         });
         break;
 
-      case "threads":
-        publishResult = await postToThreads(
-          account.accountId,
-          post.content,
-          (post.mediaType ?? "TEXT") as "TEXT" | "IMAGE" | "VIDEO",
-          post.mediaUrls?.[0]
-        );
+      case "threads": {
+        const postData = {
+          accountId: account.accountId,
+          content: post.content,
+          mediaUrls: post.mediaUrls,
+          userId: job.userId,
+        };
+        publishResult = await postToThreads(postData);
         break;
+      }
 
-      case "linkedin":
-        publishResult = await postToLinkedin(account.accountId, post.content);
-        break;
+      case "linkedin": {
+        const mediaFiles = await Promise.all(
+          post.fileRefs.map(async (ref: string) => {
+            // Reconstruct the full publicId or Cloudinary path if needed
+            const publicId = `skedlii/${ref}`;
+            const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
+              publicId
+            );
 
-      case "instagram":
-        publishResult = await postToInstagram(
-          account.accountId,
-          post.content,
-          post.mediaUrls ?? []
+            if (!buffer || !mimetype) {
+              throw new Error(
+                `Invalid Cloudinary asset or missing content-type for ref: ${ref}`
+              );
+            }
+
+            return {
+              originalname: ref,
+              buffer,
+              mimetype,
+            };
+          })
         );
+
+        try {
+          const result = await postToLinkedIn({
+            postData: {
+              accountId: account.accountId,
+              accountName: account.accountName,
+              accountType: account.accountType,
+              content: post.content,
+              mediaType: post.mediaType,
+              platformAccountId: account.accountId,
+              accessToken: account.accessToken,
+              dimensions: post.dimensions,
+              mediaUrls: post.mediaUrls,
+              userId: job.userId,
+            },
+            mediaFiles,
+          });
+          if (!result.success) {
+            return {
+              success: false,
+              error: result.error,
+              errorType: "SERVICE_ERROR",
+            };
+          }
+
+          publishResult = {
+            id: result.postId,
+          };
+        } catch (err: any) {
+          console.error("LinkedIn post error:", err);
+          return {
+            success: false,
+            error: "Unexpected error posting to LinkedIn",
+            errorType: "SERVICE_ERROR",
+          };
+        }
         break;
+      }
+
+      case "instagram": {
+        const payload = {
+          accountId: account.accountId,
+          accountName: account.accountName,
+          accountType: account.accountType,
+          content: post.content,
+          mediaType: post.mediaType,
+          platformAccountId: account.accountId,
+          accessToken: account.accessToken,
+          dimensions: post.dimensions,
+          mediaUrls: post.mediaUrls,
+          userId: job.userId,
+        };
+
+        const result = await postToInstagram({ postData: payload });
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error,
+            errorType: "SERVICE_ERROR",
+          };
+        }
+        publishResult = {
+          id: result.postId,
+        };
+        break;
+      }
 
       default:
         throw new Error(`Unsupported platform: ${account.platform}`);
@@ -104,10 +186,35 @@ export const postToPlatform = async (job: PlatformDetails) => {
       };
     }
 
-    const postUrl =
-      "url" in publishResult
-        ? publishResult.url
-        : `https://${account.platform}.com/status/${publishResult.id}`;
+    let postId: string;
+    let postUrl: string;
+
+    if ("success" in publishResult) {
+      // LinkedIn or Threads service format
+      if (!publishResult.success) {
+        throw new Error(
+          publishResult.error ?? `Failed to post to ${account.platform}`
+        );
+      }
+      postId = publishResult.id ?? `${account.platform}-${Date.now()}`;
+
+      // Generate platform-specific URLs
+      if (account.platform === "linkedin") {
+        const visibleId = publishResult.id?.split(":").pop();
+        postUrl = `https://www.linkedin.com/feed/update/${visibleId}`;
+      } else if (account.platform === "threads") {
+        postUrl = `https://threads.net/t/${postId}`;
+      } else {
+        postUrl = `https://${account.platform}.com/posts/${postId}`;
+      }
+    } else {
+      // Twitter/other services format
+      postId = publishResult.id;
+      postUrl =
+        "url" in publishResult
+          ? publishResult.url
+          : `https://${account.platform}.com/status/${postId}`;
+    }
 
     // ✅ Update the scheduled post’s platform entry to mark as published
     await scheduledposts.updateOne(
@@ -127,7 +234,7 @@ export const postToPlatform = async (job: PlatformDetails) => {
       mediaType: post.mediaType,
       platform: account.platform,
       socialAccountId: account._id,
-      postId: publishResult.id,
+      postId,
       postUrl,
       publishedDate: new Date(),
       status: "published",
