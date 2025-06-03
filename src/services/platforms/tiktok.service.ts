@@ -45,6 +45,7 @@ export async function createSocialAccount(
   );
 
   console.log({ profileRes });
+  console.log({ profileData: profileRes.data });
 
   const profile = profileRes.data.data;
   const accountId = profile.open_id;
