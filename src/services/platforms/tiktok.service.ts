@@ -45,11 +45,10 @@ export async function createSocialAccount(
   );
 
   console.log({ profileRes });
-  console.log({ user: profileRes.data.user });
-  console.log({ data: profileRes.data.data });
+  console.log({ user: profileRes.data.data.user });
 
-  const profile = profileRes.data.data;
-  const accountId = profile.open_id;
+  const userProfile = profileRes.data.data.user;
+  const accountId = userProfile.open_id;
 
   const existingAccount = await socialaccounts.findOne({
     platform: "tiktok",
@@ -86,8 +85,8 @@ export async function createSocialAccount(
       updatedAt: new Date(),
       metadata: {
         ...userExistingAccount.metadata,
-        username: profile.display_name,
-        avatar: profile.avatar_url,
+        username: userProfile.display_name,
+        avatar: userProfile.avatar_url,
       },
       status: "active",
     };
@@ -106,9 +105,9 @@ export async function createSocialAccount(
   const socialAccount: SocialAccount = {
     platform: "tiktok",
     accountType: organizationId ? "business" : "personal",
-    accountName: profile.display_name,
-    accountId: profile.open_id,
-    platformAccountId: profile.open_id,
+    accountName: userProfile.display_name,
+    accountId: userProfile.open_id,
+    platformAccountId: userProfile.open_id,
     accessToken: tokenData.access_token,
     refreshToken: tokenData.refresh_token,
     tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
@@ -116,8 +115,8 @@ export async function createSocialAccount(
     status: "active",
     userId: new ObjectId(userId),
     metadata: {
-      username: profile.display_name,
-      profileImageUrl: profile.avatar_url,
+      username: userProfile.display_name,
+      profileImageUrl: userProfile.avatar_url,
     },
     permissions: {
       canPost: true,
