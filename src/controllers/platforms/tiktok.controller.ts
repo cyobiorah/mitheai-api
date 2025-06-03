@@ -69,6 +69,7 @@ export const startDirectTikTokAuth = async (
     authUrl.searchParams.append("state", stateId);
     authUrl.searchParams.append("code_challenge", codeChallenge);
     authUrl.searchParams.append("code_challenge_method", "S256");
+    authUrl.searchParams.append("disable_auto_auth", "1");
 
     return res.send(authUrl.toString());
   } catch (error: any) {
