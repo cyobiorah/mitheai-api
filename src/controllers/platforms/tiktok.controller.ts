@@ -83,6 +83,11 @@ export const handleTikTokCallback = async (
 ) => {
   const { code, state, error, error_description } = req.query;
 
+  console.log({ code });
+  console.log({ state });
+  console.log({ error });
+  console.log({ error_description });
+
   if (error) {
     console.error("TikTok OAuth error:", error, error_description);
     return res.redirect(
@@ -131,6 +136,7 @@ export const handleTikTokCallback = async (
     const { userId, organizationId, currentTeamId } = stateData;
 
     const tokenData = await exchangeCodeForTokens(code as string);
+    console.log({ tokenData });
     await createSocialAccount(userId, tokenData, organizationId, currentTeamId);
 
     return res.redirect(
