@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireJwtAuth } from "../../middlewares/auth";
 import {
-  post,
+  // post,
   startDirectThreadsAuth,
   startThreadsConnect,
   handleThreadsCallback,
@@ -14,8 +14,8 @@ router.get("/direct-auth", requireJwtAuth, (req, res) => {
 });
 router.get("/connect", startThreadsConnect);
 router.get("/callback", handleThreadsCallback);
-router.post(":accountId/post", requireJwtAuth, (req, res) => {
-  post({ req, res });
-});
+// router.post(":accountId/post", requireJwtAuth, (req, res) => {
+//   post({ req, res });
+// });
 
 export default router;

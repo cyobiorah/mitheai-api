@@ -1,7 +1,7 @@
 import { getCollections } from "../config/db";
 import { ObjectId } from "mongodb";
 import { post as postToTwitter } from "../services/platforms/twitter.service";
-import { postContent as postToThreads } from "../services/platforms/threads.service";
+import { postToThreads } from "../services/platforms/threads.service";
 
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { postToLinkedIn } from "../services/platforms/linkedin.service";
@@ -74,14 +74,16 @@ export const postToPlatform = async (job: PlatformDetails) => {
         });
         break;
 
-      case "threads":
-        publishResult = await postToThreads(
-          account.accountId,
-          post.content,
-          (post.mediaType ?? "TEXT") as "TEXT" | "IMAGE" | "VIDEO",
-          post.mediaUrls?.[0]
-        );
+      case "threads": {
+        const postData = {
+          accountId: account.accountId,
+          content: post.content,
+          mediaUrls: post.mediaUrls,
+          userId: job.userId,
+        };
+        publishResult = await postToThreads(postData);
         break;
+      }
 
       case "linkedin": {
         const mediaFiles = await Promise.all(

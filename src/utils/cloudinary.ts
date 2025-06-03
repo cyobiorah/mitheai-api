@@ -369,3 +369,36 @@ export function getCloudinaryTransformations(
 
   return { transformation: undefined };
 }
+
+export function getMediaTypeFromUrl(url: string): string | null {
+  const extensionToMime: Record<string, string> = {
+    jpg: "IMAGE",
+    jpeg: "IMAGE",
+    png: "IMAGE",
+    gif: "IMAGE",
+    webp: "IMAGE",
+    svg: "IMAGE",
+    mp4: "VIDEO",
+    mov: "VIDEO",
+    avi: "VIDEO",
+    webm: "VIDEO",
+    mp3: "AUDIO",
+    wav: "AUDIO",
+    ogg: "AUDIO",
+    pdf: "APPLICATION",
+  };
+
+  try {
+    const pathname = new URL(url).pathname;
+    const extensionMatch = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    const extension = extensionMatch?.[1]?.toLowerCase();
+
+    if (extension && extensionToMime[extension]) {
+      return extensionToMime[extension];
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
