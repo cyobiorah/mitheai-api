@@ -45,9 +45,9 @@ export async function createSocialAccount(
   );
 
   console.log({ profileRes });
-  console.log({ profileData: profileRes.data });
+  console.log({ user: profileRes.data.user });
 
-  const profile = profileRes.data.data;
+  const profile = profileRes.data.user;
   const accountId = profile.open_id;
 
   const existingAccount = await socialaccounts.findOne({
