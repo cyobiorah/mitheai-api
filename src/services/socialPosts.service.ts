@@ -138,7 +138,7 @@ export async function handlePlatformUploadAndPost({
 
     let mediaUrls: string[] = [];
 
-    if (platform !== "linkedin") {
+    if (platform !== "linkedin" && platform !== "twitter") {
       mediaUrls = await handleTransformAndUpload({
         mediaFiles,
         postMeta,
@@ -180,7 +180,7 @@ export async function handlePlatformUploadAndPost({
       };
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
-      if (platform === "linkedin") {
+      if (platform === "linkedin" || platform === "twitter") {
         const fileRefs: string[] = [];
 
         for (const file of mediaFiles) {
