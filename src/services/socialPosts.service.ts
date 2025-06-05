@@ -11,7 +11,9 @@ import { postToFacebook } from "../controllers/platforms/facebook.controller";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
+import { post as postToTikTok } from "./platforms/tiktok.service";
 import { toUTC } from "../utils/dateUtils";
+import { directPostQueue } from "../worker/queue";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
@@ -138,7 +140,7 @@ export async function handlePlatformUploadAndPost({
 
     let mediaUrls: string[] = [];
 
-    if (platform !== "linkedin") {
+    if (platform !== "linkedin" && platform !== "tiktok") {
       mediaUrls = await handleTransformAndUpload({
         mediaFiles,
         postMeta,
@@ -180,7 +182,7 @@ export async function handlePlatformUploadAndPost({
       };
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
-      if (platform === "linkedin") {
+      if (platform === "linkedin" || platform === "tiktok") {
         const fileRefs: string[] = [];
 
         for (const file of mediaFiles) {
@@ -258,6 +260,65 @@ export async function handlePlatformUploadAndPost({
           return res
             .status(500)
             .json({ error: "Unexpected error posting to LinkedIn" });
+        }
+      }
+      case "tiktok": {
+        // try {
+        //   const result = await postToTikTok({
+        //     postData: payload,
+        //     mediaFiles,
+        //   });
+        //   if (!result.success) {
+        //     return res.status(400).json({ error: result.error });
+        //   }
+
+        //   return res.status(200).json({
+        //     message: "Post published successfully",
+        //     postId: result.postId,
+        //   });
+        // } catch (err: any) {
+        //   console.error("TikTok post error:", err);
+        //   return res
+        //     .status(500)
+        //     .json({ error: "Unexpected error posting to TikTok" });
+        // }
+        try {
+          const fileRefs: string[] = [];
+
+          for (const file of mediaFiles) {
+            const publicId = `${file.originalname}-${Date.now()}`;
+
+            await uploadToCloudinaryBuffer(file, {
+              folder: "skedlii",
+              publicId,
+              transformations: undefined, // or pass platform-specific if needed
+            });
+
+            fileRefs.push(publicId);
+          }
+
+          if (!fileRefs.length) {
+            return res
+              .status(400)
+              .json({ error: "TikTok post missing media buffer" });
+          }
+
+          console.log({ fileRefs });
+
+          await directPostQueue.add("tiktok-post", {
+            platform: "tiktok",
+            accountId: payload.accountId,
+            userId,
+            description: payload.content ?? "",
+            buffer: Array.from(fileRefs),
+          });
+
+          return res.status(202).json({ message: "TikTok job queued" });
+        } catch (err: any) {
+          console.error("TikTok post error:", err);
+          return res
+            .status(500)
+            .json({ error: "Unexpected error posting to TikTok" });
         }
       }
       default:

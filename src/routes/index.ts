@@ -16,6 +16,7 @@ import { skedliiPlans } from "../services/plans.service";
 import invoicesRoutes from "./invoices.routes";
 import mediaRoutes from "./media.routes";
 import queueStatusRoutes from "./queueStatus.routes";
+import tiktokTriggerRoutes from "./tiktok.trigger.routes";
 
 const router = Router();
 
@@ -63,6 +64,9 @@ router.get("/", (_req, res) => {
 
 // Manual cron routes
 router.use("/manual-cron", manualCronRoutes);
+
+// TikTok trigger routes
+router.use("/tiktok", tiktokTriggerRoutes);
 
 // Process job
 router.use("/process-job", processJobRoutes);
