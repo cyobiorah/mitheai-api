@@ -60,7 +60,6 @@ export const startDirectTikTokAuth = async (
       "redirect_uri",
       process.env.TIKTOK_REDIRECT_URI!
     );
-    // authUrl.searchParams.append("redirect_uri", callbackUrl);
     authUrl.searchParams.append("response_type", "code");
     authUrl.searchParams.append(
       "scope",
@@ -111,7 +110,7 @@ export const handleTikTokCallback = async (
   }
 
   try {
-    const stateData = await redisService.get(`tiktok:oauth:${state}`);
+    const stateData = await redisService.get(`tiktok:oauth:${state as string}`);
 
     if (!stateData) {
       return res.redirect(
@@ -124,7 +123,7 @@ export const handleTikTokCallback = async (
     }
 
     if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
-      await redisService.delete(`tiktok:oauth:${state}`);
+      await redisService.delete(`tiktok:oauth:${state as string}`);
       return res.redirect(
         `${
           process.env.FRONTEND_URL
@@ -162,7 +161,14 @@ export const postToTikTok = async (req: Request, res: ExpressResponse) => {
     const { media, description } = req.body;
     const { accountId } = req.params;
 
-    const result = await post(accountId, media, description, user.id);
+    const result = await post({
+      postData: {
+        accountId,
+        userId: user.id,
+        description,
+      },
+      mediaFiles: media,
+    });
     res.status(200).json(result);
   } catch (error: any) {
     console.error("Error posting to TikTok:", error);
