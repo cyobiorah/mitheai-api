@@ -13,6 +13,7 @@ export interface SocialAccount {
 
   accessToken: string;
   refreshToken?: string;
+  refreshExpiresIn?: Date;
   tokenExpiry: Date;
   lastRefreshed: Date;
   status: "active" | "expired" | "error";

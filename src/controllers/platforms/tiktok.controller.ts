@@ -3,9 +3,13 @@ import {
   createSocialAccount,
   exchangeCodeForTokens,
   post,
+  refreshTikTokTokenAndUpdateAccount,
+  revokeAndDeleteAccount,
 } from "../../services/platforms/tiktok.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 const rawCallbackUrl: string = process.env.TIKTOK_REDIRECT_URI ?? "";
 
@@ -172,6 +176,66 @@ export const postToTikTok = async (req: Request, res: ExpressResponse) => {
     res.status(200).json(result);
   } catch (error: any) {
     console.error("Error posting to TikTok:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const refreshAndUpdateToken = async (
+  req: Request,
+  res: ExpressResponse
+) => {
+  const { accountId } = req.params;
+
+  if (!accountId) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    accountId,
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  try {
+    const result = await refreshTikTokTokenAndUpdateAccount(account);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error refreshing TikTok token:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const revokeAndRemoveAccount = async (
+  req: Request,
+  res: ExpressResponse
+) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(id),
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  try {
+    const result = await revokeAndDeleteAccount(account);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error revoking TikTok account:", error);
     res.status(500).json({ error: error.message });
   }
 };
