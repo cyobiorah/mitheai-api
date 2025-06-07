@@ -107,6 +107,9 @@ export async function createSocialAccount(
     platformAccountId: userProfile.open_id,
     accessToken: tokenData.access_token,
     refreshToken: tokenData.refresh_token,
+    refreshExpiresIn: new Date(
+      Date.now() + tokenData.refresh_expires_in * 1000
+    ),
     tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
     lastRefreshed: new Date(),
     status: "active",
@@ -133,529 +136,200 @@ export async function createSocialAccount(
   return createdAccount;
 }
 
-// export async function post({
-//   postData,
-//   mediaFiles,
-// }: {
-//   postData: any;
-//   mediaFiles: Express.Multer.File[];
-// }) {
-//   console.log({ postData });
-//   console.log({ mediaFiles });
-//   const { accountId, userId, description } = postData;
+export async function refreshTikTokTokenAndUpdateAccount(account: any) {
+  const { socialaccounts } = await getCollections();
 
-//   const { socialaccounts, socialposts } = await getCollections();
+  if (!account?.refreshToken) {
+    return {
+      success: false,
+      error: "No refresh token found for TikTok account.",
+    };
+  }
 
-//   const account = await socialaccounts.findOne({
-//     accountId,
-//     userId: new ObjectId(userId),
-//   });
+  const refreshRes = await refreshTikTokToken(account.refreshToken);
 
-//   if (!account) throw new Error("TikTok account not found for user");
+  if (!refreshRes.success) {
+    return {
+      success: false,
+      error: refreshRes.error,
+    };
+  }
 
-//   let publishRes;
+  const newTokenData = refreshRes.data;
 
-//   try {
-//     const uploadRes = await axios.post(
-//       "https://open.tiktokapis.com/v2/video/upload/",
-//       mediaFiles[0].buffer,
-//       {
-//         headers: {
-//           Authorization: `Bearer ${account.accessToken}`,
-//           "Content-Type": "video/mp4",
-//         },
-//       }
-//     );
+  const updatedFields = {
+    accountId: newTokenData.open_id,
+    accessToken: newTokenData.access_token,
+    refreshToken: newTokenData.refresh_token,
+    tokenExpiry: new Date(Date.now() + newTokenData.expires_in * 1000),
+    refreshExpiresIn: new Date(
+      Date.now() + newTokenData.refresh_expires_in * 1000
+    ),
+    lastRefreshed: new Date(),
+    updatedAt: new Date(),
+  };
 
-//     console.log({ uploadRes });
+  await socialaccounts.updateOne({ _id: account._id }, { $set: updatedFields });
 
-//     publishRes = await axios.post(
-//       "https://open.tiktokapis.com/v2/video/publish/",
-//       {
-//         video_id: uploadRes.data.data.video_id,
-//         text: description,
-//       },
-//       {
-//         headers: { Authorization: `Bearer ${account.accessToken}` },
-//       }
-//     );
-//   } catch (err: any) {
-//     console.log({ err });
-//   }
+  return {
+    success: true,
+    updated: updatedFields,
+  };
+}
 
-//   console.log({ publishRes });
+export async function refreshTikTokToken(refreshToken: string) {
+  try {
+    const response = await axios.post(
+      "https://open.tiktokapis.com/v2/oauth/token/",
+      new URLSearchParams({
+        client_key: process.env.TIKTOK_CLIENT_KEY!,
+        client_secret: process.env.TIKTOK_CLIENT_SECRET!,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
 
-//   if (!publishRes?.data.data.video_id) {
-//     return {
-//       success: false,
-//       error: "Failed to publish TikTok post",
-//     };
-//   }
+    console.log({ response });
 
-//   const postId = publishRes?.data.data.video_id;
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error: any) {
+    console.error(
+      "TikTok token refresh error:",
+      error.response?.data || error.message
+    );
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 
-//   try {
-//     const postRecord = {
-//       type: "social_post",
-//       content: description,
-//       platform: "tiktok",
-//       platformPostId: publishRes?.data.data.video_id,
-//       status: "posted",
-//       postedAt: new Date(),
-//       userId: new ObjectId(userId),
-//       metadata: {
-//         videoUrl: publishRes?.data.data.share_url,
-//         socialPost: {
-//           platform: "tiktok",
-//           accountId: account.accountId,
-//           username: account.metadata?.username,
-//         },
-//       },
-//       createdAt: new Date(),
-//       updatedAt: new Date(),
-//     };
+export async function revokeAndDeleteAccount(account: any) {
+  const { socialaccounts } = await getCollections();
 
-//     await socialposts.insertOne(postRecord);
-//   } catch (err: any) {
-//     console.log({ err });
-//   }
+  try {
+    const revokeRes = await axios.post(
+      "https://open.tiktokapis.com/v2/oauth/revoke/",
+      new URLSearchParams({
+        client_key: process.env.TIKTOK_CLIENT_KEY!,
+        client_secret: process.env.TIKTOK_CLIENT_SECRET!,
+        token: account.accessToken,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
 
-//   return {
-//     success: true,
-//     postId,
-//   };
-// }
+    console.log({ revokeRes });
 
-// export async function post({
-//   postData,
-//   mediaFiles,
-// }: {
-//   postData: any;
-//   mediaFiles: Express.Multer.File[];
-// }) {
-//   const { accountId, userId, description } = postData;
-//   const { socialaccounts, socialposts } = await getCollections();
+    if (revokeRes.status === 200 && revokeRes.statusText === "OK") {
+      await socialaccounts.deleteOne({ _id: account._id });
+    }
 
-//   const account = await socialaccounts.findOne({
-//     accountId,
-//     userId: new ObjectId(userId),
-//   });
-
-//   if (!account) throw new Error("TikTok account not found for user");
-
-//   try {
-//     console.log("here");
-//     const videoId = await uploadToTikTok(account.accessToken, mediaFiles[0]);
-//     console.log({ videoId });
-//     const publishRes = await publishToTikTok(
-//       account.accessToken,
-//       videoId,
-//       description
-//     );
-//     console.log({ publishRes });
-
-//     const postId = publishRes.data?.data?.video_id;
-
-//     await socialposts.insertOne({
-//       type: "social_post",
-//       content: description,
-//       platform: "tiktok",
-//       platformPostId: postId,
-//       status: "posted",
-//       postedAt: new Date(),
-//       userId: new ObjectId(userId),
-//       metadata: {
-//         videoUrl: publishRes.data?.data?.share_url,
-//         socialPost: {
-//           platform: "tiktok",
-//           accountId: account.accountId,
-//           username: account.metadata?.username,
-//         },
-//       },
-//       createdAt: new Date(),
-//       updatedAt: new Date(),
-//     });
-
-//     return { success: true, postId };
-//   } catch (error: any) {
-//     console.error("TikTok post error:", error?.response?.data || error.message);
-//     return {
-//       success: false,
-//       error: error.message || "Unknown TikTok post error",
-//     };
-//   }
-// }
-
-// async function uploadToTikTok(
-//   accessToken: string,
-//   file: Express.Multer.File
-// ): Promise<string> {
-//   // Step 1: Get Upload URL
-//   const { data: uploadUrlResponse } = await axios.get(
-//     "https://open.tiktokapis.com/v2/video/upload_url/",
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//       },
-//     }
-//   );
-
-//   console.log({ uploadUrlResponse });
-
-//   console.log(uploadUrlResponse.data.data);
-
-//   const { upload_url, video_id } = uploadUrlResponse.data.data;
-//   if (!upload_url || !video_id) {
-//     throw new Error("Failed to obtain TikTok upload URL");
-//   }
-
-//   // Step 2: Upload video file using PUT
-//   await axios.put(upload_url, file.buffer, {
-//     headers: {
-//       "Content-Type": "video/mp4",
-//     },
-//     maxContentLength: Infinity,
-//     maxBodyLength: Infinity,
-//   });
-
-//   return video_id;
-// }
-
-// export async function uploadToTikTok(
-//   accessToken: string,
-//   file: Express.Multer.File
-// ): Promise<string> {
-//   const videoSize = Number(file.size);
-//   console.log("TikTok Init Payload:", {
-//     source_info: {
-//       source: "FILE_UPLOAD",
-//       video_size: videoSize,
-//       chunk_size: videoSize,
-//       total_chunk_count: 1,
-//     },
-//   });
-
-//   const upload_payload = JSON.stringify({
-//     source_info: {
-//       source: "FILE_UPLOAD",
-//       video_size: file.size,
-//       chunk_size: file.size,
-//       total_chunk_count: 1,
-//     },
-//   });
-
-//   // Step 1: Get upload URL
-//   const { data: res } = await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-//     upload_payload,
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-
-//   console.log("TikTok init response:", res);
-//   console.log("TikTok init response data:", JSON.stringify(res.data, null, 2));
-
-//   const payload = res.data;
-//   if (!payload?.data) {
-//     console.error("TikTok init returned invalid structure:", payload);
-//     throw new Error("TikTok init: Missing data field");
-//   }
-
-//   const { upload_url, publish_id } = payload.data;
-//   if (!upload_url || !publish_id) {
-//     console.error(
-//       "TikTok init response missing expected fields:",
-//       payload.data
-//     );
-//     throw new Error("Invalid upload URL or publish_id");
-//   }
-
-//   // Step 2: Validate file
-//   if (!file.buffer || file.buffer.length === 0)
-//     throw new Error("Invalid video file buffer");
-
-//   // Step 3: Upload via PUT
-//   await axios.put(upload_url, file.buffer, {
-//     headers: {
-//       "Content-Type": "video/mp4",
-//     },
-//     maxBodyLength: Infinity,
-//     maxContentLength: Infinity,
-//   });
-
-//   return publish_id;
-// }
-
-// export async function uploadToTikTok(
-//   accessToken: string,
-//   file: Express.Multer.File
-// ): Promise<string> {
-//   if (!file?.buffer || file.buffer.length === 0)
-//     throw new Error("Invalid video file buffer");
-
-//   const payload = JSON.stringify({
-//     source_info: {
-//       source: "FILE_UPLOAD",
-//       video_size: file.size,
-//       chunk_size: file.size,
-//       total_chunk_count: 1,
-//     },
-//   });
-
-//   const { data } = await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-//     payload,
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-
-//   console.log("TikTok init response data:", JSON.stringify(data, null, 2));
-
-//   if (!data?.data) {
-//     console.error("TikTok init returned invalid structure:", data);
-//     throw new Error("TikTok init: Missing data field");
-//   }
-
-//   const { upload_url, publish_id } = data.data;
-//   if (!upload_url || !publish_id) {
-//     console.error("TikTok init response missing expected fields:", data.data);
-//     throw new Error("Invalid upload URL or publish_id");
-//   }
-
-//   await axios.put(upload_url, file.buffer, {
-//     headers: {
-//       "Content-Type": "video/mp4",
-//       "Content-Range": `bytes 0-${file.size - 1}/${file.size}`,
-//     },
-//     maxBodyLength: Infinity,
-//     maxContentLength: Infinity,
-//   });
-
-//   return publish_id;
-// }
-
-// async function publishToTikTok(
-//   accessToken: string,
-//   publishId: string,
-//   description: string
-// ) {
-//   const { data } = await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/inbox/video/commit/",
-//     {
-//       publish_id: publishId,
-//       text: description,
-//     },
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-
-//   return data;
-// }
-
-// async function publishToTikTok(
-//   accessToken: string,
-//   publishId: string,
-//   description: string
-// ) {
-//   return await axios.post(
-//     "https://open.tiktokapis.com/v2/video/publish/",
-//     {
-//       publish_id: publishId,
-//       text: description,
-//     },
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//       },
-//     }
-//   );
-// }
-
-// export async function post({
-//   postData,
-//   mediaFiles,
-// }: {
-//   postData: any;
-//   mediaFiles: Express.Multer.File[];
-// }) {
-//   const { accountId, userId, description } = postData;
-//   const { socialaccounts, socialposts } = await getCollections();
-
-//   const account = await socialaccounts.findOne({
-//     accountId,
-//     userId: new ObjectId(userId),
-//   });
-
-//   if (!account) throw new Error("TikTok account not found for user");
-
-//   try {
-//     const file = mediaFiles[0];
-//     const publishId = await initAndUploadToTikTok(account.accessToken, file);
-//     const commitRes = await commitTikTokUpload(
-//       account.accessToken,
-//       publishId,
-//       description
-//     );
-
-//     const { video_id, share_url } = commitRes.data ?? {};
-
-//     await socialposts.insertOne({
-//       type: "social_post",
-//       content: description,
-//       platform: "tiktok",
-//       platformPostId: video_id,
-//       status: "posted",
-//       postedAt: new Date(),
-//       userId: new ObjectId(userId),
-//       metadata: {
-//         videoUrl: share_url,
-//         socialPost: {
-//           platform: "tiktok",
-//           accountId: account.accountId,
-//           username: account.metadata?.username,
-//         },
-//       },
-//       createdAt: new Date(),
-//       updatedAt: new Date(),
-//     });
-
-//     return { success: true, postId: video_id };
-//   } catch (error: any) {
-//     console.error("TikTok post error:", error?.response?.data || error.message);
-//     return {
-//       success: false,
-//       error: error.message || "Unknown TikTok post error",
-//     };
-//   }
-// }
-
-// async function initAndUploadToTikTok(
-//   accessToken: string,
-//   file: Express.Multer.File
-// ): Promise<string> {
-//   if (!file?.buffer || file.buffer.length === 0)
-//     throw new Error("Invalid video file buffer");
-
-//   const initPayload = {
-//     source_info: {
-//       source: "FILE_UPLOAD",
-//       video_size: file.size,
-//       chunk_size: file.size,
-//       total_chunk_count: 1,
-//     },
-//   };
-
-//   const { data } = await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-//     JSON.stringify(initPayload),
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-
-//   if (!data?.data?.upload_url || !data.data.publish_id) {
-//     console.error("TikTok init failed:", data);
-//     throw new Error("TikTok init: Missing upload_url or publish_id");
-//   }
-
-//   const { upload_url, publish_id } = data.data;
-
-//   console.log("Uploading to:", upload_url);
-//   console.log("Range: bytes 0-" + (file.size - 1) + "/" + file.size);
-
-//   await axios.put(upload_url, file.buffer, {
-//     headers: {
-//       "Content-Type": "video/mp4",
-//       "Content-Range": `bytes 0-${file.size - 1}/${file.size}`,
-//     },
-//     maxBodyLength: Infinity,
-//     maxContentLength: Infinity,
-//     timeout: 10_000,
-//   });
-
-//   return publish_id;
-// }
-
-// async function commitTikTokUpload(
-//   accessToken: string,
-//   publishId: string,
-//   text: string
-// ) {
-//   return await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/inbox/video/commit/",
-//     {
-//       publish_id: publishId,
-//       text,
-//     },
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-// }
+    return {
+      success: true,
+      data: null,
+    };
+  } catch (error: any) {
+    console.error(
+      "TikTok revoke error:",
+      error.response?.data ?? error.message
+    );
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 
 export async function post({
   postData,
   mediaFiles,
 }: {
   postData: any;
-  mediaFiles: Express.Multer.File[];
+  mediaFiles: string[];
 }) {
   console.log({ mediaFiles });
   const { accountId, userId, content: description } = postData;
   const { socialaccounts, socialposts } = await getCollections();
+
+  console.log({ accountId, userId });
 
   const account = await socialaccounts.findOne({
     accountId,
     userId: new ObjectId(userId),
   });
 
-  if (!account) throw new Error("TikTok account not found for user");
+  console.log({ account });
+
+  if (!account)
+    throw new Error("TikTok account not found for user na here ooo");
+
+  // const file = await fetchCloudinaryFileBuffer(mediaFiles[0]);
+  // console.log("here");
+  // console.log({ file });
+  // console.log("there");
+
+  const fileBuffer = await Promise.all(
+    mediaFiles.map(async (file: string) => {
+      const publicId = file;
+      // const { buffer, mimetype } = await fetchCloudinaryFileBuffer(publicId);
+      const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
+        `skedlii/${publicId}`,
+        "video"
+      );
+
+      if (!buffer || !mimetype) {
+        throw new Error(
+          `Invalid Cloudinary asset or missing content-type for ref: ${file}`
+        );
+      }
+
+      return {
+        originalname: file,
+        buffer,
+        mimetype,
+      };
+    })
+  );
+
+  console.log({ fileBuffer });
 
   try {
-    // const file = await fetchCloudinaryFileBuffer(mediaFiles[0]);
-    const file = mediaFiles[0];
-    console.log({ file });
+    // const file = mediaFiles[0];
     const publishId = await initAndUploadDirectTikTok(
       account.accessToken,
-      file,
+      fileBuffer[0],
       description
     );
-    const commitRes = await commitDirectTikTokUpload(
-      account.accessToken,
-      publishId,
-      description
-    );
+    // const commitRes = await commitDirectTikTokUpload(
+    //   account.accessToken,
+    //   publishId,
+    //   description
+    // );
 
-    const { video_id, share_url } = commitRes.data ?? {};
+    // const { video_id, share_url } = commitRes.data ?? {};
 
     await socialposts.insertOne({
       type: "social_post",
       content: description,
       platform: "tiktok",
-      platformPostId: video_id,
+      platformPostId: publishId,
       status: "posted",
       postedAt: new Date(),
       userId: new ObjectId(userId),
       metadata: {
-        videoUrl: share_url,
+        videoUrl: "",
         socialPost: {
           platform: "tiktok",
           accountId: account.accountId,
@@ -666,7 +340,7 @@ export async function post({
       updatedAt: new Date(),
     });
 
-    return { success: true, postId: video_id };
+    return { success: true, postId: publishId };
   } catch (error: any) {
     console.error("TikTok post error:", error?.response?.data || error.message);
     return {
@@ -675,60 +349,6 @@ export async function post({
     };
   }
 }
-
-// async function initAndUploadDirectTikTok(
-//   accessToken: string,
-//   file: Express.Multer.File,
-//   caption: string
-// ): Promise<string> {
-//   if (!file?.buffer || file.buffer.length === 0)
-//     throw new Error("Invalid video file buffer");
-
-//   const initPayload = {
-//     post_info: {
-//       title: caption,
-//       privacy_level: "PUBLIC", // or "PRIVATE", "FRIENDS"
-//     },
-//     source_info: {
-//       source: "FILE_UPLOAD",
-//       video_size: file.size,
-//       chunk_size: file.size,
-//       total_chunk_count: 1,
-//     },
-//   };
-
-//   console.log("TikTok init payload:", initPayload);
-
-//   const { data } = await axios.post(
-//     "https://open.tiktokapis.com/v2/post/publish/video/init/",
-//     initPayload,
-//     {
-//       headers: {
-//         Authorization: `Bearer ${accessToken}`,
-//         "Content-Type": "application/json",
-//       },
-//     }
-//   );
-
-//   if (!data?.data?.upload_url || !data.data.publish_id) {
-//     console.error("TikTok direct init failed:", data);
-//     throw new Error("TikTok init: Missing upload_url or publish_id");
-//   }
-
-//   const { upload_url, publish_id } = data.data;
-
-//   await axios.put(upload_url, file.buffer, {
-//     headers: {
-//       "Content-Type": "video/mp4",
-//       "Content-Range": `bytes 0-${file.size - 1}/${file.size}`,
-//     },
-//     maxBodyLength: Infinity,
-//     maxContentLength: Infinity,
-//     timeout: 15_000,
-//   });
-
-//   return publish_id;
-// }
 
 async function initAndUploadDirectTikTok(
   accessToken: string,
@@ -790,6 +410,7 @@ async function initAndUploadDirectTikTok(
   );
 
   const data = await response.json();
+  console.log({ data });
   if (data?.error?.code !== "ok") {
     throw new Error("TikTok init failed: " + data.error.message);
   }
@@ -810,6 +431,9 @@ async function initAndUploadDirectTikTok(
     timeout: 15_000,
   });
 
+  // ⚠️ Delay before commit
+  // await new Promise((resolve) => setTimeout(resolve, 30000));
+
   return publish_id;
 }
 
@@ -818,17 +442,29 @@ async function commitDirectTikTokUpload(
   publishId: string,
   caption: string
 ) {
-  return await axios.post(
-    "https://open.tiktokapis.com/v2/post/publish/video/commit/",
-    {
-      publish_id: publishId,
-      text: caption,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
+  try {
+    const res = await axios.post(
+      "https://open.tiktokapis.com/v2/post/publish/video/commit/",
+      {
+        publish_id: publishId,
+        text: caption,
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+      }
+    );
+
+    console.log({ res });
+
+    return res;
+  } catch (err: any) {
+    console.error("Commit error:", err?.response?.data || err.message);
+    throw new Error(
+      "TikTok commit failed: " +
+        (err?.response?.data?.error?.message || err.message)
+    );
+  }
 }

@@ -264,18 +264,30 @@ export async function handlePlatformUploadAndPost({
       }
       case "tiktok": {
         // try {
-        //   const result = await postToTikTok({
-        //     postData: payload,
-        //     mediaFiles,
-        //   });
-        //   if (!result.success) {
-        //     return res.status(400).json({ error: result.error });
+        //   const fileRefs: string[] = [];
+        //   for (const file of mediaFiles) {
+        //     const publicId = `${file.originalname}-${Date.now()}`;
+        //     await uploadToCloudinaryBuffer(file, {
+        //       folder: "skedlii",
+        //       publicId,
+        //       transformations: undefined, // or pass platform-specific if needed
+        //     });
+        //     fileRefs.push(publicId);
         //   }
-
-        //   return res.status(200).json({
-        //     message: "Post published successfully",
-        //     postId: result.postId,
+        //   if (!fileRefs.length) {
+        //     return res
+        //       .status(400)
+        //       .json({ error: "TikTok post missing media buffer" });
+        //   }
+        //   console.log({ fileRefs });
+        //   await directPostQueue.add("tiktok-post", {
+        //     platform: "tiktok",
+        //     accountId: payload.accountId,
+        //     userId,
+        //     description: payload.content ?? "",
+        //     buffer: Array.from(fileRefs),
         //   });
+        //   return res.status(202).json({ message: "TikTok job queued" });
         // } catch (err: any) {
         //   console.error("TikTok post error:", err);
         //   return res
@@ -284,19 +296,16 @@ export async function handlePlatformUploadAndPost({
         // }
         try {
           const fileRefs: string[] = [];
-
           for (const file of mediaFiles) {
             const publicId = `${file.originalname}-${Date.now()}`;
-
-            await uploadToCloudinaryBuffer(file, {
+            const buffer = await uploadToCloudinaryBuffer(file, {
               folder: "skedlii",
               publicId,
               transformations: undefined, // or pass platform-specific if needed
             });
-
+            console.log({ buffer });
             fileRefs.push(publicId);
           }
-
           if (!fileRefs.length) {
             return res
               .status(400)
@@ -305,15 +314,17 @@ export async function handlePlatformUploadAndPost({
 
           console.log({ fileRefs });
 
-          await directPostQueue.add("tiktok-post", {
-            platform: "tiktok",
-            accountId: payload.accountId,
-            userId,
-            description: payload.content ?? "",
-            buffer: Array.from(fileRefs),
+          const result = await postToTikTok({
+            postData: payload,
+            mediaFiles: fileRefs,
           });
-
-          return res.status(202).json({ message: "TikTok job queued" });
+          if (!result.success) {
+            return res.status(400).json({ error: result.error });
+          }
+          return res.status(200).json({
+            message: "Post published successfully",
+            postId: result.postId,
+          });
         } catch (err: any) {
           console.error("TikTok post error:", err);
           return res
