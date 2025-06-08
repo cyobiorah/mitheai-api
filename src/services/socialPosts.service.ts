@@ -13,7 +13,7 @@ import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
 import { post as postToTikTok } from "./platforms/tiktok.service";
 import { toUTC } from "../utils/dateUtils";
-import { directPostQueue } from "../worker/queue";
+// import { directPostQueue } from "../worker/queue";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
