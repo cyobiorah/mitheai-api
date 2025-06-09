@@ -194,8 +194,6 @@ export async function refreshTikTokToken(refreshToken: string) {
       }
     );
 
-    console.log({ response });
-
     return {
       success: true,
       data: response.data,
@@ -230,8 +228,6 @@ export async function revokeAndDeleteAccount(account: any) {
       }
     );
 
-    console.log({ revokeRes });
-
     if (revokeRes.status === 200 && revokeRes.statusText === "OK") {
       await socialaccounts.deleteOne({ _id: account._id });
     }
@@ -259,26 +255,16 @@ export async function post({
   postData: any;
   mediaFiles: string[];
 }) {
-  console.log({ mediaFiles });
   const { accountId, userId, content: description } = postData;
   const { socialaccounts, socialposts } = await getCollections();
-
-  console.log({ accountId, userId });
 
   const account = await socialaccounts.findOne({
     accountId,
     userId: new ObjectId(userId),
   });
 
-  console.log({ account });
-
   if (!account)
     throw new Error("TikTok account not found for user na here ooo");
-
-  // const file = await fetchCloudinaryFileBuffer(mediaFiles[0]);
-  // console.log("here");
-  // console.log({ file });
-  // console.log("there");
 
   const fileBuffer = await Promise.all(
     mediaFiles.map(async (file: string) => {
@@ -303,10 +289,7 @@ export async function post({
     })
   );
 
-  console.log({ fileBuffer });
-
   try {
-    // const file = mediaFiles[0];
     const publishId = await initAndUploadDirectTikTok(
       account.accessToken,
       fileBuffer[0],
@@ -358,9 +341,7 @@ async function initAndUploadDirectTikTok(
   },
   caption: string
 ): Promise<string> {
-  console.log("here");
   try {
-    console.log("where");
     const response = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
@@ -373,7 +354,6 @@ async function initAndUploadDirectTikTok(
     );
 
     const tokenDebug = await response.json();
-    console.log("TikTok token scopes:", JSON.stringify(tokenDebug, null, 2));
   } catch (err: any) {
     console.error("TikTok creator_info query failed:", err.message);
   }
@@ -395,8 +375,6 @@ async function initAndUploadDirectTikTok(
     },
   };
 
-  console.log("TikTok init payload:", JSON.stringify(initPayload, null, 2));
-
   const response = await fetch(
     "https://open.tiktokapis.com/v2/post/publish/video/init/",
     {
@@ -410,7 +388,6 @@ async function initAndUploadDirectTikTok(
   );
 
   const data = await response.json();
-  console.log({ data });
   if (data?.error?.code !== "ok") {
     throw new Error("TikTok init failed: " + data.error.message);
   }
@@ -456,8 +433,6 @@ async function commitDirectTikTokUpload(
         },
       }
     );
-
-    console.log({ res });
 
     return res;
   } catch (err: any) {

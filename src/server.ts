@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 import "./worker/postWorker";
-import "./worker/tiktok.direct.processor";
 
 dotenv.config();
 

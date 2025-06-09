@@ -13,7 +13,6 @@ import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
 import { post as postToTikTok } from "./platforms/tiktok.service";
 import { toUTC } from "../utils/dateUtils";
-import { directPostQueue } from "../worker/queue";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
@@ -263,47 +262,15 @@ export async function handlePlatformUploadAndPost({
         }
       }
       case "tiktok": {
-        // try {
-        //   const fileRefs: string[] = [];
-        //   for (const file of mediaFiles) {
-        //     const publicId = `${file.originalname}-${Date.now()}`;
-        //     await uploadToCloudinaryBuffer(file, {
-        //       folder: "skedlii",
-        //       publicId,
-        //       transformations: undefined, // or pass platform-specific if needed
-        //     });
-        //     fileRefs.push(publicId);
-        //   }
-        //   if (!fileRefs.length) {
-        //     return res
-        //       .status(400)
-        //       .json({ error: "TikTok post missing media buffer" });
-        //   }
-        //   console.log({ fileRefs });
-        //   await directPostQueue.add("tiktok-post", {
-        //     platform: "tiktok",
-        //     accountId: payload.accountId,
-        //     userId,
-        //     description: payload.content ?? "",
-        //     buffer: Array.from(fileRefs),
-        //   });
-        //   return res.status(202).json({ message: "TikTok job queued" });
-        // } catch (err: any) {
-        //   console.error("TikTok post error:", err);
-        //   return res
-        //     .status(500)
-        //     .json({ error: "Unexpected error posting to TikTok" });
-        // }
         try {
           const fileRefs: string[] = [];
           for (const file of mediaFiles) {
             const publicId = `${file.originalname}-${Date.now()}`;
-            const buffer = await uploadToCloudinaryBuffer(file, {
+            await uploadToCloudinaryBuffer(file, {
               folder: "skedlii",
               publicId,
               transformations: undefined, // or pass platform-specific if needed
             });
-            console.log({ buffer });
             fileRefs.push(publicId);
           }
           if (!fileRefs.length) {
@@ -311,8 +278,6 @@ export async function handlePlatformUploadAndPost({
               .status(400)
               .json({ error: "TikTok post missing media buffer" });
           }
-
-          console.log({ fileRefs });
 
           const result = await postToTikTok({
             postData: payload,
