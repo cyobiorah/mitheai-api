@@ -131,6 +131,7 @@ export async function handlePlatformUploadAndPost({
       profileImageUrl: string;
       platform: string;
     };
+    tiktokAccountOptions?: {};
   };
   res: ExpressResponse;
 }): Promise<any> {
@@ -210,7 +211,7 @@ export async function handlePlatformUploadAndPost({
     }
 
     // ✅ Immediate Posting
-    const payload = {
+    const payload: any = {
       content: postMeta.caption,
       mediaUrls,
       mediaType: postMeta.mediaType,
@@ -262,6 +263,12 @@ export async function handlePlatformUploadAndPost({
         }
       }
       case "tiktok": {
+        if (!postMeta.tiktokAccountOptions) {
+          return res
+            .status(400)
+            .json({ error: "TikTok post missing account options" });
+        }
+        payload.tiktokAccountOptions = postMeta.tiktokAccountOptions;
         try {
           const fileRefs: string[] = [];
           for (const file of mediaFiles) {

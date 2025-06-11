@@ -2,6 +2,7 @@ import { Request, Response as ExpressResponse } from "express";
 import {
   createSocialAccount,
   exchangeCodeForTokens,
+  getCreatorInfo,
   post,
   refreshTikTokTokenAndUpdateAccount,
   revokeAndDeleteAccount,
@@ -10,6 +11,7 @@ import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
+import { sanitizeAccount } from "../../utils";
 
 const rawCallbackUrl: string = process.env.TIKTOK_REDIRECT_URI ?? "";
 
@@ -232,4 +234,27 @@ export const revokeAndRemoveAccount = async (
     console.error("Error revoking TikTok account:", error);
     res.status(500).json({ error: error.message });
   }
+};
+
+export const getAccountInfo = async (req: Request, res: ExpressResponse) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(id),
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  const creatorInfo = await getCreatorInfo(account);
+
+  res.status(200).json({ creatorInfo });
 };

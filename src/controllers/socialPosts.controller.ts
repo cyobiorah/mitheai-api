@@ -194,6 +194,9 @@ export async function postToMultiPlatform({
         ...(parsedPostData.timezone && {
           timezone: parsedPostData.timezone,
         }),
+        ...(account.platform === "tiktok" && {
+          tiktokAccountOptions: parsedPostData.tiktokAccountOptions,
+        }),
       },
       res,
     });

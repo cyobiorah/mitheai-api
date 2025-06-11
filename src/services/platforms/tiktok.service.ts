@@ -3,6 +3,7 @@ import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
 import { SocialAccount } from "../../schema/schema";
 import { fetchCloudinaryFileBuffer } from "../../utils/cloudinary";
+import { isTokenExpired } from "./twitter.service";
 
 const TIKTOK_CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY!;
 const TIKTOK_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET!;
@@ -255,7 +256,12 @@ export async function post({
   postData: any;
   mediaFiles: string[];
 }) {
-  const { accountId, userId, content: description } = postData;
+  const {
+    accountId,
+    userId,
+    content: description,
+    tiktokAccountOptions,
+  } = postData;
   const { socialaccounts, socialposts } = await getCollections();
 
   const account = await socialaccounts.findOne({
@@ -269,7 +275,6 @@ export async function post({
   const fileBuffer = await Promise.all(
     mediaFiles.map(async (file: string) => {
       const publicId = file;
-      // const { buffer, mimetype } = await fetchCloudinaryFileBuffer(publicId);
       const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
         `skedlii/${publicId}`,
         "video"
@@ -293,15 +298,9 @@ export async function post({
     const publishId = await initAndUploadDirectTikTok(
       account.accessToken,
       fileBuffer[0],
-      description
+      description,
+      tiktokAccountOptions
     );
-    // const commitRes = await commitDirectTikTokUpload(
-    //   account.accessToken,
-    //   publishId,
-    //   description
-    // );
-
-    // const { video_id, share_url } = commitRes.data ?? {};
 
     await socialposts.insertOne({
       type: "social_post",
@@ -333,31 +332,47 @@ export async function post({
   }
 }
 
-async function initAndUploadDirectTikTok(
-  accessToken: string,
-  file: {
-    buffer: Buffer;
-    mimetype: string;
-  },
-  caption: string
-): Promise<string> {
+export async function getCreatorInfo(account: any) {
+  let refreshRes;
+  if (isTokenExpired(account.accessToken)) {
+    refreshRes = await refreshTikTokTokenAndUpdateAccount(account);
+    if (!refreshRes.success) {
+      return {
+        success: false,
+        error: refreshRes.error,
+      };
+    }
+  }
   try {
     const response = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${refreshRes?.updated?.accessToken}`,
           "Content-Type": "application/json; charset=UTF-8",
         },
       }
     );
 
-    const tokenDebug = await response.json();
+    const data = await response.json();
+    return data;
   } catch (err: any) {
     console.error("TikTok creator_info query failed:", err.message);
+    return null;
   }
+}
 
+async function initAndUploadDirectTikTok(
+  accessToken: string,
+  file: {
+    buffer: Buffer;
+    mimetype: string;
+  },
+  caption: string,
+  tiktokAccountOptions: any
+): Promise<string> {
+  console.log({ tiktokAccountOptions });
   if (!file?.buffer || file.buffer.length === 0)
     throw new Error("Invalid video file buffer");
 
@@ -365,7 +380,7 @@ async function initAndUploadDirectTikTok(
     post_info: {
       title:
         caption?.slice(0, 100).replace(/[^\w\s]/gi, "") || "Posted via Skedlii",
-      privacy_level: "SELF_ONLY",
+      privacy_level: tiktokAccountOptions?.privacy ?? "SELF_ONLY",
     },
     source_info: {
       source: "FILE_UPLOAD",
@@ -407,9 +422,6 @@ async function initAndUploadDirectTikTok(
     maxContentLength: Infinity,
     timeout: 15_000,
   });
-
-  // ⚠️ Delay before commit
-  // await new Promise((resolve) => setTimeout(resolve, 30000));
 
   return publish_id;
 }
