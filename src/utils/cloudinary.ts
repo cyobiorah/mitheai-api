@@ -78,7 +78,6 @@ export async function fetchCloudinaryFileBuffer(
   buffer: Buffer;
   mimetype: string;
 }> {
-  console.log({ publicId });
   const url = `https://res.cloudinary.com/${
     process.env.CLOUDINARY_CLOUD_NAME
   }/${fileType ?? "image"}/upload/${publicId}`;
@@ -88,8 +87,6 @@ export async function fetchCloudinaryFileBuffer(
   });
 
   const contentType = response.headers["content-type"];
-
-  console.log({ response });
 
   return {
     buffer: Buffer.from(response.data),
