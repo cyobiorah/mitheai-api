@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
+import { getMediaTypeFromUrl } from "../../utils/cloudinary";
 
 let lastTokenExpirationDate: Date | null = null;
 
@@ -169,7 +170,7 @@ export async function getUserProfile(accessToken: string) {
     // Use the access token directly to fetch user profile information
     // For Threads API, we need to use the Threads Graph API
     const response = await axios.get(
-      `https://graph.threads.net/me?fields=id,username&access_token=${accessToken}`
+      `https://graph.threads.net/me?fields=id,username,threads_profile_picture_url&access_token=${accessToken}`
     );
 
     if (!response.data?.id) {
@@ -279,12 +280,15 @@ export async function createSocialAccount(
  * Post content to Threads via Threads API
  * [https://developers.facebook.com/docs/threads/create-posts](https://developers.facebook.com/docs/threads/create-posts)
  */
-export async function postContent(
-  accountId: string,
-  content: string,
-  mediaType: "TEXT" | "IMAGE" | "VIDEO" | "CAROUSEL" | "text" = "TEXT",
-  mediaUrl?: string
-): Promise<{ success: boolean; id?: string; error?: string }> {
+export async function postToThreads({
+  accountId,
+  content,
+  mediaUrls,
+}: {
+  accountId: string;
+  content: string;
+  mediaUrls?: string[];
+}): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const { socialaccounts } = await getCollections();
     const account = await socialaccounts.findOne({
@@ -300,22 +304,10 @@ export async function postContent(
     }
 
     // Post the content based on the media type
-    if (mediaType === "TEXT" || mediaType === "text") {
-      return await createTextPost(account, content);
-    } else if (mediaType === "IMAGE" && mediaUrl) {
-      return await createImagePost(account, content, mediaUrl);
-    } else if (mediaType === "VIDEO" && mediaUrl) {
-      return await createVideoPost(account, content, mediaUrl);
-    } else if (mediaType === "CAROUSEL") {
-      return {
-        success: false,
-        error: "Carousel posting is not yet supported for Threads",
-      };
+    if (mediaUrls?.length && mediaUrls?.length > 1) {
+      return await createThreadsCarouselPost({ account, content, mediaUrls });
     } else {
-      return {
-        success: false,
-        error: `Invalid media type or missing media URL: ${mediaType}`,
-      };
+      return await createThreadsPost({ account, content, mediaUrls });
     }
   } catch (error: any) {
     // Handle OAuth/token errors
@@ -425,6 +417,162 @@ async function createTextPost(
     return {
       success: false,
       error: error.message ?? "Unknown error creating text post on Threads",
+    };
+  }
+}
+
+async function createThreadsPost({
+  account,
+  content,
+  mediaUrls,
+}: {
+  account: any;
+  content: string;
+  mediaUrls?: string[];
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const containerResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.accountId}/threads`,
+      {
+        text: content,
+        media_type: mediaUrls?.length
+          ? getMediaTypeFromUrl(mediaUrls?.[0] ?? "") ?? "TEXT"
+          : "TEXT",
+        ...(mediaUrls?.length && getMediaTypeFromUrl(mediaUrls?.[0]) === "IMAGE"
+          ? { image_url: mediaUrls?.[0] }
+          : {}),
+        ...(mediaUrls?.length && getMediaTypeFromUrl(mediaUrls?.[0]) === "VIDEO"
+          ? { video_url: mediaUrls?.[0] }
+          : {}),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    if (!containerResponse?.data?.id) {
+      return {
+        success: false,
+        error: "Failed to create Threads media container",
+      };
+    }
+
+    const containerId = containerResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await delay(30000); // 30 seconds delay
+
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.accountId}/threads_publish`,
+      {
+        creation_id: containerId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!publishResponse?.data?.id) {
+      return {
+        success: false,
+        error: "Failed to publish Threads post",
+      };
+    }
+
+    return {
+      success: true,
+      id: publishResponse.data.id,
+    };
+  } catch (error: any) {
+    console.error("Error creating text post on Threads:", error);
+    return {
+      success: false,
+      error: error.message ?? "Unknown error creating text post on Threads",
+    };
+  }
+}
+
+async function createThreadsCarouselPost({
+  account,
+  content,
+  mediaUrls,
+}: {
+  account: any;
+  content: string;
+  mediaUrls: string[];
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const containers = [];
+    for (const mediaUrl of mediaUrls) {
+      const itemContainer = await axios.post(
+        `https://graph.threads.net/v1.0/${account.accountId}/threads`,
+        {
+          is_carousel_item: true,
+          media_type: getMediaTypeFromUrl(mediaUrl),
+          ...(getMediaTypeFromUrl(mediaUrl) === "IMAGE"
+            ? { image_url: mediaUrl }
+            : {}),
+          ...(getMediaTypeFromUrl(mediaUrl) === "VIDEO"
+            ? { video_url: mediaUrl }
+            : {}),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${account.accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      containers.push(itemContainer.data.id);
+    }
+
+    const carouselResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.accountId}/threads`,
+      {
+        text: content,
+        media_type: "CAROUSEL",
+        children: containers.join(","),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const carouselId = carouselResponse.data.id;
+
+    // Wait for the container to be processed (recommended by Meta)
+    await delay(30000); // 30 seconds delay
+
+    const publishResponse = await axios.post(
+      `https://graph.threads.net/v1.0/${account.accountId}/threads_publish`,
+      {
+        creation_id: carouselId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return {
+      success: true,
+      id: publishResponse.data.id,
+    };
+  } catch (error: any) {
+    console.error("Error creating carousel post on Threads:", error);
+    return {
+      success: false,
+      error: error.message ?? "Unknown error creating carousel post on Threads",
     };
   }
 }

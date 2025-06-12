@@ -2,11 +2,8 @@
 
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
-import {
-  AllPlatformConstraints,
-  platformConstraints,
-  PlatformMediaConstraints,
-} from "../config/platformConstraints";
+import { platformConstraints } from "../config/platformConstraints";
+import axios from "axios";
 
 // Run once globally
 cloudinary.v2.config({
@@ -74,349 +71,34 @@ export function uploadToCloudinaryBuffer(
   });
 }
 
-// export function getCloudinaryTransformations(
-//   platform: string,
-//   fileMimeType: string
-// ): {
-//   transformation: Record<string, any> | undefined;
-// } {
-//   const constraints: PlatformMediaConstraints =
-//     platformConstraints[platform.toLowerCase()] ?? platformConstraints.general;
+export async function fetchCloudinaryFileBuffer(
+  publicId: string,
+  fileType?: "image" | "video"
+): Promise<{
+  buffer: Buffer;
+  mimetype: string;
+}> {
+  // Validate publicId to ensure it conforms to expected format
+  const validPublicIdPattern = /^[a-zA-Z0-9_-]+$/; // Allow only alphanumeric, underscore, and hyphen
+  if (!validPublicIdPattern.test(publicId)) {
+    throw new Error(`Invalid publicId: ${publicId}`);
+  }
 
-//   const isImage = fileMimeType.startsWith("image/");
-//   const isVideo = fileMimeType.startsWith("video/");
+  const url = `https://res.cloudinary.com/${
+    process.env.CLOUDINARY_CLOUD_NAME
+  }/${fileType ?? "image"}/upload/${publicId}`;
 
-//   if (isImage && constraints.image?.maxDimensions) {
-//     const { width, height } = constraints.image.maxDimensions;
+  const response = await axios.get(url, {
+    responseType: "arraybuffer",
+  });
 
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit", // preserve aspect ratio, no upscaling
-//       },
-//     };
-//   }
+  const contentType = response.headers["content-type"];
 
-//   if (isVideo && constraints.video?.maxDimensions) {
-//     const { width, height } = constraints.video.maxDimensions;
-
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit",
-//         quality: "auto", // optional: you can use "eco" for lower data cost
-//         flags: "progressive",
-//       },
-//     };
-//   }
-
-//   return { transformation: undefined };
-// }
-
-// export function getCloudinaryTransformations(
-//   platform: string,
-//   fileMimeType: string
-// ): {
-//   transformation: Record<string, any> | undefined;
-// } {
-//   const constraints: PlatformMediaConstraints =
-//     platformConstraints[platform.toLowerCase()] ?? platformConstraints.general;
-
-//   const isImage = fileMimeType.startsWith("image/");
-//   const isVideo = fileMimeType.startsWith("video/");
-
-//   if (isImage) {
-//     return {
-//       transformation: {
-//         aspect_ratio: "1:1",
-//         crop: "fill",
-//         gravity: "auto", // or "auto" if you're cropping faces etc.
-//         width: 1080, // safe for Instagram
-//         fetch_format: "jpg",
-//       },
-//     };
-//   }
-
-//   if (isVideo && constraints.video?.maxDimensions) {
-//     const { width, height } = constraints.video.maxDimensions;
-
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit",
-//         flags: "progressive",
-//         dpr: "auto",
-//       },
-//     };
-//   }
-
-//   return { transformation: undefined };
-// }
-
-// export function getCloudinaryTransformations(
-//   platform: string,
-//   fileMimeType: string,
-//   metadata?: { width?: number; height?: number }
-// ): {
-//   transformation: Record<string, any> | undefined;
-// } {
-//   const constraints: PlatformMediaConstraints =
-//     platformConstraints[platform.toLowerCase()] ?? platformConstraints.general;
-
-//   const isImage = fileMimeType.startsWith("image/");
-//   const isVideo = fileMimeType.startsWith("video/");
-
-//   if (isImage) {
-//     const maxWidth = constraints.image?.maxDimensions?.width ?? 1080;
-//     const maxHeight = constraints.image?.maxDimensions?.height ?? 1080;
-//     const shouldResize =
-//       (metadata?.width && metadata.width > maxWidth) ||
-//       (metadata?.height && metadata.height > maxHeight);
-
-//     if (shouldResize) {
-//       return {
-//         transformation: {
-//           aspect_ratio: "4:5", // Only if platform demands
-//           crop: "fill",
-//           gravity: "auto",
-//           width: maxWidth,
-//           fetch_format: "auto", // Allow Cloudinary to decide best format
-//         },
-//       };
-//     } else {
-//       return { transformation: undefined }; // Don't touch perfect images
-//     }
-//   }
-
-//   if (isVideo && constraints.video?.maxDimensions) {
-//     const { width, height } = constraints.video.maxDimensions;
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit",
-//         flags: "progressive",
-//         dpr: "auto",
-//       },
-//     };
-//   }
-
-//   return { transformation: undefined };
-// }
-
-// export function getCloudinaryTransformations(
-//   platform: string,
-//   fileMimeType: string,
-//   metadata?: { width?: number; height?: number }
-// ): {
-//   transformation: Record<string, any> | undefined;
-// } {
-//   // Assume platformConstraints and PlatformMediaConstraints are defined elsewhere in your project
-//   const constraints: PlatformMediaConstraints =
-//     platformConstraints[platform.toLowerCase()] ?? platformConstraints.general;
-
-//   // For the purpose of this standalone snippet, let's mock a basic constraints structure
-//   // In your actual code, you would use your existing 'platformConstraints' object.
-//   //   const mockPlatformConstraints: any = {
-//   //     general: {
-//   //       image: { maxDimensions: { width: 1080, height: 1080 } },
-//   //       video: { maxDimensions: { width: 1920, height: 1080 } },
-//   //     },
-//   //     instagram: {
-//   //       image: { maxDimensions: { width: 1080, height: 1350 } }, // Example for Instagram (allows 4:5 portrait)
-//   //       // video constraints for instagram if specific
-//   //     },
-//   //     // ... other platforms
-//   //   };
-
-//   //   const constraints =
-//   //     mockPlatformConstraints[platform.toLowerCase()] ??
-//   //     mockPlatformConstraints.general;
-
-//   const isImage = fileMimeType.startsWith("image/");
-//   const isVideo = fileMimeType.startsWith("video/");
-
-//   if (isImage) {
-//     const maxWidth = constraints.image?.maxDimensions?.width ?? 1080;
-//     const maxHeight = constraints.image?.maxDimensions?.height ?? 1080;
-
-//     const imageWidth = metadata?.width;
-//     const imageHeight = metadata?.height;
-
-//     // Check if resizing is needed based on actual image dimensions and platform constraints
-//     const shouldResize =
-//       (imageWidth && imageWidth > maxWidth) ||
-//       (imageHeight && imageHeight > maxHeight);
-
-//     if (shouldResize) {
-//       // If resizing is needed, apply transformations that maintain aspect ratio
-//       // and fit the image within the platform's maximum dimensions.
-//       return {
-//         transformation: {
-//           width: maxWidth,
-//           height: maxHeight,
-//           // Use "limit" to scale the image down to fit within the specified
-//           // width and height, maintaining the original aspect ratio.
-//           // This prevents undesirable cropping if the aspect ratios differ.
-//           // If the image is already smaller, 'limit' won't scale it up.
-//           crop: "limit",
-//           fetch_format: "auto", // Allow Cloudinary to choose the best format
-//           // No 'aspect_ratio' is forced here, preserving the original aspect ratio.
-//           // 'gravity: "auto"' is useful with cropping modes like 'fill' or 'crop',
-//           // but less critical for 'limit' which primarily scales.
-//         },
-//       };
-//     } else {
-//       // If the image is already within the platform's recommended dimensions,
-//       // don't apply any transformations to avoid altering a "perfect" image.
-//       return { transformation: undefined };
-//     }
-//   }
-
-//   if (isVideo && constraints.video?.maxDimensions) {
-//     // Video transformation logic remains the same as in your original code
-//     const { width, height } = constraints.video.maxDimensions;
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit", // 'limit' is also good for video to fit within dimensions
-//         flags: "progressive",
-//         dpr: "auto",
-//       },
-//     };
-//   }
-
-//   // If not an image or video, or no specific transformations are needed
-//   return { transformation: undefined };
-// }
-
-// export function getCloudinaryTransformations(
-//   platform: string,
-//   fileMimeType: string,
-//   metadata?: { width?: number; height?: number }
-// ): {
-//   transformation: Record<string, any> | undefined;
-// } {
-//   const mockPlatformConstraints: any = {
-//     general: {
-//       image: { maxDimensions: { width: 1080, height: 1080 } },
-//       video: { maxDimensions: { width: 1920, height: 1080 } },
-//     },
-//     instagram: {
-//       image: {
-//         maxDimensions: { width: 1080, height: 1350 }, // Max width 1080, max height 1350 (for 4:5)
-//         // Instagram specific aspect ratio limits:
-//         minAcceptedAR: 0.8, // 4:5 aspect ratio (e.g., 1080x1350)
-//         maxAcceptedAR: 1.91, // 1.91:1 aspect ratio (e.g., 1080x566)
-//         targetPortraitAR: "4:5",
-//         targetLandscapeAR: "1.91:1",
-//       },
-//       // video constraints for instagram if specific
-//     },
-//     // ... other platforms
-//   };
-
-//   const platformConfig =
-//     mockPlatformConstraints[platform.toLowerCase()] ??
-//     mockPlatformConstraints.general;
-
-//   const isImage = fileMimeType.startsWith("image/");
-//   const isVideo = fileMimeType.startsWith("video/");
-
-//   if (isImage) {
-//     const imageWidth = metadata?.width;
-//     const imageHeight = metadata?.height;
-
-//     if (!imageWidth || !imageHeight) {
-//       // Cannot determine aspect ratio or size, return undefined or handle as per requirements.
-//       // For safety, returning no transformation if metadata is missing.
-//       return { transformation: undefined };
-//     }
-
-//     const originalAR = imageWidth / imageHeight;
-
-//     if (platform.toLowerCase() === "instagram") {
-//       const instaConstraints = platformConfig.image;
-//       const instaMaxWidth = instaConstraints.maxDimensions.width;
-//       const instaMaxHeight = instaConstraints.maxDimensions.height;
-//       const minAcceptedAR = instaConstraints.minAcceptedAR;
-//       const maxAcceptedAR = instaConstraints.maxAcceptedAR;
-
-//       const isAROutOfRange =
-//         originalAR < minAcceptedAR || originalAR > maxAcceptedAR;
-//       const isTooLargeInDimensions =
-//         imageWidth > instaMaxWidth || imageHeight > instaMaxHeight;
-
-//       // If aspect ratio is acceptable AND dimensions are within limits, no transformation needed.
-//       if (!isAROutOfRange && !isTooLargeInDimensions) {
-//         return { transformation: undefined };
-//       }
-
-//       // Otherwise, a transformation is required.
-//       let transformParams: Record<string, any> = { fetch_format: "auto" };
-
-//       if (isAROutOfRange) {
-//         // Aspect ratio is out of range, needs cropping to a supported AR.
-//         if (originalAR < minAcceptedAR) {
-//           // Image is too tall (e.g., 1:2)
-//           transformParams.aspect_ratio = instaConstraints.targetPortraitAR; // Crop to 4:5
-//         } else {
-//           // Image is too wide (e.g., 2:1)
-//           transformParams.aspect_ratio = instaConstraints.targetLandscapeAR; // Crop to 1.91:1
-//         }
-//         transformParams.crop = "fill"; // Crop to fill the target aspect ratio
-//         transformParams.width = instaMaxWidth; // Set width to max (e.g., 1080px)
-//         // Height will be derived from width and AR.
-//         transformParams.gravity = "auto"; // Cloudinary intelligently finds the subject
-//       } else {
-//         // Aspect ratio is acceptable, but the image is too large in dimensions.
-//         // Scale it down, preserving its (acceptable) aspect ratio.
-//         transformParams.crop = "limit";
-//         transformParams.width = instaMaxWidth;
-//         transformParams.height = instaMaxHeight; // Fit within this bounding box (e.g., 1080x1350)
-//       }
-//       return { transformation: transformParams };
-//     } else {
-//       // Generic logic for other platforms (same as your previous "limit" logic)
-//       const maxWidth = platformConfig.image?.maxDimensions?.width ?? 1080;
-//       const maxHeight = platformConfig.image?.maxDimensions?.height ?? 1080;
-
-//       const shouldResize = imageWidth > maxWidth || imageHeight > maxHeight;
-
-//       if (shouldResize) {
-//         return {
-//           transformation: {
-//             width: maxWidth,
-//             height: maxHeight,
-//             crop: "limit",
-//             fetch_format: "auto",
-//           },
-//         };
-//       } else {
-//         return { transformation: undefined };
-//       }
-//     }
-//   }
-
-//   if (isVideo && platformConfig.video?.maxDimensions) {
-//     const { width, height } = platformConfig.video.maxDimensions;
-//     return {
-//       transformation: {
-//         width,
-//         height,
-//         crop: "limit",
-//         flags: "progressive",
-//         dpr: "auto",
-//       },
-//     };
-//   }
-
-//   return { transformation: undefined };
-// }
+  return {
+    buffer: Buffer.from(response.data),
+    mimetype: contentType,
+  };
+}
 
 /**
  * Parses an aspect ratio string (e.g., "16:9", "1.91:1", "4:5") into a numerical value.
@@ -697,4 +379,37 @@ export function getCloudinaryTransformations(
   }
 
   return { transformation: undefined };
+}
+
+export function getMediaTypeFromUrl(url: string): string | null {
+  const extensionToMime: Record<string, string> = {
+    jpg: "IMAGE",
+    jpeg: "IMAGE",
+    png: "IMAGE",
+    gif: "IMAGE",
+    webp: "IMAGE",
+    svg: "IMAGE",
+    mp4: "VIDEO",
+    mov: "VIDEO",
+    avi: "VIDEO",
+    webm: "VIDEO",
+    mp3: "AUDIO",
+    wav: "AUDIO",
+    ogg: "AUDIO",
+    pdf: "APPLICATION",
+  };
+
+  try {
+    const pathname = new URL(url).pathname;
+    const extensionMatch = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    const extension = extensionMatch?.[1]?.toLowerCase();
+
+    if (extension && extensionToMime[extension]) {
+      return extensionToMime[extension];
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
