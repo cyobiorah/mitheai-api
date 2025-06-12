@@ -142,7 +142,6 @@ async function seed() {
       organizationId: orgId,
       teamId: teamId,
       platform: "twitter",
-      platformAccountId: "123456789",
       accountType: "personal",
       accountName: "Test Twitter",
       accountId: "test-twitter-id",
@@ -156,7 +155,6 @@ async function seed() {
     {
       userId: individualUserId,
       platform: "twitter",
-      platformAccountId: "indiv-twitter-123",
       accountType: "personal",
       accountName: "Indi Twitter",
       accountId: "indiv-twitter-id",

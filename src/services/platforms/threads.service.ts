@@ -210,7 +210,7 @@ export async function createSocialAccount(
     const { socialaccounts } = await getCollections();
     const existingAccountForAnyUser = await socialaccounts.findOne({
       platform: "threads",
-      platformAccountId: profile.id,
+      accountId: profile.id,
     });
 
     if (existingAccountForAnyUser) {
@@ -235,7 +235,6 @@ export async function createSocialAccount(
     const newAccount = await socialaccounts.insertOne({
       userId: new ObjectId(userId),
       platform: "threads",
-      platformAccountId: profile.id,
       accountName: profile.username,
       accountId: profile.id,
       accountType: organizationId ? "business" : "personal",
@@ -369,7 +368,7 @@ async function createTextPost(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const containerResponse = await axios.post(
-      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads`,
+      `https://graph.threads.net/v1.0/${account.accountId}/threads`,
       {
         text: content,
         media_type: "TEXT",
@@ -392,7 +391,7 @@ async function createTextPost(
     await delay(30000); // 30 seconds delay
 
     const publishResponse = await axios.post(
-      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads_publish`,
+      `https://graph.threads.net/v1.0/${account.accountId}/threads_publish`,
       {
         creation_id: containerId,
       },

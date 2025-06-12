@@ -90,3 +90,17 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
     );
   }
 };
+
+export const refreshYoutubeAccessToken = async (req: any, res: Response) => {
+  const { accountId } = req.params;
+  try {
+    const result = await youtubeService.refreshAccessToken(accountId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("YouTube refresh token error:", error);
+    res.status(500).json({
+      error: "Failed to refresh access token",
+      message: error.message ?? "Unknown error",
+    });
+  }
+};

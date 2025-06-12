@@ -116,7 +116,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
               accountType: account.accountType,
               content: post.content,
               mediaType: post.mediaType,
-              platformAccountId: account.accountId,
               accessToken: account.accessToken,
               dimensions: post.dimensions,
               mediaUrls: post.mediaUrls,
@@ -153,7 +152,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
           accountType: account.accountType,
           content: post.content,
           mediaType: post.mediaType,
-          platformAccountId: account.accountId,
           accessToken: account.accessToken,
           dimensions: post.dimensions,
           mediaUrls: post.mediaUrls,
@@ -181,7 +179,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
           accountType: account.accountType,
           content: post.content,
           mediaType: post.mediaType,
-          platformAccountId: account.accountId,
           accessToken: account.accessToken,
           dimensions: post.dimensions,
           mediaUrls: post.mediaUrls,
@@ -282,7 +279,7 @@ export const postToPlatform = async (job: PlatformDetails) => {
         source: "scheduled_post",
         accountName: account.accountName,
         platform: account.platform,
-        platformAccountId: account.accountId,
+        accountId: account.accountId,
       },
     };
 

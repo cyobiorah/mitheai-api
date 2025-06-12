@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import axios from "axios";
 import { ObjectId } from "mongodb";
 import { getCollections } from "../../config/db";
+import { Readable } from "stream";
 
 const YOUTUBE_CLIENT_ID = process.env.YOUTUBE_CLIENT_ID!;
 const YOUTUBE_CLIENT_SECRET = process.env.YOUTUBE_CLIENT_SECRET!;
@@ -32,7 +33,7 @@ export async function getAuthorizationUrl(state?: string): Promise<string> {
     "openid",
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.upload",
   ];
 
   // Generate a random state value for CSRF protection if not provided
@@ -42,6 +43,8 @@ export async function getAuthorizationUrl(state?: string): Promise<string> {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: scopes,
+    prompt: "consent",
+    include_granted_scopes: true,
     state,
   });
 
@@ -172,11 +175,11 @@ export async function getUserProfile(accessToken: string): Promise<any> {
 }
 
 export async function createSocialAccount(user: any, profile: any, token: any) {
-  const { id: userId, organizationId } = user;
+  const { userId, organizationId } = user;
   const { access_token, id_token, expires_in } = token;
   const platform = "youtube";
   const accountName = profile.name;
-  const accountId = profile.sub;
+  const accountId = profile.id;
 
   const { socialaccounts } = await getCollections();
 
@@ -200,10 +203,9 @@ export async function createSocialAccount(user: any, profile: any, token: any) {
 
   const metadata = {
     profileUrl: `https://www.youtube.com/channel/${accountId}`,
-    picture: profile.picture,
+    profileImageUrl: profile.picture,
     email: profile.email,
-    verified: profile.email_verified,
-    locale: profile.locale,
+    verified: profile.verified_email,
     lastChecked: new Date(),
   };
 
@@ -240,4 +242,180 @@ export async function createSocialAccount(user: any, profile: any, token: any) {
   }
 
   return insertResult;
+}
+
+export async function refreshAccessToken(accountId: string): Promise<any> {
+  const account = await getSocialAccount(accountId);
+
+  if (!account?.refreshToken) {
+    throw new Error("Account not found or no refresh token");
+  }
+
+  try {
+    const response = await axios.post(
+      "https://oauth2.googleapis.com/token",
+      new URLSearchParams({
+        client_id: YOUTUBE_CLIENT_ID,
+        client_secret: YOUTUBE_CLIENT_SECRET,
+        refresh_token: account.refreshToken,
+        grant_type: "refresh_token",
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    const tokenData = response.data;
+
+    if (!tokenData.access_token) {
+      throw new YoutubeError(
+        "MISSING_ACCESS_TOKEN",
+        "No access token returned when refreshing",
+        { response: tokenData }
+      );
+    }
+
+    const updatedAccount = {
+      ...account,
+      accessToken: tokenData.access_token,
+      idToken: tokenData.id_token,
+      tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
+      lastRefreshed: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { socialaccounts } = await getCollections();
+    await socialaccounts.updateOne(
+      { _id: new ObjectId(accountId) },
+      { $set: updatedAccount }
+    );
+
+    return updatedAccount;
+  } catch (error: any) {
+    console.error(
+      "YouTube refresh token error:",
+      error.response?.data ?? error.message
+    );
+    throw new YoutubeError(
+      "TOKEN_REFRESH_ERROR",
+      "Failed to refresh access token",
+      { originalError: error.response?.data }
+    );
+  }
+}
+
+export async function getSocialAccount(accountId: string): Promise<any> {
+  const { socialaccounts } = await getCollections();
+  try {
+    return socialaccounts.findOne({ _id: new ObjectId(accountId) });
+  } catch (error) {
+    console.error(`Error retrieving social account :`, error);
+    return null;
+  }
+}
+
+export async function postToYouTube({
+  postData,
+  mediaFiles,
+}: {
+  postData: any;
+  mediaFiles: Express.Multer.File[];
+}): Promise<{ success: boolean; videoId?: string; error?: string }> {
+  const { accountId, content } = postData;
+
+  const { socialaccounts, socialposts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    accountId,
+    platform: "youtube",
+  });
+
+  if (!account) {
+    return { success: false, error: "YouTube account not found" };
+  }
+
+  if (!account.accessToken || new Date(account.tokenExpiry) < new Date()) {
+    return {
+      success: false,
+      error: "YouTube access token has expired. Please reconnect your account.",
+    };
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    YOUTUBE_CLIENT_ID,
+    YOUTUBE_CLIENT_SECRET,
+    YOUTUBE_REDIRECT_URI
+  );
+
+  oauth2Client.setCredentials({
+    access_token: account.accessToken,
+  });
+
+  const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+
+  const file = mediaFiles[0]; // YouTube only allows one video per upload
+
+  try {
+    const uploadRes = await youtube.videos.insert({
+      part: ["snippet", "status"],
+      requestBody: {
+        snippet: {
+          title: content?.slice(0, 100) ?? "Skedlii Upload",
+          description: content ?? "",
+        },
+        status: {
+          privacyStatus: "private", // or "public" / "unlisted"
+        },
+      },
+      media: {
+        body: Readable.from(file.buffer),
+      },
+    });
+
+    const videoId = uploadRes.data.id;
+
+    if (!videoId) {
+      return {
+        success: false,
+        error: "Failed to upload video to YouTube",
+      };
+    }
+
+    await socialposts.insertOne({
+      userId: account.userId,
+      organizationId: account.organizationId
+        ? new ObjectId(account.organizationId)
+        : undefined,
+      socialAccountId: account._id,
+      platform: "youtube",
+      content,
+      metadata: {
+        videoId,
+        accountName: account.accountName,
+        profileImageUrl: account.metadata?.profileImageUrl,
+      },
+      mediaType: "VIDEO",
+      postId: videoId,
+      status: "published",
+      publishedDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return { success: true, videoId };
+  } catch (error: any) {
+    console.error(
+      "YouTube upload error:",
+      error?.response?.data || error.message
+    );
+
+    return {
+      success: false,
+      error: `YouTube API error: ${
+        error?.response?.data?.error?.message || error.message
+      }`,
+    };
+  }
 }
