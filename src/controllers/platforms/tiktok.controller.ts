@@ -2,10 +2,15 @@ import { Request, Response as ExpressResponse } from "express";
 import {
   createSocialAccount,
   exchangeCodeForTokens,
+  getCreatorInfo,
   post,
+  refreshTikTokTokenAndUpdateAccount,
+  revokeAndDeleteAccount,
 } from "../../services/platforms/tiktok.service";
 import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
+import { getCollections } from "../../config/db";
+import { ObjectId } from "mongodb";
 
 const rawCallbackUrl: string = process.env.TIKTOK_REDIRECT_URI ?? "";
 
@@ -83,11 +88,6 @@ export const handleTikTokCallback = async (
 ) => {
   const { code, state, error, error_description } = req.query;
 
-  console.log({ code });
-  console.log({ state });
-  console.log({ error });
-  console.log({ error_description });
-
   if (error) {
     console.error("TikTok OAuth error:", error, error_description);
     return res.redirect(
@@ -136,7 +136,6 @@ export const handleTikTokCallback = async (
     const { userId, organizationId, currentTeamId } = stateData;
 
     const tokenData = await exchangeCodeForTokens(code as string);
-    console.log({ tokenData });
     await createSocialAccount(userId, tokenData, organizationId, currentTeamId);
 
     return res.redirect(
@@ -174,4 +173,87 @@ export const postToTikTok = async (req: Request, res: ExpressResponse) => {
     console.error("Error posting to TikTok:", error);
     res.status(500).json({ error: error.message });
   }
+};
+
+export const refreshAndUpdateToken = async (
+  req: Request,
+  res: ExpressResponse
+) => {
+  const { accountId } = req.params;
+
+  if (!accountId) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    accountId,
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  try {
+    const result = await refreshTikTokTokenAndUpdateAccount(account);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error refreshing TikTok token:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const revokeAndRemoveAccount = async (
+  req: Request,
+  res: ExpressResponse
+) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(id),
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  try {
+    const result = await revokeAndDeleteAccount(account);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error revoking TikTok account:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getAccountInfo = async (req: Request, res: ExpressResponse) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing account ID" });
+  }
+
+  const { socialaccounts } = await getCollections();
+
+  const account = await socialaccounts.findOne({
+    _id: new ObjectId(id),
+    platform: "tiktok",
+  });
+
+  if (!account) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+
+  const creatorInfo = await getCreatorInfo(account);
+
+  res.status(200).json({ creatorInfo });
 };

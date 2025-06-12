@@ -20,16 +20,3 @@ export const postQueue = new Queue("scheduled-posts", {
     },
   },
 });
-
-export const directPostQueue = new Queue("direct-posts", {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: false,
-    removeOnFail: { count: 2 },
-    attempts: 2,
-    backoff: {
-      type: "fixed",
-      delay: 5000,
-    },
-  },
-});

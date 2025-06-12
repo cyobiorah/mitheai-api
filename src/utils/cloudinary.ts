@@ -71,11 +71,16 @@ export function uploadToCloudinaryBuffer(
   });
 }
 
-export async function fetchCloudinaryFileBuffer(publicId: string): Promise<{
+export async function fetchCloudinaryFileBuffer(
+  publicId: string,
+  fileType?: "image" | "video"
+): Promise<{
   buffer: Buffer;
   mimetype: string;
 }> {
-  const url = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/${publicId}`;
+  const url = `https://res.cloudinary.com/${
+    process.env.CLOUDINARY_CLOUD_NAME
+  }/${fileType ?? "image"}/upload/${publicId}`;
 
   const response = await axios.get(url, {
     responseType: "arraybuffer",

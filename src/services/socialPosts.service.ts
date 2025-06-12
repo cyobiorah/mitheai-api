@@ -13,7 +13,6 @@ import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
 import { post as postToTikTok } from "./platforms/tiktok.service";
 import { toUTC } from "../utils/dateUtils";
-import { directPostQueue } from "../worker/queue";
 
 // Get social posts by userId
 export async function getSocialPostsByUserId(userId: string) {
@@ -132,6 +131,7 @@ export async function handlePlatformUploadAndPost({
       profileImageUrl: string;
       platform: string;
     };
+    tiktokAccountOptions?: {};
   };
   res: ExpressResponse;
 }): Promise<any> {
@@ -211,7 +211,7 @@ export async function handlePlatformUploadAndPost({
     }
 
     // ✅ Immediate Posting
-    const payload = {
+    const payload: any = {
       content: postMeta.caption,
       mediaUrls,
       mediaType: postMeta.mediaType,
@@ -263,57 +263,40 @@ export async function handlePlatformUploadAndPost({
         }
       }
       case "tiktok": {
-        // try {
-        //   const result = await postToTikTok({
-        //     postData: payload,
-        //     mediaFiles,
-        //   });
-        //   if (!result.success) {
-        //     return res.status(400).json({ error: result.error });
-        //   }
-
-        //   return res.status(200).json({
-        //     message: "Post published successfully",
-        //     postId: result.postId,
-        //   });
-        // } catch (err: any) {
-        //   console.error("TikTok post error:", err);
-        //   return res
-        //     .status(500)
-        //     .json({ error: "Unexpected error posting to TikTok" });
-        // }
+        if (!postMeta.tiktokAccountOptions) {
+          return res
+            .status(400)
+            .json({ error: "TikTok post missing account options" });
+        }
+        payload.tiktokAccountOptions = postMeta.tiktokAccountOptions;
         try {
           const fileRefs: string[] = [];
-
           for (const file of mediaFiles) {
             const publicId = `${file.originalname}-${Date.now()}`;
-
             await uploadToCloudinaryBuffer(file, {
               folder: "skedlii",
               publicId,
               transformations: undefined, // or pass platform-specific if needed
             });
-
             fileRefs.push(publicId);
           }
-
           if (!fileRefs.length) {
             return res
               .status(400)
               .json({ error: "TikTok post missing media buffer" });
           }
 
-          console.log({ fileRefs });
-
-          await directPostQueue.add("tiktok-post", {
-            platform: "tiktok",
-            accountId: payload.accountId,
-            userId,
-            description: payload.content ?? "",
-            buffer: Array.from(fileRefs),
+          const result = await postToTikTok({
+            postData: payload,
+            mediaFiles: fileRefs,
           });
-
-          return res.status(202).json({ message: "TikTok job queued" });
+          if (!result.success) {
+            return res.status(400).json({ error: result.error });
+          }
+          return res.status(200).json({
+            message: "Post published successfully",
+            postId: result.postId,
+          });
         } catch (err: any) {
           console.error("TikTok post error:", err);
           return res
