@@ -5,11 +5,6 @@ import * as crypto from "crypto";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
 
-const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID!;
-const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET!;
-const FRONTEND_URL = process.env.FRONTEND_URL!;
-const LINKEDIN_REDIRECT_URI = process.env.LINKEDIN_REDIRECT_URI!;
-
 // 1. Start LinkedIn OAuth
 export const startDirectLinkedinAuth = async (req: any, res: Response) => {
   try {
