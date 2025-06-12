@@ -179,6 +179,9 @@ export async function handlePlatformUploadAndPost({
           profileImageUrl: postMeta.accountType,
           platform,
         },
+        ...(platform === "tiktok" && {
+          tiktokAccountOptions: postMeta.tiktokAccountOptions,
+        }),
       };
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
