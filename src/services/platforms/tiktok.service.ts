@@ -202,7 +202,7 @@ export async function refreshTikTokToken(refreshToken: string) {
   } catch (error: any) {
     console.error(
       "TikTok token refresh error:",
-      error.response?.data || error.message
+      error.response?.data ?? error.message
     );
     return {
       success: false,
@@ -324,10 +324,10 @@ export async function post({
 
     return { success: true, postId: publishId };
   } catch (error: any) {
-    console.error("TikTok post error:", error?.response?.data || error.message);
+    console.error("TikTok post error:", error?.response?.data ?? error.message);
     return {
       success: false,
-      error: error.message || "Unknown TikTok post error",
+      error: error.message ?? "Unknown TikTok post error",
     };
   }
 }
@@ -372,7 +372,6 @@ async function initAndUploadDirectTikTok(
   caption: string,
   tiktokAccountOptions: any
 ): Promise<string> {
-  console.log({ tiktokAccountOptions });
   if (!file?.buffer || file.buffer.length === 0)
     throw new Error("Invalid video file buffer");
 
@@ -448,10 +447,10 @@ async function commitDirectTikTokUpload(
 
     return res;
   } catch (err: any) {
-    console.error("Commit error:", err?.response?.data || err.message);
+    console.error("Commit error:", err?.response?.data ?? err.message);
     throw new Error(
       "TikTok commit failed: " +
-        (err?.response?.data?.error?.message || err.message)
+        (err?.response?.data?.error?.message ?? err.message)
     );
   }
 }
