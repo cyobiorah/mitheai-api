@@ -11,7 +11,6 @@ import redisService from "../../utils/redisClient";
 import * as crypto from "crypto";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
-import { sanitizeAccount } from "../../utils";
 
 const rawCallbackUrl: string = process.env.TIKTOK_REDIRECT_URI ?? "";
 
