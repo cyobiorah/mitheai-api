@@ -78,6 +78,12 @@ export async function fetchCloudinaryFileBuffer(
   buffer: Buffer;
   mimetype: string;
 }> {
+  // Validate publicId to ensure it conforms to expected format
+  const validPublicIdPattern = /^[a-zA-Z0-9_-]+$/; // Allow only alphanumeric, underscore, and hyphen
+  if (!validPublicIdPattern.test(publicId)) {
+    throw new Error(`Invalid publicId: ${publicId}`);
+  }
+
   const url = `https://res.cloudinary.com/${
     process.env.CLOUDINARY_CLOUD_NAME
   }/${fileType ?? "image"}/upload/${publicId}`;

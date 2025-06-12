@@ -274,6 +274,12 @@ export async function post({
 
   const fileBuffer = await Promise.all(
     mediaFiles.map(async (file: string) => {
+      // Validate file (publicId) to ensure it conforms to expected format
+      const validPublicIdPattern = /^[a-zA-Z0-9_-]+$/; // Allow only alphanumeric, underscore, and hyphen
+      if (!validPublicIdPattern.test(file)) {
+        throw new Error(`Invalid media file publicId: ${file}`);
+      }
+
       const publicId = file;
       const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
         `skedlii/${publicId}`,
