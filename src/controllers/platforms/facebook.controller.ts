@@ -51,7 +51,7 @@ export const handleFacebookCallback = async (
   try {
     // 1. Exchange code for access token
     const tokenRes = await axios.post(
-      "https://graph.facebook.com/v19.0/oauth/access_token",
+      "https://graph.facebook.com/v22.0/oauth/access_token",
       new URLSearchParams({
         client_id: process.env.META_CLIENT_ID!,
         client_secret: process.env.META_CLIENT_SECRET!,
@@ -61,6 +61,8 @@ export const handleFacebookCallback = async (
       })
     );
 
+    console.log({ data: tokenRes.data });
+
     const userAccessToken = tokenRes.data.access_token;
     const tokenExpiry = tokenRes.data.expires_in
       ? Date.now() + tokenRes.data.expires_in * 1000
@@ -68,23 +70,27 @@ export const handleFacebookCallback = async (
 
     // 2. Fetch Facebook Pages
     const pagesRes = await axios.get(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`
+      `https://graph.facebook.com/v22.0/me/accounts?access_token=${userAccessToken}`
     );
+    console.log({ pagesRes });
     const pages = pagesRes.data.data;
+    console.log({ pages });
     if (!pages || pages.length === 0) {
       throw new Error("No Facebook Pages found for this user.");
     }
-
-    let connectedIG = false;
 
     for (const page of pages) {
       const pageId = page.id;
 
       // Fetch Page details
       const pageDetailsRes = await axios.get(
-        `https://graph.facebook.com/v19.0/${pageId}?fields=name,instagram_business_account&access_token=${userAccessToken}`
+        `https://graph.facebook.com/v22.0/${pageId}?fields=name,instagram_business_account&access_token=${userAccessToken}`
       );
+      console.log({ pageDetailsRes });
+
       const pageData = pageDetailsRes.data;
+
+      console.log({ pageData });
 
       // Always save Facebook Page account
       const fbAccountPayload = {

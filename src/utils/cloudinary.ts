@@ -71,6 +71,44 @@ export function uploadToCloudinaryBuffer(
   });
 }
 
+// export async function uploadUrlToCloudinary(url: string) {
+//   const response = await axios.get(url, { responseType: "arraybuffer" });
+//   const buffer = Buffer.from(response.data, "binary");
+
+//   const result = await cloudinary.v2.uploader.upload_stream({
+//     resource_type: "auto",
+//     folder: "threads-media",
+//   });
+
+//   console.log({ result });
+//   return result.secure_url;
+// }
+
+export async function uploadUrlToCloudinary(url: string): Promise<string> {
+  const response = await axios.get(url, { responseType: "arraybuffer" });
+  const buffer = Buffer.from(response.data, "binary");
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.v2.uploader.upload_stream(
+      {
+        resource_type: "auto",
+        folder: "threads-media",
+      },
+      (error, result) => {
+        if (error) {
+          return reject(error as Error);
+        }
+        if (!result?.secure_url) {
+          return reject(new Error("No secure_url returned from Cloudinary"));
+        }
+        resolve(result.secure_url);
+      }
+    );
+
+    uploadStream.end(buffer); // Pipe buffer into the stream
+  });
+}
+
 export async function fetchCloudinaryFileBuffer(
   publicId: string,
   fileType?: "image" | "video"
