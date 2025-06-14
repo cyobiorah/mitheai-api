@@ -194,7 +194,6 @@ export const postContent = async (
     updatedAt: now,
     metadata: {
       platform: "instagram",
-      platformAccountId: null,
       accountId: igUserId,
       accountName: account.accountName,
       accountType: account.accountType,

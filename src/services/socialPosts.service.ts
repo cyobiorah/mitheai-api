@@ -11,6 +11,7 @@ import { postToFacebook } from "../controllers/platforms/facebook.controller";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { lookupCollectionDetails } from "../utils/mongoAggregations";
 import { postToLinkedIn } from "./platforms/linkedin.service";
+import { postToYouTube } from "./platforms/youtube.service";
 import { post as postToTikTok } from "./platforms/tiktok.service";
 import { toUTC } from "../utils/dateUtils";
 
@@ -115,7 +116,6 @@ export async function handlePlatformUploadAndPost({
     accountType: string;
     caption?: string;
     mediaType: "image" | "video";
-    platformAccountId: string;
     accessToken: string;
     dimensions: {
       id: string;
@@ -140,7 +140,11 @@ export async function handlePlatformUploadAndPost({
 
     let mediaUrls: string[] = [];
 
-    if (platform !== "linkedin" && platform !== "tiktok") {
+    if (
+      platform !== "linkedin" &&
+      platform !== "tiktok" &&
+      platform !== "youtube"
+    ) {
       mediaUrls = await handleTransformAndUpload({
         mediaFiles,
         postMeta,
@@ -179,10 +183,13 @@ export async function handlePlatformUploadAndPost({
           profileImageUrl: postMeta.accountType,
           platform,
         },
+        ...(platform === "tiktok" && {
+          tiktokAccountOptions: postMeta.tiktokAccountOptions,
+        }),
       };
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
-      if (platform === "linkedin" || platform === "tiktok") {
+      if (["linkedin", "tiktok", "youtube"].includes(platform)) {
         const fileRefs: string[] = [];
 
         for (const file of mediaFiles) {
@@ -216,7 +223,6 @@ export async function handlePlatformUploadAndPost({
       mediaUrls,
       mediaType: postMeta.mediaType,
       accountId: postMeta.accountId,
-      platformAccountId: postMeta.platformAccountId,
       accessToken: postMeta.accessToken,
       userId,
     };
@@ -240,6 +246,26 @@ export async function handlePlatformUploadAndPost({
       case "twitter": {
         await postToTwitter({ postData: payload, res });
         return { success: true };
+      }
+      case "youtube": {
+        try {
+          const result = await postToYouTube({
+            postData: payload,
+            mediaFiles,
+          });
+          if (!result.success) {
+            return res.status(400).json({ error: result.error });
+          }
+          return res.status(200).json({
+            message: "Post published successfully",
+            postId: result.videoId,
+          });
+        } catch (err: any) {
+          console.error("YouTube post error:", err);
+          return res
+            .status(500)
+            .json({ error: "Unexpected error posting to YouTube" });
+        }
       }
       case "linkedin": {
         try {

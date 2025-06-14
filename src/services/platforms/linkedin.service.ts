@@ -51,7 +51,7 @@ export async function createSocialAccount(user: any, profile: any, token: any) {
 
   const metadata = {
     profileUrl: `https://www.linkedin.com/in/${accountId}`,
-    picture: profile.picture,
+    profileImageUrl: profile.picture,
     email: profile.email,
     verified: profile.email_verified,
     locale: profile.locale,
@@ -362,7 +362,6 @@ export async function postContent(
       content: message,
       metadata: {
         platform: account.platform,
-        platformAccountId: account.platformAccountId,
         accountId: account.accountId,
         accountName: account.accountName,
         accountType: account.accountType,
@@ -542,7 +541,6 @@ export async function postToLinkedIn({
       content,
       metadata: {
         platform: account.platform,
-        platformAccountId: account.platformAccountId,
         accountId: account.accountId,
         accountName: account.accountName,
         accountType: account.accountType,

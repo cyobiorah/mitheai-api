@@ -2,15 +2,16 @@ import { getCollections } from "../config/db";
 import { ObjectId } from "mongodb";
 import { post as postToTwitter } from "../services/platforms/twitter.service";
 import { postToThreads } from "../services/platforms/threads.service";
-
+import { post as postToTikTok } from "../services/platforms/tiktok.service";
 import { postToInstagram } from "../controllers/platforms/instagram.controller";
 import { postToLinkedIn } from "../services/platforms/linkedin.service";
 import { fetchCloudinaryFileBuffer } from "../utils/cloudinary";
+import { postToYouTube } from "../services/platforms/youtube.service";
 
 interface PlatformDetails {
   scheduledPostId: string;
   platform: {
-    platformName: "twitter" | "linkedin" | "instagram" | "threads";
+    platformName: "twitter" | "linkedin" | "instagram" | "threads" | "tiktok";
     accountId: string;
   };
   userId: string;
@@ -116,7 +117,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
               accountType: account.accountType,
               content: post.content,
               mediaType: post.mediaType,
-              platformAccountId: account.accountId,
               accessToken: account.accessToken,
               dimensions: post.dimensions,
               mediaUrls: post.mediaUrls,
@@ -153,7 +153,6 @@ export const postToPlatform = async (job: PlatformDetails) => {
           accountType: account.accountType,
           content: post.content,
           mediaType: post.mediaType,
-          platformAccountId: account.accountId,
           accessToken: account.accessToken,
           dimensions: post.dimensions,
           mediaUrls: post.mediaUrls,
@@ -170,6 +169,90 @@ export const postToPlatform = async (job: PlatformDetails) => {
         }
         publishResult = {
           id: result.postId,
+        };
+        break;
+      }
+
+      case "tiktok": {
+        const payload = {
+          accountId: account.accountId,
+          accountName: account.accountName,
+          accountType: account.accountType,
+          content: post.content,
+          mediaType: post.mediaType,
+          accessToken: account.accessToken,
+          dimensions: post.dimensions,
+          mediaUrls: post.mediaUrls,
+          userId: job.userId,
+          tiktokAccountOptions: account.tiktokAccountOptions,
+        };
+
+        const result = await postToTikTok({
+          postData: payload,
+          mediaFiles: post.fileRefs,
+        });
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error,
+            errorType: "SERVICE_ERROR",
+          };
+        }
+        publishResult = {
+          id: result.postId,
+        };
+        break;
+      }
+
+      case "youtube": {
+        const mediaFiles = await Promise.all(
+          post.fileRefs.map(async (ref: string) => {
+            // Reconstruct the full publicId or Cloudinary path if needed
+            const publicId = `skedlii/${ref}`;
+            const { buffer, mimetype } = await fetchCloudinaryFileBuffer(
+              publicId,
+              "video"
+            );
+
+            if (!buffer || !mimetype) {
+              throw new Error(
+                `Invalid Cloudinary asset or missing content-type for ref: ${ref}`
+              );
+            }
+
+            return {
+              originalname: ref,
+              buffer,
+              mimetype,
+            };
+          })
+        );
+
+        const payload = {
+          accountId: account.accountId,
+          accountName: account.accountName,
+          accountType: account.accountType,
+          content: post.content,
+          mediaType: post.mediaType,
+          accessToken: account.accessToken,
+          dimensions: post.dimensions,
+          mediaUrls: post.mediaUrls,
+          userId: job.userId,
+        };
+
+        const result = await postToYouTube({
+          postData: payload,
+          mediaFiles,
+        });
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error,
+            errorType: "SERVICE_ERROR",
+          };
+        }
+        publishResult = {
+          id: result.videoId,
         };
         break;
       }
@@ -250,7 +333,7 @@ export const postToPlatform = async (job: PlatformDetails) => {
         source: "scheduled_post",
         accountName: account.accountName,
         platform: account.platform,
-        platformAccountId: account.accountId,
+        accountId: account.accountId,
       },
     };
 

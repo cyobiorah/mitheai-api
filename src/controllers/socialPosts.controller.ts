@@ -185,7 +185,6 @@ export async function postToMultiPlatform({
         accountType: account.accountType,
         caption: parsedPostData.caption ?? parsedPostData.content,
         mediaType: parsedPostData.mediaType,
-        platformAccountId: account.accountId,
         accessToken: account.accessToken,
         dimensions: parsedDimensions,
         ...(parsedPostData.scheduledFor && {
