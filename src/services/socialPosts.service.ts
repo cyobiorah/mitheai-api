@@ -189,11 +189,7 @@ export async function handlePlatformUploadAndPost({
       };
 
       // 🔁 LinkedIn: Store a fileRef instead of URL (for later upload)
-      if (
-        platform === "linkedin" ||
-        platform === "tiktok" ||
-        platform === "youtube"
-      ) {
+      if (["linkedin", "tiktok", "youtube"].includes(platform)) {
         const fileRefs: string[] = [];
 
         for (const file of mediaFiles) {

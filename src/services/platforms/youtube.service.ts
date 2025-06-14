@@ -4,6 +4,7 @@ import axios from "axios";
 import { ObjectId } from "mongodb";
 import { getCollections } from "../../config/db";
 import { Readable } from "stream";
+import { isTokenExpired } from "./twitter.service";
 
 const YOUTUBE_CLIENT_ID = process.env.YOUTUBE_CLIENT_ID!;
 const YOUTUBE_CLIENT_SECRET = process.env.YOUTUBE_CLIENT_SECRET!;
@@ -244,8 +245,8 @@ export async function createSocialAccount(user: any, profile: any, token: any) {
   return insertResult;
 }
 
-export async function refreshAccessToken(accountId: string): Promise<any> {
-  const account = await getSocialAccount(accountId);
+export async function refreshAccessToken(id: string): Promise<any> {
+  const account = await getSocialAccount(id);
 
   if (!account?.refreshToken) {
     throw new Error("Account not found or no refresh token");
@@ -288,7 +289,7 @@ export async function refreshAccessToken(accountId: string): Promise<any> {
 
     const { socialaccounts } = await getCollections();
     await socialaccounts.updateOne(
-      { _id: new ObjectId(accountId) },
+      { _id: new ObjectId(id) },
       { $set: updatedAccount }
     );
 
@@ -306,10 +307,10 @@ export async function refreshAccessToken(accountId: string): Promise<any> {
   }
 }
 
-export async function getSocialAccount(accountId: string): Promise<any> {
+export async function getSocialAccount(id: string): Promise<any> {
   const { socialaccounts } = await getCollections();
   try {
-    return socialaccounts.findOne({ _id: new ObjectId(accountId) });
+    return socialaccounts.findOne({ _id: new ObjectId(id) });
   } catch (error) {
     console.error(`Error retrieving social account :`, error);
     return null;
@@ -327,7 +328,7 @@ export async function postToYouTube({
 
   const { socialaccounts, socialposts } = await getCollections();
 
-  const account = await socialaccounts.findOne({
+  let account = await socialaccounts.findOne({
     accountId,
     platform: "youtube",
   });
@@ -337,9 +338,13 @@ export async function postToYouTube({
   }
 
   if (!account.accessToken || new Date(account.tokenExpiry) < new Date()) {
+    account = await refreshAccessToken(account._id.toString());
+  }
+
+  if (!account?.accessToken || !account?.refreshToken) {
     return {
       success: false,
-      error: "YouTube access token has expired. Please reconnect your account.",
+      error: "Unable to refresh token, please reconnect your account.",
     };
   }
 
