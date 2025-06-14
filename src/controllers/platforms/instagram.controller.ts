@@ -4,6 +4,7 @@ import {
   saveOrUpdateMetaAccount,
   getAuthorizationUrl,
 } from "../../services/platforms/meta.service";
+import { getAuthorizationUrl as getInstagramAuthorizationUrl } from "../../services/platforms/instagram.service";
 import redisService from "../../utils/redisClient";
 import axios from "axios";
 import { getCollections } from "../../config/db";
@@ -22,7 +23,7 @@ export const startDirectInstagramOAuth = async (
     600
   );
 
-  const redirectUri = getAuthorizationUrl(state, "instagram");
+  const redirectUri = getInstagramAuthorizationUrl(state);
 
   res.send(redirectUri);
 };

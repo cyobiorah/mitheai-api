@@ -3,6 +3,7 @@ import redisService from "../../utils/redisClient";
 import { getAuthorizationUrl } from "../../services/platforms/meta.service";
 import axios from "axios";
 import * as metaService from "../../services/platforms/meta.service";
+import { uploadUrlToCloudinary } from "../../utils/cloudinary";
 
 export const startDirectMetaOAuth = async (
   req: Request,
@@ -82,6 +83,8 @@ export const handleMetaCallback = async (
       );
       const pageData = pageDetailsRes.data;
 
+      console.log({ pageData });
+
       // Always save Facebook Page account
       const fbAccountPayload = {
         platform: "facebook" as "facebook" | "instagram",
@@ -123,6 +126,10 @@ export const handleMetaCallback = async (
         );
         const igProfile = igProfileRes.data;
 
+        const profileImageUrl = await uploadUrlToCloudinary(
+          igProfile.profile_picture_url
+        );
+
         const igPayload = {
           platform: "instagram" as "facebook" | "instagram",
           accountType: "business",
@@ -138,7 +145,7 @@ export const handleMetaCallback = async (
           currentTeamId,
           metadata: {
             profileUrl: `https://instagram.com/${igProfile.username}`,
-            profileImageUrl: igProfile.profile_picture_url,
+            profileImageUrl,
             followerCount: igProfile.followers_count,
             fbPageId: pageId,
             fbPageName: pageData.name,

@@ -36,12 +36,12 @@ interface InstagramAccountPayload {
 }
 
 export const getAuthorizationUrl = (state: string) => {
-  const base = "https://www.facebook.com/v19.0/dialog/oauth";
+  // const base = "https://www.facebook.com/v19.0/dialog/oauth";
+  const base = "https://www.instagram.com/oauth/authorize";
   const params = new URLSearchParams({
     client_id: INSTAGRAM_CLIENT_ID,
     redirect_uri: INSTAGRAM_REDIRECT_URI,
-    scope:
-      "pages_show_list,instagram_basic,instagram_content_publish,pages_read_engagement,business_management",
+    scope: "instagram_business_basic,instagram_business_content_publish",
     response_type: "code",
     state,
   });
