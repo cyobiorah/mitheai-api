@@ -76,7 +76,7 @@ export const handleInstagramCallback = async (
       return;
     }
 
-    const shortLivedAccessToken = shortLivedAccessTokenRes.data[0].access_token;
+    const shortLivedAccessToken = shortLivedAccessTokenRes.data.access_token;
 
     // 2. Exchange short lived access token for long lived access token
     const longLivedTokenRes: any = await axios.post(
@@ -117,7 +117,7 @@ export const handleInstagramCallback = async (
       profile_picture_url,
       followers_count,
       follows_count,
-    } = igUserDetailsRes.data[0];
+    } = igUserDetailsRes.data;
 
     const { socialaccounts } = await getCollections();
 
