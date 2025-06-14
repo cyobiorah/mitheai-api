@@ -1,5 +1,6 @@
 import { Request, Response as ExpressResponse } from "express";
 import * as instagramService from "../../services/platforms/instagram.service";
+import * as crypto from "crypto";
 import {
   saveOrUpdateMetaAccount,
   getAuthorizationUrl,
@@ -15,7 +16,8 @@ export const startDirectInstagramOAuth = async (
   res: ExpressResponse
 ) => {
   const { id: userId, organizationId, currentTeamId } = (req as any).user!;
-  const state = `${userId}:${organizationId}:${currentTeamId}:${Date.now()}`;
+  // const state = `${userId}:${organizationId}:${currentTeamId}:${Date.now()}`;
+  const state = crypto.randomBytes(16).toString("hex");
 
   await redisService.set(
     `instagram:state:${state}`,
