@@ -46,99 +46,173 @@ export const handleInstagramCallback = async (
   }
 
   const stored = await redisService.get(`instagram:state:${state as string}`);
-  if (!stored) return res.status(403).send("Invalid or expired state.");
+  if (!stored) return res.status(403).send("Invalid or Expired State");
 
   const { userId, organizationId, currentTeamId } = JSON.parse(stored);
 
   try {
-    // 1. Exchange code for access token
-    const tokenRes = await axios.post(
-      "https://graph.facebook.com/v19.0/oauth/access_token",
+    // 1. Exchange code for short lived access token
+    const shortLivedAccessTokenRes: any = await axios.post(
+      "https://api.instagram.com/oauth/access_token",
       new URLSearchParams({
-        client_id: process.env.META_CLIENT_ID!,
-        client_secret: process.env.META_CLIENT_SECRET!,
+        client_id: process.env.INSTAGRAM_CLIENT_ID!,
+        client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
         grant_type: "authorization_code",
         redirect_uri: process.env.INSTAGRAM_REDIRECT_URI!,
         code: code as string,
       })
     );
 
-    const userAccessToken = tokenRes.data.access_token;
-    const tokenExpiry = tokenRes.data.expires_in
-      ? Date.now() + tokenRes.data.expires_in * 1000
-      : null;
+    console.log({ shortLivedAccessTokenRes });
 
-    // 2. Fetch pages
-    const pagesRes = await axios.get(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`
-    );
-    const pages = pagesRes.data.data;
-    if (!pages || pages.length === 0) {
-      throw new Error("No Facebook Pages found for this user.");
-    }
-
-    // 3. Find page linked to Instagram Business account
-    let igBusinessAccount = null;
-    let fbPage = null;
-    for (const page of pages) {
-      const pageRes = await axios.get(
-        `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account,name&access_token=${userAccessToken}`
+    if (shortLivedAccessTokenRes.error_message) {
+      res.redirect(
+        `${
+          process.env.FRONTEND_URL
+        }/dashboard/accounts?status=failed&message=${encodeURIComponent(
+          shortLivedAccessTokenRes.error_message
+        )}`
       );
-      if (pageRes.data.instagram_business_account) {
-        igBusinessAccount = pageRes.data.instagram_business_account;
-        fbPage = pageRes.data;
-        break;
-      }
+      return;
     }
 
-    if (!igBusinessAccount) {
-      throw new Error("No connected Instagram Business Account found.");
-    }
+    const shortLivedAccessToken = shortLivedAccessTokenRes.data[0].access_token;
 
-    // 4. Get IG Profile info
-    const igId = igBusinessAccount.id;
-    const igProfileRes = await axios.get(
-      `https://graph.facebook.com/v19.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`
+    // 2. Exchange short lived access token for long lived access token
+    const longLivedTokenRes: any = await axios.post(
+      "https://graph.instagram.com/access_token",
+      new URLSearchParams({
+        client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+        grant_type: "ig_exchange_token",
+        access_token: shortLivedAccessToken,
+      })
     );
-    const igProfile = igProfileRes.data;
 
-    // 5. Compose payload
-    const accountPayload = {
-      platform: "instagram" as "facebook" | "instagram",
-      accountType: "business",
-      accountName: igProfile.username,
-      accountId: igId,
-      accessToken: userAccessToken,
-      refreshToken: null,
-      tokenExpiry,
+    console.log({ longLivedTokenRes });
+
+    const {
+      access_token: longLivedAccessToken,
+      expires_in: longLivedTokenExpiry,
+    } = longLivedTokenRes.data;
+
+    // 3. Get User Details
+    const igUserDetailsRes: any = await axios.get(
+      "https://graph.instagram.com/v23.0/me",
+      {
+        params: {
+          access_token: longLivedAccessToken,
+          fields:
+            "user_id,username,name,account_type,profile_picture_url,followers_count,follows_count",
+        },
+      }
+    );
+
+    console.log({ igUserDetailsRes });
+
+    const {
+      user_id,
+      username,
+      name,
+      account_type,
+      profile_picture_url,
+      followers_count,
+      follows_count,
+    } = igUserDetailsRes.data[0];
+
+    const { socialaccounts } = await getCollections();
+
+    const anyExistingAccount = await socialaccounts.findOne({
+      platform: "instagram",
+      accountId: user_id,
+    });
+
+    if (anyExistingAccount && anyExistingAccount.userId.toString() !== userId) {
+      const error: any = new Error(
+        "This social account is already connected to another user in the system"
+      );
+      error.code = "account_already_connected_to_other_user";
+      error.details = {
+        existingAccountId: anyExistingAccount._id,
+        connectedUserId: anyExistingAccount.userId,
+        organizationId: anyExistingAccount.organizationId,
+        teamId: anyExistingAccount.teamId,
+        connectionDate: anyExistingAccount.createdAt,
+      };
+      throw error;
+    }
+
+    const userExistingAccount = await socialaccounts.findOne({
+      platform: "instagram",
+      accountId: user_id,
+      userId: new ObjectId(userId),
+    });
+
+    if (userExistingAccount) {
+      // Treat this as a reconnection attempt — update token and metadata
+      const updatedAccount = {
+        accessToken: longLivedAccessToken,
+        tokenExpiry: new Date(Date.now() + longLivedTokenExpiry * 1000),
+        lastRefreshed: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          ...userExistingAccount.metadata,
+          profileUrl: `https://instagram.com/${username}`,
+          followerCount: followers_count,
+          followingCount: follows_count,
+          lastChecked: new Date(),
+          profileImageUrl: profile_picture_url,
+          username,
+        },
+        status: "active",
+      };
+
+      await socialaccounts.updateOne(
+        { _id: userExistingAccount._id },
+        { $set: updatedAccount }
+      );
+
+      return {
+        _id: userExistingAccount._id,
+        updated: true,
+      };
+    }
+
+    const socialAccount: any = {
+      platform: "instagram",
+      accountType: account_type,
+      accountName: name,
+      userName: username,
+      accountId: user_id,
+      accessToken: longLivedAccessToken,
+      tokenExpiry: new Date(Date.now() + longLivedTokenExpiry * 1000),
       lastRefreshed: new Date(),
-      status: "active",
-      userId,
-      organizationId,
-      currentTeamId,
       metadata: {
-        profileUrl: `https://instagram.com/${igProfile.username}`,
-        profileImageUrl: igProfile.profile_picture_url,
-        followerCount: igProfile.followers_count,
-        fbPageId: fbPage.id,
-        fbPageName: fbPage.name,
+        profileUrl: `https://instagram.com/${username}`,
+        profileImageUrl: profile_picture_url,
+        followerCount: followers_count,
+        followingCount: follows_count,
         lastChecked: new Date(),
       },
+      status: "active",
+      userId: new ObjectId(userId),
       permissions: {
         canPost: true,
         canSchedule: true,
         canAnalyze: true,
       },
-      connectedAt: new Date(),
+      createdAt: new Date(),
       updatedAt: new Date(),
+      ...(organizationId ? new ObjectId(organizationId) : null),
+      ...(currentTeamId ? new ObjectId(currentTeamId) : null),
     };
 
-    // 6. Save via service
-    await saveOrUpdateMetaAccount(accountPayload);
+    await socialaccounts.insertOne(socialAccount);
 
-    res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/accounts?status=success`
-    );
+    return res.json({
+      _id: socialAccount._id,
+      created: true,
+      message: "Instagram Account created successfully",
+    });
   } catch (err: any) {
     console.error("Instagram callback error:", err);
     res.redirect(
@@ -150,6 +224,158 @@ export const handleInstagramCallback = async (
     );
   }
 };
+
+// export const handleInstagramCallback = async (
+//   req: Request,
+//   res: ExpressResponse
+// ) => {
+//   const { code, state } = req.query;
+
+//   console.log({ code });
+//   console.log({ state });
+
+//   if (!code || !state) {
+//     res.redirect(
+//       `${
+//         process.env.FRONTEND_URL
+//       }/dashboard/accounts?status=failed&message=${encodeURIComponent(
+//         "Missing code or state"
+//       )}`
+//     );
+//     return;
+//   }
+
+//   const stored = await redisService.get(`instagram:state:${state as string}`);
+//   if (!stored) return res.status(403).send("Invalid or expired state.");
+
+//   const { userId, organizationId, currentTeamId } = JSON.parse(stored);
+
+//   try {
+//     // 1. Exchange code for access token
+//     const tokenRes: any = await axios.post(
+//       "https://api.instagram.com/oauth/access_token",
+//       new URLSearchParams({
+//         client_id: process.env.INSTAGRAM_CLIENT_ID!,
+//         client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+//         grant_type: "authorization_code",
+//         redirect_uri: process.env.INSTAGRAM_REDIRECT_URI!,
+//         code: code as string,
+//       })
+//     );
+
+//     console.log({ tokenRes: tokenRes.data[0] });
+
+//     const userAccessToken = tokenRes.data[0].access_token;
+
+//     if (tokenRes.error_message) {
+//       res.redirect(
+//         `${
+//           process.env.FRONTEND_URL
+//         }/dashboard/accounts?status=failed&message=${encodeURIComponent(
+//           tokenRes.error_message
+//         )}`
+//       );
+//       return;
+//     }
+
+//     // 2. Exchange access_token for Long Lived Token
+//     const longLivedTokenRes: any = await axios.post(
+//       "https://graph.instagram.com/access_token",
+//       new URLSearchParams({
+//         client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+//         grant_type: "ig_exchange_token",
+//         access_token: userAccessToken,
+//       })
+//     );
+
+//     console.log({ longLivedTokenRes });
+
+//     const longLivedAccessToken = longLivedTokenRes.access_token;
+//     const longLivedTokenExpiry =
+//       Date.now() + longLivedTokenRes.expires_in * 1000;
+
+//     // 2. Fetch pages
+//     const pagesRes = await axios.get(
+//       `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`
+//     );
+//     const pages = pagesRes.data.data;
+//     if (!pages || pages.length === 0) {
+//       throw new Error("No Facebook Pages found for this user.");
+//     }
+
+//     // 3. Find page linked to Instagram Business account
+//     let igBusinessAccount = null;
+//     let fbPage = null;
+//     for (const page of pages) {
+//       const pageRes = await axios.get(
+//         `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account,name&access_token=${userAccessToken}`
+//       );
+//       if (pageRes.data.instagram_business_account) {
+//         igBusinessAccount = pageRes.data.instagram_business_account;
+//         fbPage = pageRes.data;
+//         break;
+//       }
+//     }
+
+//     if (!igBusinessAccount) {
+//       throw new Error("No connected Instagram Business Account found.");
+//     }
+
+//     // 4. Get IG Profile info
+//     const igId = igBusinessAccount.id;
+//     const igProfileRes = await axios.get(
+//       `https://graph.facebook.com/v19.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`
+//     );
+//     const igProfile = igProfileRes.data;
+
+//     // 5. Compose payload
+//     const accountPayload = {
+//       platform: "instagram" as "facebook" | "instagram",
+//       accountType: "business",
+//       accountName: igProfile.username,
+//       accountId: igId,
+//       accessToken: userAccessToken,
+//       refreshToken: null,
+//       tokenExpiry,
+//       lastRefreshed: new Date(),
+//       status: "active",
+//       userId,
+//       organizationId,
+//       currentTeamId,
+//       metadata: {
+//         profileUrl: `https://instagram.com/${igProfile.username}`,
+//         profileImageUrl: igProfile.profile_picture_url,
+//         followerCount: igProfile.followers_count,
+//         fbPageId: fbPage.id,
+//         fbPageName: fbPage.name,
+//         lastChecked: new Date(),
+//       },
+//       permissions: {
+//         canPost: true,
+//         canSchedule: true,
+//         canAnalyze: true,
+//       },
+//       connectedAt: new Date(),
+//       updatedAt: new Date(),
+//     };
+
+//     // 6. Save via service
+//     await saveOrUpdateMetaAccount(accountPayload);
+
+//     res.redirect(
+//       `${process.env.FRONTEND_URL}/dashboard/accounts?status=success`
+//     );
+//   } catch (err: any) {
+//     console.error("Instagram callback error:", err);
+//     res.redirect(
+//       `${
+//         process.env.FRONTEND_URL
+//       }/dashboard/accounts?status=failed&message=${encodeURIComponent(
+//         err.message ?? "Unknown error"
+//       )}`
+//     );
+//   }
+// };
 
 export const post = async (req: Request, res: ExpressResponse) => {
   try {
