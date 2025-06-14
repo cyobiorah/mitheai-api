@@ -65,27 +65,28 @@ export const handleInstagramCallback = async (
 
     console.log({ shortLivedAccessTokenRes });
 
-    if (shortLivedAccessTokenRes.error_message) {
-      res.redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/dashboard/accounts?status=failed&message=${encodeURIComponent(
-          shortLivedAccessTokenRes.error_message
-        )}`
-      );
-      return;
+    if (shortLivedAccessTokenRes.data.error_message) {
+      return res.status(400).send(shortLivedAccessTokenRes.data.error_message);
     }
 
-    const shortLivedAccessToken = shortLivedAccessTokenRes.data.access_token;
+    const {
+      access_token: shortLivedAccessToken,
+      user_id: igId,
+      permissions,
+    } = shortLivedAccessTokenRes.data;
+
+    console.log({ igId, permissions, shortLivedAccessToken });
 
     // 2. Exchange short lived access token for long lived access token
-    const longLivedTokenRes: any = await axios.post(
+    const longLivedTokenRes: any = await axios.get(
       "https://graph.instagram.com/access_token",
-      new URLSearchParams({
-        client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
-        grant_type: "ig_exchange_token",
-        access_token: shortLivedAccessToken,
-      })
+      {
+        params: {
+          client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+          grant_type: "ig_exchange_token",
+          access_token: shortLivedAccessToken,
+        },
+      }
     );
 
     console.log({ longLivedTokenRes });
