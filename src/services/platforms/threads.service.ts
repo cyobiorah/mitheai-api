@@ -208,20 +208,34 @@ export async function createSocialAccount(
     }
 
     const { socialaccounts } = await getCollections();
-    const existingAccountForAnyUser = await socialaccounts.findOne({
+
+    const accountId = profile.id;
+
+    const anyExistingAccount = await socialaccounts.findOne({
       platform: "threads",
-      platformAccountId: profile.id,
+      accountId,
     });
 
-    if (existingAccountForAnyUser) {
-      console.warn(
-        `Threads account ${profile.id} already linked to user ${existingAccountForAnyUser.userId}`
+    if (anyExistingAccount && anyExistingAccount.userId.toString() !== userId) {
+      const error: any = new Error(
+        "This social account is already connected to another user in the system"
       );
-      throw new SocialAccountError(
-        "ACCOUNT_ALREADY_LINKED",
-        "This Threads account is already connected to another user"
-      );
+      error.code = "account_already_connected_to_other_user";
+      error.details = {
+        existingAccountId: anyExistingAccount._id,
+        connectedUserId: anyExistingAccount.userId,
+        organizationId: anyExistingAccount.organizationId,
+        teamId: anyExistingAccount.teamId,
+        connectionDate: anyExistingAccount.createdAt,
+      };
+      throw error;
     }
+
+    const userExistingAccount = await socialaccounts.findOne({
+      platform: "threads",
+      accountId,
+      userId: new ObjectId(userId),
+    });
 
     // Use the token expiration date from the long-lived token exchange if available
     // Otherwise default to 60 days from now
@@ -230,12 +244,42 @@ export async function createSocialAccount(
       lastTokenExpirationDate ??
       new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
+    if (userExistingAccount) {
+      // Treat this as a reconnection attempt — update token and metadata
+      const updatedAccount = {
+        accessToken,
+        refreshToken,
+        tokenExpiry: tokenExpiresAt,
+        lastRefreshed: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          ...userExistingAccount.metadata,
+          profileUrl: `https://threads.net/@${profile.username}`,
+          followerCount: profile.public_metrics?.followers_count,
+          followingCount: profile.public_metrics?.following_count,
+          lastChecked: new Date(),
+          profileImageUrl: profile.profile_picture_url,
+          username: profile.username,
+        },
+        status: "active",
+      };
+
+      await socialaccounts.updateOne(
+        { _id: userExistingAccount._id },
+        { $set: updatedAccount }
+      );
+
+      return {
+        _id: userExistingAccount._id,
+        updated: true,
+      };
+    }
+
     // Create a new social account
 
     const newAccount = await socialaccounts.insertOne({
       userId: new ObjectId(userId),
       platform: "threads",
-      platformAccountId: profile.id,
       accountName: profile.username,
       accountId: profile.id,
       accountType: organizationId ? "business" : "personal",
@@ -369,7 +413,7 @@ async function createTextPost(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const containerResponse = await axios.post(
-      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads`,
+      `https://graph.threads.net/v1.0/${account.accountId}/threads`,
       {
         text: content,
         media_type: "TEXT",
@@ -392,7 +436,7 @@ async function createTextPost(
     await delay(30000); // 30 seconds delay
 
     const publishResponse = await axios.post(
-      `https://graph.threads.net/v1.0/${account.platformAccountId}/threads_publish`,
+      `https://graph.threads.net/v1.0/${account.accountId}/threads_publish`,
       {
         creation_id: containerId,
       },

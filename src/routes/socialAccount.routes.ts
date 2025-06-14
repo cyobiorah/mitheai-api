@@ -17,6 +17,7 @@ import instagramRoutes from "./platforms/instagram.routes";
 import metaRoutes from "./platforms/meta.routes";
 import facebookRoutes from "./platforms/facebook.routes";
 import tiktokRoutes from "./platforms/tiktok.routes";
+import youtubeRoutes from "./platforms/youtube.routes";
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.use("/instagram", instagramRoutes);
 router.use("/meta", metaRoutes);
 router.use("/facebook", facebookRoutes);
 router.use("/tiktok", tiktokRoutes);
+router.use("/youtube", youtubeRoutes);
 
 // Get Social Accounts by Organization
 router.get("/", requireJwtAuth, getSocialAccountsByOrganizationId);

@@ -7,7 +7,6 @@ export const socialAccountValidationSchema = Joi.object({
   platform: Joi.string()
     .valid("twitter", "facebook", "linkedin", "instagram", "threads")
     .required(),
-  platformAccountId: Joi.string().required(),
   accountType: Joi.string().valid("personal", "business").required(),
   accountName: Joi.string().required(),
   accountId: Joi.string().required(),
@@ -28,7 +27,6 @@ export const validateSocialAccountCreate = (data: any) =>
     platform: Joi.string()
       .valid("twitter", "facebook", "linkedin", "instagram", "threads")
       .required(),
-    platformAccountId: Joi.string().required(),
     accountType: Joi.string().valid("personal", "business").required(),
     accountName: Joi.string().required(),
     accountId: Joi.string().required(),

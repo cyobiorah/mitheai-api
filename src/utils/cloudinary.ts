@@ -105,7 +105,7 @@ export async function fetchCloudinaryFileBuffer(
  * @param {string} arString - The aspect ratio string.
  * @returns {number | null} The numerical aspect ratio, or null if parsing fails.
  */
-function parseAspectRatio(arString: string) {
+export function parseAspectRatio(arString: string) {
   if (!arString) return null;
   if (arString.includes(":")) {
     const parts = arString.split(":");
@@ -210,6 +210,177 @@ function getTargetCropAR(
   return targetARString;
 }
 
+// export function getCloudinaryTransformations(
+//   fileMimeType: string,
+//   metadata?: { width?: number; height?: number },
+//   platform: string = "general"
+// ): {
+//   transformation: Record<string, any> | undefined;
+// } {
+//   const platformKey = platform.toLowerCase();
+//   const platformConfig =
+//     platformConstraints[platformKey] || platformConstraints.general;
+
+//   if (!platformConfig) {
+//     // Should not happen if platformConstraints.general exists, but as a safeguard.
+//     return { transformation: undefined };
+//   }
+
+//   const isImage = fileMimeType.startsWith("image/");
+//   const isVideo = fileMimeType.startsWith("video/");
+
+//   if (isImage && platformConfig.image) {
+//     const imageConstraints = platformConfig.image;
+//     const imageWidth = metadata?.width;
+//     const imageHeight = metadata?.height;
+
+//     if (!imageWidth || !imageHeight) {
+//       return { transformation: undefined }; // Cannot process without dimensions
+//     }
+
+//     const originalAR = imageWidth / imageHeight;
+//     const maxWidth = imageConstraints.maxDimensions?.width;
+//     const maxHeight = imageConstraints.maxDimensions?.height;
+
+//     // Determine min/max accepted aspect ratios for the platform
+//     const { min: minAcceptedAR, max: maxAcceptedAR } = getMinMaxAR(
+//       imageConstraints.aspectRatios || []
+//     );
+
+//     let isAROutOfRange = false;
+//     if (minAcceptedAR !== null && maxAcceptedAR !== null) {
+//       isAROutOfRange = originalAR < minAcceptedAR || originalAR > maxAcceptedAR;
+//     }
+
+//     const isTooLargeInDimensions =
+//       (maxWidth && imageWidth > maxWidth) ||
+//       (maxHeight && imageHeight > maxHeight);
+
+//     // If aspect ratio is acceptable (or not defined for platform) AND dimensions are within limits, no transformation needed.
+//     if (!isAROutOfRange && !isTooLargeInDimensions) {
+//       return { transformation: undefined };
+//     }
+
+//     let transformParams: Record<string, any> = { fetch_format: "auto" };
+
+//     if (isAROutOfRange && minAcceptedAR !== null && maxAcceptedAR !== null) {
+//       // Aspect ratio is out of range, needs cropping to a supported AR.
+//       transformParams.aspect_ratio = getTargetCropAR(
+//         originalAR,
+//         minAcceptedAR,
+//         maxAcceptedAR,
+//         imageConstraints.aspectRatios || [],
+//         imageConstraints.recommendedAspectRatios || []
+//       );
+//       transformParams.crop = "fill";
+//       // When cropping to a new AR, usually one dimension is primary.
+//       // Let's use maxWidth if available, Cloudinary will calculate height based on AR.
+//       // If only maxHeight is available, that could be an alternative strategy.
+//       if (maxWidth) {
+//         transformParams.width = maxWidth;
+//       } else if (maxHeight) {
+//         // This case is less common for AR enforcement but possible.
+//         // If we only have maxHeight, and we set AR, width will be derived.
+//         // However, we also need to ensure the derived width doesn't exceed a potential maxWidth.
+//         // For simplicity now, we prioritize width for AR cropping.
+//         // A more complex logic might be needed if only height is constrained with AR.
+//         transformParams.height = maxHeight; // Or adjust based on platform preference
+//       }
+//       transformParams.gravity = "auto";
+//     } else if (isTooLargeInDimensions) {
+//       // Aspect ratio is acceptable (or no AR constraints), but the image is too large.
+//       // Scale it down, preserving its aspect ratio.
+//       transformParams.crop = "limit";
+//       if (maxWidth) transformParams.width = maxWidth;
+//       if (maxHeight) transformParams.height = maxHeight;
+//     } else {
+//       // This case should ideally be caught by the first check (no transformation)
+//       // but if somehow reached, means no transformation is determined to be needed.
+//       return { transformation: undefined };
+//     }
+
+//     // If after AR crop, the image is still too large for the *other* dimension constraint not directly set by AR crop
+//     // (e.g. cropped to AR using width, but resulting height > maxHeight), add a subsequent limit.
+//     // Cloudinary handles chained transformations. This can be done by adding another transformation component if needed,
+//     // or ensuring the initial crop/resize considers both. `crop: "fill"` with `width` and `aspect_ratio` should produce
+//     // an image of that width and AR. We then need to ensure this fits maxHeight.
+//     // A simpler Cloudinary approach for this is to set width, height, AR, and crop mode like `fill` or `thumb`.
+//     // Let's refine the AR cropping part to ensure it fits within BOTH maxWidth and maxHeight after AR adjustment.
+//     if (transformParams.crop === "fill" && transformParams.aspect_ratio) {
+//       // If we set width and AR, height is determined. Check if this height > maxHeight.
+//       // If we set height and AR, width is determined. Check if this width > maxWidth.
+//       // Cloudinary's `c_fill,w_W,h_H,ar_AR` will fill WxH using AR, potentially letterboxing/pillarboxing if W/H doesn't match AR.
+//       // To strictly crop to AR and then fit:
+//       // 1. Crop to AR: `c_fill,ar_TARGET_AR,g_auto` (this might result in a large image)
+//       // 2. Then scale: `c_limit,w_MAX_W,h_MAX_H`
+//       // This would require chained transformations. The current SDK structure might not directly support complex chains in one object.
+//       // For a single transformation object, if we crop to an aspect ratio, we also need to provide dimensions that respect that aspect ratio AND the max dimensions.
+
+//       // Let's simplify: if cropping to an AR, also provide target dimensions that fit.
+//       if (maxWidth && maxHeight) {
+//         const targetARNumeric = parseAspectRatio(transformParams.aspect_ratio);
+//         if (targetARNumeric) {
+//           // Calculate dimensions for targetAR that fit within maxWidth, maxHeight
+//           let targetWidth = maxWidth;
+//           let targetHeight = Math.round(maxWidth / targetARNumeric);
+
+//           if (targetHeight > maxHeight) {
+//             targetHeight = maxHeight;
+//             targetWidth = Math.round(maxHeight * targetARNumeric);
+//             // Re-check if this new targetWidth exceeds maxWidth (can happen with extreme ARs)
+//             if (targetWidth > maxWidth) targetWidth = maxWidth;
+//           }
+//           transformParams.width = targetWidth;
+//           transformParams.height = targetHeight;
+//         }
+//       } else if (maxWidth) {
+//         transformParams.width = maxWidth; // Height will be auto-adjusted by Cloudinary based on AR
+//       } else if (maxHeight) {
+//         transformParams.height = maxHeight; // Width will be auto-adjusted
+//       }
+//     }
+
+//     // If no transformParams were set (e.g. only metadata missing), return undefined.
+//     if (
+//       Object.keys(transformParams).length === 1 &&
+//       transformParams.fetch_format === "auto"
+//     ) {
+//       return { transformation: undefined };
+//     }
+
+//     return { transformation: transformParams };
+//   }
+
+//   if (isVideo && platformConfig.video) {
+//     const videoConstraints = platformConfig.video;
+//     const videoWidth = metadata?.width;
+//     const videoHeight = metadata?.height;
+
+//     // Similar logic can be applied for video aspect ratios and dimensions if needed.
+//     // For now, using the simpler dimension limiting logic from before.
+//     const maxWidth = videoConstraints.maxDimensions?.width;
+//     const maxHeight = videoConstraints.maxDimensions?.height;
+
+//     if (
+//       (maxWidth && videoWidth && videoWidth > maxWidth) ||
+//       (maxHeight && videoHeight && videoHeight > maxHeight)
+//     ) {
+//       let transformParams: Record<string, any> = {
+//         crop: "limit",
+//         fetch_format: "auto", // Or specific video format like "mp4"
+//         flags: "progressive", // For video
+//         dpr: "auto",
+//       };
+//       if (maxWidth) transformParams.width = maxWidth;
+//       if (maxHeight) transformParams.height = maxHeight;
+//       return { transformation: transformParams };
+//     }
+//     // Potentially add video-specific aspect ratio handling here too, similar to images.
+//   }
+
+//   return { transformation: undefined };
+// }
+
 export function getCloudinaryTransformations(
   fileMimeType: string,
   metadata?: { width?: number; height?: number },
@@ -222,7 +393,6 @@ export function getCloudinaryTransformations(
     platformConstraints[platformKey] || platformConstraints.general;
 
   if (!platformConfig) {
-    // Should not happen if platformConstraints.general exists, but as a safeguard.
     return { transformation: undefined };
   }
 
@@ -235,36 +405,35 @@ export function getCloudinaryTransformations(
     const imageHeight = metadata?.height;
 
     if (!imageWidth || !imageHeight) {
-      return { transformation: undefined }; // Cannot process without dimensions
+      return { transformation: undefined };
     }
 
     const originalAR = imageWidth / imageHeight;
     const maxWidth = imageConstraints.maxDimensions?.width;
     const maxHeight = imageConstraints.maxDimensions?.height;
 
-    // Determine min/max accepted aspect ratios for the platform
     const { min: minAcceptedAR, max: maxAcceptedAR } = getMinMaxAR(
       imageConstraints.aspectRatios || []
     );
 
-    let isAROutOfRange = false;
-    if (minAcceptedAR !== null && maxAcceptedAR !== null) {
-      isAROutOfRange = originalAR < minAcceptedAR || originalAR > maxAcceptedAR;
-    }
+    const isAROutOfRange =
+      minAcceptedAR !== null &&
+      maxAcceptedAR !== null &&
+      (originalAR < minAcceptedAR || originalAR > maxAcceptedAR);
 
-    const isTooLargeInDimensions =
+    const isTooLarge =
       (maxWidth && imageWidth > maxWidth) ||
       (maxHeight && imageHeight > maxHeight);
 
-    // If aspect ratio is acceptable (or not defined for platform) AND dimensions are within limits, no transformation needed.
-    if (!isAROutOfRange && !isTooLargeInDimensions) {
+    if (!isAROutOfRange && !isTooLarge) {
       return { transformation: undefined };
     }
 
-    let transformParams: Record<string, any> = { fetch_format: "auto" };
+    const transformParams: Record<string, any> = {
+      quality: 100,
+    };
 
     if (isAROutOfRange && minAcceptedAR !== null && maxAcceptedAR !== null) {
-      // Aspect ratio is out of range, needs cropping to a supported AR.
       transformParams.aspect_ratio = getTargetCropAR(
         originalAR,
         minAcceptedAR,
@@ -273,80 +442,13 @@ export function getCloudinaryTransformations(
         imageConstraints.recommendedAspectRatios || []
       );
       transformParams.crop = "fill";
-      // When cropping to a new AR, usually one dimension is primary.
-      // Let's use maxWidth if available, Cloudinary will calculate height based on AR.
-      // If only maxHeight is available, that could be an alternative strategy.
-      if (maxWidth) {
-        transformParams.width = maxWidth;
-      } else if (maxHeight) {
-        // This case is less common for AR enforcement but possible.
-        // If we only have maxHeight, and we set AR, width will be derived.
-        // However, we also need to ensure the derived width doesn't exceed a potential maxWidth.
-        // For simplicity now, we prioritize width for AR cropping.
-        // A more complex logic might be needed if only height is constrained with AR.
-        transformParams.height = maxHeight; // Or adjust based on platform preference
-      }
       transformParams.gravity = "auto";
-    } else if (isTooLargeInDimensions) {
-      // Aspect ratio is acceptable (or no AR constraints), but the image is too large.
-      // Scale it down, preserving its aspect ratio.
+    } else if (isTooLarge) {
       transformParams.crop = "limit";
-      if (maxWidth) transformParams.width = maxWidth;
-      if (maxHeight) transformParams.height = maxHeight;
-    } else {
-      // This case should ideally be caught by the first check (no transformation)
-      // but if somehow reached, means no transformation is determined to be needed.
-      return { transformation: undefined };
     }
 
-    // If after AR crop, the image is still too large for the *other* dimension constraint not directly set by AR crop
-    // (e.g. cropped to AR using width, but resulting height > maxHeight), add a subsequent limit.
-    // Cloudinary handles chained transformations. This can be done by adding another transformation component if needed,
-    // or ensuring the initial crop/resize considers both. `crop: "fill"` with `width` and `aspect_ratio` should produce
-    // an image of that width and AR. We then need to ensure this fits maxHeight.
-    // A simpler Cloudinary approach for this is to set width, height, AR, and crop mode like `fill` or `thumb`.
-    // Let's refine the AR cropping part to ensure it fits within BOTH maxWidth and maxHeight after AR adjustment.
-    if (transformParams.crop === "fill" && transformParams.aspect_ratio) {
-      // If we set width and AR, height is determined. Check if this height > maxHeight.
-      // If we set height and AR, width is determined. Check if this width > maxWidth.
-      // Cloudinary's `c_fill,w_W,h_H,ar_AR` will fill WxH using AR, potentially letterboxing/pillarboxing if W/H doesn't match AR.
-      // To strictly crop to AR and then fit:
-      // 1. Crop to AR: `c_fill,ar_TARGET_AR,g_auto` (this might result in a large image)
-      // 2. Then scale: `c_limit,w_MAX_W,h_MAX_H`
-      // This would require chained transformations. The current SDK structure might not directly support complex chains in one object.
-      // For a single transformation object, if we crop to an aspect ratio, we also need to provide dimensions that respect that aspect ratio AND the max dimensions.
-
-      // Let's simplify: if cropping to an AR, also provide target dimensions that fit.
-      if (maxWidth && maxHeight) {
-        const targetARNumeric = parseAspectRatio(transformParams.aspect_ratio);
-        if (targetARNumeric) {
-          // Calculate dimensions for targetAR that fit within maxWidth, maxHeight
-          let targetWidth = maxWidth;
-          let targetHeight = Math.round(maxWidth / targetARNumeric);
-
-          if (targetHeight > maxHeight) {
-            targetHeight = maxHeight;
-            targetWidth = Math.round(maxHeight * targetARNumeric);
-            // Re-check if this new targetWidth exceeds maxWidth (can happen with extreme ARs)
-            if (targetWidth > maxWidth) targetWidth = maxWidth;
-          }
-          transformParams.width = targetWidth;
-          transformParams.height = targetHeight;
-        }
-      } else if (maxWidth) {
-        transformParams.width = maxWidth; // Height will be auto-adjusted by Cloudinary based on AR
-      } else if (maxHeight) {
-        transformParams.height = maxHeight; // Width will be auto-adjusted
-      }
-    }
-
-    // If no transformParams were set (e.g. only metadata missing), return undefined.
-    if (
-      Object.keys(transformParams).length === 1 &&
-      transformParams.fetch_format === "auto"
-    ) {
-      return { transformation: undefined };
-    }
+    if (maxWidth) transformParams.width = maxWidth;
+    if (maxHeight) transformParams.height = maxHeight;
 
     return { transformation: transformParams };
   }
@@ -356,26 +458,26 @@ export function getCloudinaryTransformations(
     const videoWidth = metadata?.width;
     const videoHeight = metadata?.height;
 
-    // Similar logic can be applied for video aspect ratios and dimensions if needed.
-    // For now, using the simpler dimension limiting logic from before.
     const maxWidth = videoConstraints.maxDimensions?.width;
     const maxHeight = videoConstraints.maxDimensions?.height;
 
-    if (
+    const isTooLarge =
       (maxWidth && videoWidth && videoWidth > maxWidth) ||
-      (maxHeight && videoHeight && videoHeight > maxHeight)
-    ) {
-      let transformParams: Record<string, any> = {
-        crop: "limit",
-        fetch_format: "auto", // Or specific video format like "mp4"
-        flags: "progressive", // For video
-        dpr: "auto",
-      };
-      if (maxWidth) transformParams.width = maxWidth;
-      if (maxHeight) transformParams.height = maxHeight;
-      return { transformation: transformParams };
+      (maxHeight && videoHeight && videoHeight > maxHeight);
+
+    if (!isTooLarge) {
+      return { transformation: undefined };
     }
-    // Potentially add video-specific aspect ratio handling here too, similar to images.
+
+    const transformParams: Record<string, any> = {
+      quality: 100,
+      crop: "limit",
+    };
+
+    if (maxWidth) transformParams.width = maxWidth;
+    if (maxHeight) transformParams.height = maxHeight;
+
+    return { transformation: transformParams };
   }
 
   return { transformation: undefined };

@@ -40,10 +40,9 @@ export const exchangeCodeForTokensAndProfile = async (code: string) => {
   const profile = profileRes.data.data;
 
   return {
-    platformAccountId: profile.id,
     accountType: "personal", // or "business" if you determine from profile
     accountName: profile.name,
-    accountId: profile.username,
+    accountId: profile.id,
     accessToken: access_token,
     refreshToken: refresh_token,
     tokenExpiry: new Date(Date.now() + expires_in * 1000),
@@ -125,7 +124,6 @@ export async function createSocialAccount(
       accountType: organizationId ? "business" : "personal",
       accountName: profile.name,
       accountId: profile.id,
-      platformAccountId: profile.id,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
       tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
