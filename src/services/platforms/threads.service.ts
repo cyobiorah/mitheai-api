@@ -1,7 +1,10 @@
 import axios from "axios";
 import { getCollections } from "../../config/db";
 import { ObjectId } from "mongodb";
-import { getMediaTypeFromUrl } from "../../utils/cloudinary";
+import {
+  getMediaTypeFromUrl,
+  uploadUrlToCloudinary,
+} from "../../utils/cloudinary";
 
 let lastTokenExpirationDate: Date | null = null;
 
@@ -244,6 +247,10 @@ export async function createSocialAccount(
       lastTokenExpirationDate ??
       new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
+    const profileImageUrl = await uploadUrlToCloudinary(
+      profile.profile_picture_url
+    );
+
     if (userExistingAccount) {
       // Treat this as a reconnection attempt — update token and metadata
       const updatedAccount = {
@@ -258,7 +265,7 @@ export async function createSocialAccount(
           followerCount: profile.public_metrics?.followers_count,
           followingCount: profile.public_metrics?.following_count,
           lastChecked: new Date(),
-          profileImageUrl: profile.profile_picture_url,
+          profileImageUrl,
           username: profile.username,
         },
         status: "active",
@@ -292,7 +299,7 @@ export async function createSocialAccount(
         profile,
         tokenExpiresAt,
         lastChecked: now,
-        profileImageUrl: profile.profile_picture_url,
+        profileImageUrl,
       },
       permissions: {
         canPost: true,

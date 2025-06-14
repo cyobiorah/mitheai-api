@@ -44,7 +44,7 @@ export const getAuthorizationUrl = (state: string, platform: string) => {
     default:
       redirectUri = INSTAGRAM_REDIRECT_URI;
   }
-  const base = "https://www.facebook.com/v19.0/dialog/oauth";
+  const base = "https://www.facebook.com/v22.0/dialog/oauth";
   const params = new URLSearchParams({
     client_id: META_CLIENT_ID,
     redirect_uri: redirectUri,
