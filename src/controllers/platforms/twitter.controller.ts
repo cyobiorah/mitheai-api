@@ -307,7 +307,6 @@ export const post = async (req: any, res: any) => {
       socialPost: {
         platform: "twitter",
         accountId: req.body.data.accountId,
-        platformAccountId: req.body.data.platformAccountId,
         accountName: req.body.data.accountName,
         accountType: req.body.data.accountType,
         mediaType: req.body.data.mediaType,
@@ -342,7 +341,6 @@ export const postToTwitter = async ({
   try {
     const {
       accountId,
-      platformAccountId,
       accountName,
       accountType,
       mediaType,
@@ -373,7 +371,6 @@ export const postToTwitter = async ({
         socialPost: {
           platform: "twitter",
           accountId,
-          platformAccountId,
           accountName,
           accountType,
           mediaType,

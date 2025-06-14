@@ -92,7 +92,6 @@ export const handleFacebookCallback = async (
         accountType: "page",
         accountName: pageData.name,
         accountId: pageId,
-        platformAccountId: pageId,
         accessToken: page.access_token, // This is the Page-level token
         refreshToken: null,
         tokenExpiry,

@@ -107,7 +107,6 @@ export const handleInstagramCallback = async (
       accountType: "business",
       accountName: igProfile.username,
       accountId: igId,
-      platformAccountId: igId,
       accessToken: userAccessToken,
       refreshToken: null,
       tokenExpiry,

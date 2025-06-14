@@ -366,11 +366,11 @@ export const postToThreads = async ({
         content,
         mediaType,
         mediaUrls,
+        accountId: account.accountId,
         metadata: {
           mediaType,
           mediaUrls,
           accountName: account.accountName,
-          platformAccountId: account.platformAccountId,
           platform: "threads",
           profileImageUrl:
             account.metadata?.profile?.threads_profile_picture_url,

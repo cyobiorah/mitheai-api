@@ -5,10 +5,10 @@ import { getCollections } from "../config/db";
 export const linkAccount = async (data: any) => {
   const { socialaccounts } = await getCollections();
 
-  // Enforce uniqueness: Only one user can link a given platform+platformAccountId
+  // Enforce uniqueness: Only one user can link a given platform+accountId
   const existing = await socialaccounts.findOne({
     platform: data.platform,
-    platformAccountId: data.platformAccountId,
+    accountId: data.accountId,
   });
   if (existing) {
     throw new Error("This social account is already linked to another user.");
